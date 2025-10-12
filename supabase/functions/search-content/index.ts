@@ -11,11 +11,43 @@ serve(async (req) => {
   }
 
   try {
-    const { query, tvId, season } = await req.json();
+    const { query, tvId, season, episodeNumber, movieId } = await req.json();
     
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     if (!TMDB_API_KEY) {
       throw new Error('TMDB_API_KEY is not configured');
+    }
+
+    // Fetch movie runtime
+    if (movieId) {
+      console.log('Fetching runtime for movie:', movieId);
+      const response = await fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch movie details');
+      }
+      
+      const data = await response.json();
+      return new Response(
+        JSON.stringify({ runtime: data.runtime || 120 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Fetch episode runtime
+    if (tvId && season && episodeNumber) {
+      console.log('Fetching runtime for episode:', tvId, season, episodeNumber);
+      const response = await fetch(`https://api.themoviedb.org/3/tv/${tvId}/season/${season}/episode/${episodeNumber}?api_key=${TMDB_API_KEY}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch episode details');
+      }
+      
+      const data = await response.json();
+      return new Response(
+        JSON.stringify({ runtime: data.runtime || 45 }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Fetch TV show seasons
@@ -92,7 +124,8 @@ serve(async (req) => {
       title: movie.title,
       type: 'movie',
       year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
-      id: movie.id
+      id: movie.id,
+      posterPath: movie.poster_path
     }));
 
     const tvShows = tvData.results.slice(0, 10).map((show: any) => ({
@@ -100,7 +133,8 @@ serve(async (req) => {
       type: 'tv',
       year: show.first_air_date ? new Date(show.first_air_date).getFullYear() : null,
       id: show.id,
-      seasons: show.number_of_seasons
+      seasons: show.number_of_seasons,
+      posterPath: show.poster_path
     }));
 
     // Combine and sort by relevance (TMDB provides them sorted)

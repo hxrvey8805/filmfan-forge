@@ -34,6 +34,7 @@ interface ContentItem {
   year?: number | null;
   seasons?: number;
   id: number;
+  posterPath?: string | null;
 }
 
 interface Message {
@@ -56,6 +57,7 @@ const Companion = () => {
   const [selectedSeason, setSelectedSeason] = useState("");
   const [selectedEpisode, setSelectedEpisode] = useState("");
   const [timestampMinutes, setTimestampMinutes] = useState([30]); // Default 30 minutes
+  const [maxRuntime, setMaxRuntime] = useState(180); // Default 3 hours
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -139,6 +141,48 @@ const Companion = () => {
 
     fetchEpisodes();
   }, [selectedContent, selectedSeason]);
+
+  // Fetch runtime when content or episode is selected
+  useEffect(() => {
+    const fetchRuntime = async () => {
+      if (!selectedContent) {
+        setMaxRuntime(180);
+        setTimestampMinutes([30]);
+        return;
+      }
+
+      try {
+        if (selectedContent.type === 'movie') {
+          const { data, error } = await supabase.functions.invoke('search-content', {
+            body: { movieId: selectedContent.id }
+          });
+
+          if (error) throw error;
+          const runtime = data.runtime || 120;
+          setMaxRuntime(runtime);
+          setTimestampMinutes([Math.min(30, runtime)]);
+        } else if (selectedContent.type === 'tv' && selectedSeason && selectedEpisode) {
+          const { data, error } = await supabase.functions.invoke('search-content', {
+            body: { 
+              tvId: selectedContent.id, 
+              season: parseInt(selectedSeason),
+              episodeNumber: parseInt(selectedEpisode)
+            }
+          });
+
+          if (error) throw error;
+          const runtime = data.runtime || 45;
+          setMaxRuntime(runtime);
+          setTimestampMinutes([Math.min(30, runtime)]);
+        }
+      } catch (error) {
+        console.error('Error fetching runtime:', error);
+        setMaxRuntime(180);
+      }
+    };
+
+    fetchRuntime();
+  }, [selectedContent, selectedSeason, selectedEpisode]);
 
   // Convert minutes to HH:MM:SS format
   const formatTimestamp = (minutes: number) => {
@@ -297,20 +341,29 @@ const Companion = () => {
                             }
                           }}
                         >
-                          <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2">
-                              <span>{item.title}</span>
-                              {item.year && (
-                                <span className="text-xs text-muted-foreground">({item.year})</span>
-                              )}
+                          <div className="flex items-center gap-3 w-full">
+                            {item.posterPath && (
+                              <img 
+                                src={`https://image.tmdb.org/t/p/w92${item.posterPath}`}
+                                alt={item.title}
+                                className="w-10 h-14 object-cover rounded"
+                              />
+                            )}
+                            <div className="flex items-center justify-between flex-1">
+                              <div className="flex items-center gap-2">
+                                <span>{item.title}</span>
+                                {item.year && (
+                                  <span className="text-xs text-muted-foreground">({item.year})</span>
+                                )}
+                              </div>
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                item.type === "tv" 
+                                  ? "bg-accent/20 text-accent"
+                                  : "bg-primary/20 text-primary"
+                              }`}>
+                                {item.type === "tv" ? "TV" : "Movie"}
+                              </span>
                             </div>
-                            <span className={`text-xs px-2 py-0.5 rounded ${
-                              item.type === "tv" 
-                                ? "bg-accent/20 text-accent"
-                                : "bg-primary/20 text-primary"
-                            }`}>
-                              {item.type === "tv" ? "TV" : "Movie"}
-                            </span>
                           </div>
                         </CommandItem>
                       ))}
@@ -374,13 +427,13 @@ const Companion = () => {
           <Slider
             value={timestampMinutes}
             onValueChange={setTimestampMinutes}
-            max={180}
+            max={maxRuntime}
             step={0.5}
             className="w-full"
           />
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>00:00:00</span>
-            <span>03:00:00</span>
+            <span>{formatTimestamp(maxRuntime)}</span>
           </div>
         </div>
 
