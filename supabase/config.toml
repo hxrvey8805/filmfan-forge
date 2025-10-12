@@ -2,3 +2,6 @@ project_id = "pginaazhujdtcjonxjrh"
 
 [functions.spoiler-free-companion]
 verify_jwt = false
+
+[functions.search-content]
+verify_jwt = false
