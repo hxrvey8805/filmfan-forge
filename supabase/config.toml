@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.search-content]
 verify_jwt = false
+
+[functions.actor-connect]
+verify_jwt = false
