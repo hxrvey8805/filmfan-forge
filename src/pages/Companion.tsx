@@ -279,6 +279,25 @@ const Companion = () => {
 
       {/* Input Section */}
       <Card className="p-4 space-y-4 bg-gradient-to-br from-card to-secondary border-border">
+        {/* Selected Content Display */}
+        {selectedContent && (
+          <div className="flex items-center gap-4 p-3 bg-background/50 rounded-lg border border-border">
+            <div className="flex-1">
+              <h3 className="font-semibold text-lg">{selectedContent.title}</h3>
+              <p className="text-sm text-muted-foreground">
+                {selectedContent.year} • {selectedContent.type === "tv" ? "TV Show" : "Movie"}
+              </p>
+            </div>
+            {selectedContent.posterPath && (
+              <img 
+                src={`https://image.tmdb.org/t/p/w154${selectedContent.posterPath}`}
+                alt={selectedContent.title}
+                className="w-20 h-28 object-cover rounded shadow-lg"
+              />
+            )}
+          </div>
+        )}
+
         {/* Content Search */}
         <div className="space-y-2">
           <label className="text-sm font-medium">Movie or TV Show</label>
