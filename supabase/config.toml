@@ -1,0 +1,4 @@
+project_id = "pginaazhujdtcjonxjrh"
+
+[functions.spoiler-free-companion]
+verify_jwt = false

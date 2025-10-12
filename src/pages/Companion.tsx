@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Send, Clock } from "lucide-react";
+import { Send, Clock, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Message {
   id: number;
@@ -14,33 +16,72 @@ interface Message {
 }
 
 const Companion = () => {
+  const { toast } = useToast();
   const [showTitle, setShowTitle] = useState("");
   const [episode, setEpisode] = useState("");
   const [timestamp, setTimestamp] = useState("");
   const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      question: "Who is the main character?",
-      answer: "Based on what you've seen so far, the main character is introduced as a mysterious figure with a complex past. More details will unfold as you continue watching!",
-      context: "S1E1 @ 00:15:30",
-      timestamp: "2 mins ago"
+  const [isLoading, setIsLoading] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  const handleAskQuestion = async () => {
+    if (!question.trim()) {
+      toast({
+        title: "Question required",
+        description: "Please enter a question about the show",
+        variant: "destructive"
+      });
+      return;
     }
-  ]);
 
-  const handleAskQuestion = () => {
-    if (!question.trim()) return;
+    if (!showTitle.trim() || !episode.trim() || !timestamp.trim()) {
+      toast({
+        title: "Context required",
+        description: "Please fill in show title, episode, and timestamp",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    const newMessage: Message = {
-      id: messages.length + 1,
-      question: question,
-      answer: "This is a demo version. In the full app, AI will analyze your show up to the timestamp you specified and provide spoiler-free context!",
-      context: episode && timestamp ? `${episode} @ ${timestamp}` : "Context not set",
-      timestamp: "Just now"
-    };
+    setIsLoading(true);
 
-    setMessages([newMessage, ...messages]);
-    setQuestion("");
+    try {
+      const { data, error } = await supabase.functions.invoke('spoiler-free-companion', {
+        body: {
+          showTitle,
+          episode,
+          timestamp,
+          question
+        }
+      });
+
+      if (error) throw error;
+
+      const newMessage: Message = {
+        id: messages.length + 1,
+        question: question,
+        answer: data.answer,
+        context: `${episode} @ ${timestamp}`,
+        timestamp: "Just now"
+      };
+
+      setMessages([newMessage, ...messages]);
+      setQuestion("");
+      
+      toast({
+        title: "Answer received",
+        description: "Spoiler-free response generated!",
+      });
+    } catch (error) {
+      console.error('Error asking question:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to get answer. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -90,17 +131,34 @@ const Companion = () => {
 
         <Button 
           onClick={handleAskQuestion}
-          className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90"
+          disabled={isLoading}
+          className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 disabled:opacity-50"
         >
-          <Send className="h-4 w-4 mr-2" />
-          Ask Question
+          {isLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <Send className="h-4 w-4 mr-2" />
+              Ask Question
+            </>
+          )}
         </Button>
       </Card>
 
       {/* Messages */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Previous Questions</h3>
-        {messages.map((msg) => (
+        {messages.length === 0 ? (
+          <Card className="p-6 text-center bg-card border-border">
+            <p className="text-muted-foreground">
+              No questions yet. Ask your first spoiler-free question!
+            </p>
+          </Card>
+        ) : (
+          messages.map((msg) => (
           <Card key={msg.id} className="p-4 space-y-3 bg-card border-border hover:border-primary/50 transition-colors">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -115,7 +173,8 @@ const Companion = () => {
               <span>{msg.timestamp}</span>
             </div>
           </Card>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
