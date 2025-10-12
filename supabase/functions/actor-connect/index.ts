@@ -64,7 +64,6 @@ serve(async (req) => {
       const credits = [...data.cast, ...data.crew]
         .filter((item: any) => item.poster_path)
         .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
-        .slice(0, 20)
         .map((item: any) => ({
           id: item.id,
           title: item.title || item.name,
@@ -93,7 +92,6 @@ serve(async (req) => {
       const data = await response.json();
       const cast = data.cast
         .filter((actor: any) => actor.profile_path)
-        .slice(0, 20)
         .map((actor: any) => ({
           id: actor.id,
           name: actor.name,
@@ -120,7 +118,6 @@ serve(async (req) => {
       const data = await response.json();
       const cast = data.cast
         .filter((actor: any) => actor.profile_path)
-        .slice(0, 20)
         .map((actor: any) => ({
           id: actor.id,
           name: actor.name,
