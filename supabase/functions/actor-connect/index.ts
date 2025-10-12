@@ -30,8 +30,16 @@ serve(async (req) => {
       }
 
       const data = await response.json();
+      // Filter for Hollywood actors (English-language productions)
       const actors = data.results
-        .filter((actor: any) => actor.known_for_department === 'Acting' && actor.profile_path)
+        .filter((actor: any) => {
+          const isActor = actor.known_for_department === 'Acting' && actor.profile_path;
+          // Check if they have English-language films in their known_for
+          const hasEnglishContent = actor.known_for?.some((item: any) => 
+            item.original_language === 'en'
+          );
+          return isActor && hasEnglishContent;
+        })
         .slice(0, 20);
       
       // Pick 2 random actors from the results
