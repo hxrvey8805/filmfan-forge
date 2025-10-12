@@ -11,18 +11,65 @@ serve(async (req) => {
   }
 
   try {
-    const { query } = await req.json();
+    const { query, tvId, season } = await req.json();
     
+    const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
+    if (!TMDB_API_KEY) {
+      throw new Error('TMDB_API_KEY is not configured');
+    }
+
+    // Fetch TV show seasons
+    if (tvId && !season) {
+      console.log('Fetching seasons for TV show:', tvId);
+      const response = await fetch(`https://api.themoviedb.org/3/tv/${tvId}?api_key=${TMDB_API_KEY}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch TV show details');
+      }
+      
+      const data = await response.json();
+      const seasons = data.seasons
+        .filter((s: any) => s.season_number > 0) // Exclude specials
+        .map((s: any) => ({
+          seasonNumber: s.season_number,
+          name: s.name,
+          episodeCount: s.episode_count
+        }));
+
+      return new Response(
+        JSON.stringify({ seasons }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Fetch episodes for a season
+    if (tvId && season) {
+      console.log('Fetching episodes for TV show:', tvId, 'season:', season);
+      const response = await fetch(`https://api.themoviedb.org/3/tv/${tvId}/season/${season}?api_key=${TMDB_API_KEY}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch season episodes');
+      }
+      
+      const data = await response.json();
+      const episodes = data.episodes.map((ep: any) => ({
+        episodeNumber: ep.episode_number,
+        name: ep.name,
+        runtime: ep.runtime || 0
+      }));
+
+      return new Response(
+        JSON.stringify({ episodes }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Search content
     if (!query || query.trim().length === 0) {
       return new Response(
         JSON.stringify({ results: [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
-    }
-
-    const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
-    if (!TMDB_API_KEY) {
-      throw new Error('TMDB_API_KEY is not configured');
     }
 
     console.log('Searching TMDB for:', query);

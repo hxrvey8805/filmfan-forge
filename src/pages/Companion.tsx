@@ -6,6 +6,13 @@ import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Send, Clock, Loader2, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   Command,
@@ -44,7 +51,10 @@ const Companion = () => {
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
   const [searchResults, setSearchResults] = useState<ContentItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [episode, setEpisode] = useState("");
+  const [seasons, setSeasons] = useState<{ seasonNumber: number; name: string; episodeCount: number }[]>([]);
+  const [episodes, setEpisodes] = useState<{ episodeNumber: number; name: string; runtime: number }[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState("");
+  const [selectedEpisode, setSelectedEpisode] = useState("");
   const [timestampMinutes, setTimestampMinutes] = useState([30]); // Default 30 minutes
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -53,7 +63,7 @@ const Companion = () => {
   // Search TMDB when query changes
   useEffect(() => {
     const searchContent = async () => {
-      if (searchQuery.trim().length < 2) {
+      if (!searchQuery || searchQuery.length < 2) {
         setSearchResults([]);
         return;
       }
@@ -67,16 +77,68 @@ const Companion = () => {
         if (error) throw error;
         setSearchResults(data.results || []);
       } catch (error) {
-        console.error('Search error:', error);
+        console.error('Error searching content:', error);
         setSearchResults([]);
       } finally {
         setIsSearching(false);
       }
     };
 
-    const debounceTimer = setTimeout(searchContent, 300);
-    return () => clearTimeout(debounceTimer);
+    const timeoutId = setTimeout(searchContent, 300);
+    return () => clearTimeout(timeoutId);
   }, [searchQuery]);
+
+  // Fetch seasons when TV show is selected
+  useEffect(() => {
+    const fetchSeasons = async () => {
+      if (!selectedContent || selectedContent.type !== 'tv') {
+        setSeasons([]);
+        setEpisodes([]);
+        setSelectedSeason("");
+        setSelectedEpisode("");
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase.functions.invoke('search-content', {
+          body: { tvId: selectedContent.id }
+        });
+
+        if (error) throw error;
+        setSeasons(data.seasons || []);
+      } catch (error) {
+        console.error('Error fetching seasons:', error);
+        setSeasons([]);
+      }
+    };
+
+    fetchSeasons();
+  }, [selectedContent]);
+
+  // Fetch episodes when season is selected
+  useEffect(() => {
+    const fetchEpisodes = async () => {
+      if (!selectedContent || !selectedSeason || selectedContent.type !== 'tv') {
+        setEpisodes([]);
+        setSelectedEpisode("");
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase.functions.invoke('search-content', {
+          body: { tvId: selectedContent.id, season: parseInt(selectedSeason) }
+        });
+
+        if (error) throw error;
+        setEpisodes(data.episodes || []);
+      } catch (error) {
+        console.error('Error fetching episodes:', error);
+        setEpisodes([]);
+      }
+    };
+
+    fetchEpisodes();
+  }, [selectedContent, selectedSeason]);
 
   // Convert minutes to HH:MM:SS format
   const formatTimestamp = (minutes: number) => {
@@ -107,10 +169,10 @@ const Companion = () => {
       return;
     }
 
-    if (selectedContent.type === "tv" && !episode.trim()) {
+    if (selectedContent.type === "tv" && (!selectedSeason || !selectedEpisode)) {
       toast({
         title: "Episode required",
-        description: "Please specify the episode for TV shows",
+        description: "Please select a season and episode for TV shows",
         variant: "destructive"
       });
       return;
@@ -119,14 +181,15 @@ const Companion = () => {
     setIsLoading(true);
 
     try {
+      const episodeString = selectedContent.type === "tv" ? `S${selectedSeason}E${selectedEpisode}` : undefined;
       const contextInfo = selectedContent.type === "tv" 
-        ? `${episode} @ ${timestamp}`
+        ? `${episodeString} @ ${timestamp}`
         : `@ ${timestamp}`;
 
       const { data, error } = await supabase.functions.invoke('spoiler-free-companion', {
         body: {
           showTitle: selectedContent.title,
-          episode: selectedContent.type === "tv" ? episode : "N/A (Movie)",
+          episode: selectedContent.type === "tv" ? episodeString : "N/A (Movie)",
           timestamp,
           question
         }
@@ -229,7 +292,8 @@ const Companion = () => {
                             setSearchQuery("");
                             setOpen(false);
                             if (item.type === "movie") {
-                              setEpisode(""); // Clear episode for movies
+                              setSelectedSeason("");
+                              setSelectedEpisode("");
                             }
                           }}
                         >
@@ -258,16 +322,43 @@ const Companion = () => {
           </Popover>
         </div>
 
-        {/* Episode Input (only for TV shows) */}
+        {/* Season & Episode Selects (only for TV shows) */}
         {selectedContent?.type === "tv" && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Episode</label>
-            <Input
-              placeholder="S1E2"
-              value={episode}
-              onChange={(e) => setEpisode(e.target.value)}
-              className="bg-background/50"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Season</label>
+              <Select value={selectedSeason} onValueChange={setSelectedSeason}>
+                <SelectTrigger className="bg-background/50">
+                  <SelectValue placeholder="Select season" />
+                </SelectTrigger>
+                <SelectContent>
+                  {seasons.map((season) => (
+                    <SelectItem key={season.seasonNumber} value={season.seasonNumber.toString()}>
+                      {season.name} ({season.episodeCount} episodes)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Episode</label>
+              <Select 
+                value={selectedEpisode} 
+                onValueChange={setSelectedEpisode}
+                disabled={!selectedSeason}
+              >
+                <SelectTrigger className="bg-background/50">
+                  <SelectValue placeholder="Select episode" />
+                </SelectTrigger>
+                <SelectContent>
+                  {episodes.map((episode) => (
+                    <SelectItem key={episode.episodeNumber} value={episode.episodeNumber.toString()}>
+                      Ep {episode.episodeNumber}: {episode.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
         
