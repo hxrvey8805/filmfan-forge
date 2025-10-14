@@ -1,12 +1,87 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import { Film } from "lucide-react";
+import PosterRow from "@/components/PosterRow";
+import ActorConnectSection from "@/components/ActorConnectSection";
+import PackSelectionSection from "@/components/PackSelectionSection";
+import TitleDetailModal from "@/components/TitleDetailModal";
+
+interface Title {
+  id: number;
+  title: string;
+  type: "movie" | "tv";
+  posterPath: string;
+  year?: number;
+  progress?: number;
+}
 
 const Index = () => {
+  const [selectedTitle, setSelectedTitle] = useState<Title | null>(null);
+
+  // Mock data - replace with real data from backend
+  const watchList: Title[] = [
+    { id: 1, title: "Inception", type: "movie", posterPath: "/inception.jpg", year: 2010 },
+    { id: 2, title: "Breaking Bad", type: "tv", posterPath: "/bb.jpg", year: 2008 },
+    { id: 3, title: "The Dark Knight", type: "movie", posterPath: "/tdk.jpg", year: 2008 },
+    { id: 4, title: "Stranger Things", type: "tv", posterPath: "/st.jpg", year: 2016 },
+    { id: 5, title: "Interstellar", type: "movie", posterPath: "/interstellar.jpg", year: 2014 },
+  ];
+
+  const currentlyWatching: Title[] = [
+    { id: 6, title: "The Office", type: "tv", posterPath: "/office.jpg", year: 2005, progress: 45 },
+    { id: 7, title: "Parasite", type: "movie", posterPath: "/parasite.jpg", year: 2019, progress: 67 },
+    { id: 8, title: "The Crown", type: "tv", posterPath: "/crown.jpg", year: 2016, progress: 23 },
+  ];
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Header */}
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent flex items-center gap-2">
+              <Film className="h-6 w-6 text-primary" />
+              CineDraft
+            </h1>
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                <span className="text-primary font-semibold">1,250</span> Coins
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-8 space-y-12">
+        {/* Watch List Row */}
+        <PosterRow 
+          title="Watch List" 
+          items={watchList}
+          onPosterClick={setSelectedTitle}
+        />
+
+        {/* Currently Watching Row */}
+        <PosterRow 
+          title="Currently Watching" 
+          items={currentlyWatching}
+          onPosterClick={setSelectedTitle}
+        />
+
+        {/* Actor Connect Game Section */}
+        <ActorConnectSection />
+
+        {/* Pack Selection Section */}
+        <PackSelectionSection />
+      </main>
+
+      {/* Title Detail Modal */}
+      {selectedTitle && (
+        <TitleDetailModal
+          title={selectedTitle}
+          open={!!selectedTitle}
+          onOpenChange={(open) => !open && setSelectedTitle(null)}
+        />
+      )}
     </div>
   );
 };
