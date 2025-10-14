@@ -1,36 +1,36 @@
 import { useState } from "react";
 import { Film, Package, Users, TrendingUp, Menu } from "lucide-react";
-import Companion from "./Companion";
+import Index from "./Index";
 import Packs from "./Packs";
 import Squad from "./Squad";
 import Market from "./Market";
 import DailyPuzzle from "./DailyPuzzle";
 
-type Tab = "companion" | "packs" | "squad" | "market" | "puzzle";
+type Tab = "home" | "packs" | "squad" | "market" | "puzzle";
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState<Tab>("companion");
+  const [activeTab, setActiveTab] = useState<Tab>("home");
 
   const tabs = [
-    { id: "companion" as Tab, label: "Companion", icon: Film },
+    { id: "home" as Tab, label: "Home", icon: Film },
+    { id: "puzzle" as Tab, label: "Game", icon: Menu },
     { id: "packs" as Tab, label: "Packs", icon: Package },
     { id: "squad" as Tab, label: "Squad", icon: Users },
     { id: "market" as Tab, label: "Market", icon: TrendingUp },
-    { id: "puzzle" as Tab, label: "Daily", icon: Menu },
   ];
 
   const renderContent = () => {
     switch (activeTab) {
-      case "companion":
-        return <Companion />;
+      case "home":
+        return <Index />;
+      case "puzzle":
+        return <DailyPuzzle />;
       case "packs":
         return <Packs />;
       case "squad":
         return <Squad />;
       case "market":
         return <Market />;
-      case "puzzle":
-        return <DailyPuzzle />;
     }
   };
 

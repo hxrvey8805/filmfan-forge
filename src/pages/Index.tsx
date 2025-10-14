@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Film } from "lucide-react";
 import PosterRow from "@/components/PosterRow";
-import ActorConnectSection from "@/components/ActorConnectSection";
-import PackSelectionSection from "@/components/PackSelectionSection";
 import TitleDetailModal from "@/components/TitleDetailModal";
 
 interface Title {
@@ -68,6 +66,7 @@ const Index = () => {
           title="Watch List" 
           items={watchList}
           onPosterClick={setSelectedTitle}
+          onAddClick={() => {/* TODO: Add search modal */}}
         />
 
         {/* Currently Watching Row */}
@@ -75,13 +74,8 @@ const Index = () => {
           title="Currently Watching" 
           items={currentlyWatching}
           onPosterClick={setSelectedTitle}
+          onAddClick={() => {/* TODO: Add search modal */}}
         />
-
-        {/* Actor Connect Game Section */}
-        <ActorConnectSection />
-
-        {/* Pack Selection Section */}
-        <PackSelectionSection />
       </main>
 
       {/* Title Detail Modal */}

@@ -1,6 +1,7 @@
-import { Film, Tv } from "lucide-react";
+import { Film, Tv, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import {
   Carousel,
   CarouselContent,
@@ -22,16 +23,25 @@ interface PosterRowProps {
   title: string;
   items: Title[];
   onPosterClick: (title: Title) => void;
+  onAddClick?: () => void;
 }
 
-const PosterRow = ({ title, items, onPosterClick }: PosterRowProps) => {
+const PosterRow = ({ title, items, onPosterClick, onAddClick }: PosterRowProps) => {
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">{title}</h2>
-        <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          See all
-        </button>
+        {onAddClick && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={onAddClick}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </Button>
+        )}
       </div>
 
       <Carousel
