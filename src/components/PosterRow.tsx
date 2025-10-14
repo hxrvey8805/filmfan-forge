@@ -50,14 +50,22 @@ const PosterRow = ({ title, items, onPosterClick }: PosterRowProps) => {
               >
                 {/* Poster Card */}
                 <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-muted transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary/20">
-                  {/* Mock poster with gradient */}
-                  <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                    {item.type === "movie" ? (
-                      <Film className="h-16 w-16 text-muted-foreground/50" />
-                    ) : (
-                      <Tv className="h-16 w-16 text-muted-foreground/50" />
-                    )}
-                  </div>
+                  {item.posterPath ? (
+                    <img 
+                      src={item.posterPath} 
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                      {item.type === "movie" ? (
+                        <Film className="h-16 w-16 text-muted-foreground/50" />
+                      ) : (
+                        <Tv className="h-16 w-16 text-muted-foreground/50" />
+                      )}
+                    </div>
+                  )}
 
                   {/* Type Badge */}
                   <Badge 

@@ -16,21 +16,31 @@ interface Title {
 
 const Index = () => {
   const [selectedTitle, setSelectedTitle] = useState<Title | null>(null);
+  const [watchList, setWatchList] = useState<Title[]>([
+    { id: 1, title: "Inception", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg", year: 2010 },
+    { id: 2, title: "Breaking Bad", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/ggFHVNu6YYI5L9pCfOacjizRGt.jpg", year: 2008 },
+    { id: 3, title: "The Dark Knight", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg", year: 2008 },
+    { id: 4, title: "Stranger Things", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/49WJfeN0moxb9IPfGn8AIqMGskD.jpg", year: 2016 },
+    { id: 5, title: "Interstellar", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg", year: 2014 },
+  ]);
+  const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([
+    { id: 6, title: "The Office", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/7DJKHzAi83BmQrWLrYYOqcoKfhR.jpg", year: 2005, progress: 45 },
+    { id: 7, title: "Parasite", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg", year: 2019, progress: 67 },
+    { id: 8, title: "The Crown", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/1M876KPjulVwppEpldhdc8V4o68.jpg", year: 2016, progress: 23 },
+  ]);
 
-  // Mock data - replace with real data from backend
-  const watchList: Title[] = [
-    { id: 1, title: "Inception", type: "movie", posterPath: "/inception.jpg", year: 2010 },
-    { id: 2, title: "Breaking Bad", type: "tv", posterPath: "/bb.jpg", year: 2008 },
-    { id: 3, title: "The Dark Knight", type: "movie", posterPath: "/tdk.jpg", year: 2008 },
-    { id: 4, title: "Stranger Things", type: "tv", posterPath: "/st.jpg", year: 2016 },
-    { id: 5, title: "Interstellar", type: "movie", posterPath: "/interstellar.jpg", year: 2014 },
-  ];
+  const handleAddToWatchList = (title: Title) => {
+    if (!watchList.find(item => item.id === title.id)) {
+      setWatchList([...watchList, title]);
+    }
+  };
 
-  const currentlyWatching: Title[] = [
-    { id: 6, title: "The Office", type: "tv", posterPath: "/office.jpg", year: 2005, progress: 45 },
-    { id: 7, title: "Parasite", type: "movie", posterPath: "/parasite.jpg", year: 2019, progress: 67 },
-    { id: 8, title: "The Crown", type: "tv", posterPath: "/crown.jpg", year: 2016, progress: 23 },
-  ];
+  const handleAddToCurrentlyWatching = (title: Title) => {
+    if (!currentlyWatching.find(item => item.id === title.id)) {
+      setCurrentlyWatching([...currentlyWatching, title]);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -80,6 +90,8 @@ const Index = () => {
           title={selectedTitle}
           open={!!selectedTitle}
           onOpenChange={(open) => !open && setSelectedTitle(null)}
+          onAddToWatchList={handleAddToWatchList}
+          onAddToCurrentlyWatching={handleAddToCurrentlyWatching}
         />
       )}
     </div>

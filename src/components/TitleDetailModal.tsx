@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Film, Tv, Clock, Send, Loader2 } from "lucide-react";
+import { Film, Tv, Clock, Send, Loader2, Plus, Eye } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -37,9 +37,11 @@ interface TitleDetailModalProps {
   title: Title;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAddToWatchList?: (title: Title) => void;
+  onAddToCurrentlyWatching?: (title: Title) => void;
 }
 
-const TitleDetailModal = ({ title, open, onOpenChange }: TitleDetailModalProps) => {
+const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddToCurrentlyWatching }: TitleDetailModalProps) => {
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -202,13 +204,21 @@ const TitleDetailModal = ({ title, open, onOpenChange }: TitleDetailModalProps) 
           {/* Header with Poster and Meta */}
           <div className="flex gap-6">
             <div className="relative aspect-[2/3] w-48 flex-shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
-              <div className="w-full h-full flex items-center justify-center">
-                {title.type === "movie" ? (
-                  <Film className="h-16 w-16 text-muted-foreground/50" />
-                ) : (
-                  <Tv className="h-16 w-16 text-muted-foreground/50" />
-                )}
-              </div>
+              {title.posterPath ? (
+                <img 
+                  src={title.posterPath} 
+                  alt={title.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  {title.type === "movie" ? (
+                    <Film className="h-16 w-16 text-muted-foreground/50" />
+                  ) : (
+                    <Tv className="h-16 w-16 text-muted-foreground/50" />
+                  )}
+                </div>
+              )}
               <Badge 
                 variant={title.type === "tv" ? "default" : "secondary"}
                 className="absolute top-2 left-2"
@@ -218,11 +228,38 @@ const TitleDetailModal = ({ title, open, onOpenChange }: TitleDetailModalProps) 
             </div>
 
             <div className="flex-1 space-y-4">
-              <div>
-                <h2 className="text-3xl font-bold">{title.title}</h2>
-                {title.year && (
-                  <p className="text-muted-foreground">{title.year}</p>
-                )}
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-3xl font-bold">{title.title}</h2>
+                  {title.year && (
+                    <p className="text-muted-foreground">{title.year}</p>
+                  )}
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onAddToWatchList?.(title);
+                      toast({ description: "Added to Watch List" });
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Watch List
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onAddToCurrentlyWatching?.({ ...title, progress: 0 });
+                      toast({ description: "Added to Currently Watching" });
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    Watching
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-3">
