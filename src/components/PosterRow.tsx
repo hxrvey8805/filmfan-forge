@@ -27,13 +27,13 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick }: PosterRowProps) 
     <section className="space-y-3">
       <h2 className="text-xl font-bold px-1">{title}</h2>
 
-      <div className="relative">
+      <div className="relative flex items-center gap-3">
         <Carousel
           opts={{
             align: "start",
             skipSnaps: false,
           }}
-          className="w-full"
+          className="flex-1"
         >
           <CarouselContent className="-ml-2">
             {items.map((item) => (
@@ -70,11 +70,11 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick }: PosterRowProps) 
           </CarouselContent>
         </Carousel>
         
-        {/* Circular Add Button positioned at the end */}
+        {/* Circular Add Button */}
         {onAddClick && (
           <button
             onClick={onAddClick}
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-12 w-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg active:scale-95 transition-all duration-200 hover:shadow-xl z-10"
+            className="flex-shrink-0 h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg active:scale-95 transition-all duration-200 hover:shadow-xl"
           >
             <Plus className="h-6 w-6" />
           </button>
