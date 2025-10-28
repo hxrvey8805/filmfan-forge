@@ -70,13 +70,15 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick }: PosterRowProps) 
             
             {/* Circular Add Button as last carousel item */}
             {onAddClick && (
-              <CarouselItem className="pl-2 basis-auto">
-                <button
-                  onClick={onAddClick}
-                  className="h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg active:scale-95 transition-all duration-200 hover:shadow-xl"
-                >
-                  <Plus className="h-6 w-6" />
-                </button>
+              <CarouselItem className="pl-2 basis-[30%] sm:basis-1/4 md:basis-1/5">
+                <div className="w-full aspect-[2/3] flex items-center justify-center">
+                  <button
+                    onClick={onAddClick}
+                    className="h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg active:scale-95 transition-all duration-200 hover:shadow-xl"
+                  >
+                    <Plus className="h-6 w-6" />
+                  </button>
+                </div>
               </CarouselItem>
             )}
           </CarouselContent>
