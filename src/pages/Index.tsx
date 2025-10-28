@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Film } from "lucide-react";
 import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
+import SearchModal from "@/components/SearchModal";
+import { toast } from "sonner";
 
 interface Title {
   id: number;
@@ -14,6 +16,8 @@ interface Title {
 
 const Index = () => {
   const [selectedTitle, setSelectedTitle] = useState<Title | null>(null);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [searchModalType, setSearchModalType] = useState<"watchlist" | "watching">("watchlist");
   const [watchList, setWatchList] = useState<Title[]>([
     { id: 1, title: "Inception", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg", year: 2010 },
     { id: 2, title: "Breaking Bad", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/ggFHVNu6YYI5L9pCfOacjizRGt.jpg", year: 2008 },
@@ -30,12 +34,31 @@ const Index = () => {
   const handleAddToWatchList = (title: Title) => {
     if (!watchList.find(item => item.id === title.id)) {
       setWatchList([...watchList, title]);
+      toast.success(`Added "${title.title}" to Watch List`);
+    } else {
+      toast.info(`"${title.title}" is already in your Watch List`);
     }
   };
 
   const handleAddToCurrentlyWatching = (title: Title) => {
     if (!currentlyWatching.find(item => item.id === title.id)) {
       setCurrentlyWatching([...currentlyWatching, title]);
+      toast.success(`Added "${title.title}" to Currently Watching`);
+    } else {
+      toast.info(`"${title.title}" is already in Currently Watching`);
+    }
+  };
+
+  const openSearchModal = (type: "watchlist" | "watching") => {
+    setSearchModalType(type);
+    setSearchModalOpen(true);
+  };
+
+  const handleSearchSelect = (title: Title) => {
+    if (searchModalType === "watchlist") {
+      handleAddToWatchList(title);
+    } else {
+      handleAddToCurrentlyWatching(title);
     }
   };
 
@@ -47,7 +70,7 @@ const Index = () => {
         title="Watch List" 
         items={watchList}
         onPosterClick={setSelectedTitle}
-        onAddClick={() => {/* TODO: Add search modal */}}
+        onAddClick={() => openSearchModal("watchlist")}
       />
 
       {/* Currently Watching Row */}
@@ -55,7 +78,7 @@ const Index = () => {
         title="Currently Watching" 
         items={currentlyWatching}
         onPosterClick={setSelectedTitle}
-        onAddClick={() => {/* TODO: Add search modal */}}
+        onAddClick={() => openSearchModal("watching")}
       />
 
       {/* Title Detail Modal */}
@@ -68,6 +91,14 @@ const Index = () => {
           onAddToCurrentlyWatching={handleAddToCurrentlyWatching}
         />
       )}
+
+      {/* Search Modal */}
+      <SearchModal
+        open={searchModalOpen}
+        onOpenChange={setSearchModalOpen}
+        onSelect={handleSearchSelect}
+        listType={searchModalType}
+      />
     </div>
   );
 };
