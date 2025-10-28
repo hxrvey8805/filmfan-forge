@@ -48,11 +48,11 @@ const Packs = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-4">
       <div>
-        <h2 className="text-2xl font-bold mb-2">Packs</h2>
+        <h2 className="text-2xl font-bold mb-2">Actor Packs</h2>
         <p className="text-muted-foreground">
-          Open packs to collect actors and build your dream cast
+          Open free packs or earn them by winning the game
         </p>
       </div>
 
@@ -63,7 +63,7 @@ const Packs = () => {
           return (
             <Card
               key={pack.id}
-              className="p-4 bg-gradient-to-r bg-card border-border hover:border-primary/50 transition-all hover:scale-[1.02]"
+              className="p-4 bg-gradient-to-r bg-card border-border active:scale-[0.98] transition-all"
             >
               <div className="flex items-center gap-4">
                 <div className={`p-4 rounded-lg bg-gradient-to-br ${pack.color}`}>
@@ -77,8 +77,7 @@ const Packs = () => {
                   onClick={() => handleOpenPack(pack.id)}
                   className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
                 >
-                  <span className="font-bold">{pack.price}</span>
-                  <span className="ml-1 text-xs">coins</span>
+                  Open
                 </Button>
               </div>
             </Card>

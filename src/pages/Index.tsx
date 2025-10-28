@@ -41,42 +41,22 @@ const Index = () => {
 
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent flex items-center gap-2">
-              <Film className="h-6 w-6 text-primary" />
-              CineDraft
-            </h1>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-muted-foreground">
-                <span className="text-primary font-semibold">1,250</span> Coins
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="space-y-8 animate-fade-in">
+      {/* Watch List Row */}
+      <PosterRow 
+        title="Watch List" 
+        items={watchList}
+        onPosterClick={setSelectedTitle}
+        onAddClick={() => {/* TODO: Add search modal */}}
+      />
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8 space-y-12">
-        {/* Watch List Row */}
-        <PosterRow 
-          title="Watch List" 
-          items={watchList}
-          onPosterClick={setSelectedTitle}
-          onAddClick={() => {/* TODO: Add search modal */}}
-        />
-
-        {/* Currently Watching Row */}
-        <PosterRow 
-          title="Currently Watching" 
-          items={currentlyWatching}
-          onPosterClick={setSelectedTitle}
-          onAddClick={() => {/* TODO: Add search modal */}}
-        />
-      </main>
+      {/* Currently Watching Row */}
+      <PosterRow 
+        title="Currently Watching" 
+        items={currentlyWatching}
+        onPosterClick={setSelectedTitle}
+        onAddClick={() => {/* TODO: Add search modal */}}
+      />
 
       {/* Title Detail Modal */}
       {selectedTitle && (

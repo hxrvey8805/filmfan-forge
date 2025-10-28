@@ -1,13 +1,9 @@
 import { Film, Tv, Plus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
 import {
   Carousel,
   CarouselContent,
   CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
 } from "@/components/ui/carousel";
 
 interface Title {
@@ -28,92 +24,64 @@ interface PosterRowProps {
 
 const PosterRow = ({ title, items, onPosterClick, onAddClick }: PosterRowProps) => {
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">{title}</h2>
-        {onAddClick && (
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={onAddClick}
-            className="gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Add
-          </Button>
-        )}
-      </div>
+    <section className="space-y-3">
+      <h2 className="text-xl font-bold px-1">{title}</h2>
 
-      <Carousel
-        opts={{
-          align: "start",
-          loop: false,
-        }}
-        className="w-full"
-      >
-        <CarouselContent className="-ml-4">
-          {items.map((item) => (
-            <CarouselItem key={item.id} className="pl-4 basis-1/2 md:basis-1/4 lg:basis-1/6">
-              <div
-                onClick={() => onPosterClick(item)}
-                className="group cursor-pointer space-y-2"
-              >
-                {/* Poster Card */}
-                <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-muted transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary/20">
-                  {item.posterPath ? (
-                    <img 
-                      src={item.posterPath} 
-                      alt={item.title}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                      {item.type === "movie" ? (
-                        <Film className="h-16 w-16 text-muted-foreground/50" />
-                      ) : (
-                        <Tv className="h-16 w-16 text-muted-foreground/50" />
-                      )}
-                    </div>
-                  )}
-
+      <div className="relative">
+        <Carousel
+          opts={{
+            align: "start",
+            skipSnaps: false,
+          }}
+          className="w-full"
+        >
+          <CarouselContent className="-ml-2">
+            {items.map((item) => (
+              <CarouselItem key={item.id} className="pl-2 basis-[30%] sm:basis-1/4 md:basis-1/5">
+                <button
+                  onClick={() => onPosterClick(item)}
+                  className="group relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-card active:scale-95 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <img
+                    src={item.posterPath}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  
                   {/* Type Badge */}
-                  <Badge 
-                    variant={item.type === "tv" ? "default" : "secondary"}
-                    className="absolute top-2 left-2 text-xs"
-                  >
-                    {item.type === "tv" ? "TV" : "Movie"}
-                  </Badge>
-
-                  {/* Hover Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/0 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center p-4">
-                    <div className="text-xs font-medium">Click to view</div>
+                  <div className="absolute top-2 right-2">
+                    {item.type === "movie" ? (
+                      <Film className="h-4 w-4 text-primary drop-shadow-lg" />
+                    ) : (
+                      <Tv className="h-4 w-4 text-accent drop-shadow-lg" />
+                    )}
                   </div>
 
-                  {/* Progress Bar */}
+                  {/* Progress Bar for Currently Watching */}
                   {item.progress !== undefined && (
-                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-background to-transparent">
-                      <Progress value={item.progress} className="h-1" />
+                    <div className="absolute bottom-0 left-0 right-0">
+                      <Progress value={item.progress} className="h-1 rounded-none" />
                     </div>
                   )}
-                </div>
-
-                {/* Title */}
-                <div className="space-y-1">
-                  <h3 className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors">
-                    {item.title}
-                  </h3>
-                  {item.year && (
-                    <p className="text-xs text-muted-foreground">{item.year}</p>
-                  )}
-                </div>
-              </div>
-            </CarouselItem>
-          ))}
-        </CarouselContent>
-        <CarouselPrevious className="-left-4" />
-        <CarouselNext className="-right-4" />
-      </Carousel>
+                </button>
+              </CarouselItem>
+            ))}
+            
+            {/* Add Button as Last Item */}
+            {onAddClick && (
+              <CarouselItem className="pl-2 basis-[30%] sm:basis-1/4 md:basis-1/5">
+                <button
+                  onClick={onAddClick}
+                  className="w-full aspect-[2/3] rounded-lg bg-card border-2 border-dashed border-muted-foreground/30 flex items-center justify-center active:scale-95 transition-all duration-200 hover:border-primary/50 hover:bg-primary/5"
+                >
+                  <Plus className="h-12 w-12 text-muted-foreground" />
+                </button>
+              </CarouselItem>
+            )}
+          </CarouselContent>
+        </Carousel>
+      </div>
     </section>
   );
 };
