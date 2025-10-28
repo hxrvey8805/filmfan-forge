@@ -32,7 +32,7 @@ const Dashboard = () => {
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            CineDraft
+            Cinemate
           </h1>
         </div>
       </header>
