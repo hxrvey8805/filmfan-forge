@@ -49,6 +49,16 @@ const Index = () => {
     }
   };
 
+  const handleDeleteFromWatchList = (title: Title) => {
+    setWatchList(watchList.filter(item => item.id !== title.id));
+    toast.success(`Removed "${title.title}" from Watch List`);
+  };
+
+  const handleDeleteFromCurrentlyWatching = (title: Title) => {
+    setCurrentlyWatching(currentlyWatching.filter(item => item.id !== title.id));
+    toast.success(`Removed "${title.title}" from Currently Watching`);
+  };
+
   const openSearchModal = (type: "watchlist" | "watching") => {
     setSearchModalType(type);
     setSearchModalOpen(true);
@@ -71,6 +81,7 @@ const Index = () => {
         items={watchList}
         onPosterClick={setSelectedTitle}
         onAddClick={() => openSearchModal("watchlist")}
+        onDeleteClick={handleDeleteFromWatchList}
       />
 
       {/* Currently Watching Row */}
@@ -79,6 +90,7 @@ const Index = () => {
         items={currentlyWatching}
         onPosterClick={setSelectedTitle}
         onAddClick={() => openSearchModal("watching")}
+        onDeleteClick={handleDeleteFromCurrentlyWatching}
       />
 
       {/* Title Detail Modal */}
