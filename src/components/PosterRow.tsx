@@ -37,7 +37,10 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick }: PosterRowProps) 
         >
           <CarouselContent className="-ml-2">
             {items.map((item) => (
-              <CarouselItem key={item.id} className="pl-2 basis-[30%] sm:basis-1/4 md:basis-1/5">
+              <CarouselItem
+                key={item.id}
+                className={`pl-2 ${onAddClick ? "basis-[45%] sm:basis-1/3 md:basis-1/6" : "basis-[30%] sm:basis-1/4 md:basis-1/5"}`}
+              >
                 <button
                   onClick={() => onPosterClick(item)}
                   className="group relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-card active:scale-95 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-primary"
