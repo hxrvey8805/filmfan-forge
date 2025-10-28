@@ -125,7 +125,9 @@ serve(async (req) => {
       type: 'movie',
       year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
       id: movie.id,
-      posterPath: movie.poster_path
+      posterPath: movie.poster_path 
+        ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+        : 'https://via.placeholder.com/500x750?text=No+Poster'
     }));
 
     const tvShows = tvData.results.slice(0, 10).map((show: any) => ({
@@ -134,7 +136,9 @@ serve(async (req) => {
       year: show.first_air_date ? new Date(show.first_air_date).getFullYear() : null,
       id: show.id,
       seasons: show.number_of_seasons,
-      posterPath: show.poster_path
+      posterPath: show.poster_path 
+        ? `https://image.tmdb.org/t/p/w500${show.poster_path}`
+        : 'https://via.placeholder.com/500x750?text=No+Poster'
     }));
 
     // Combine and sort by relevance (TMDB provides them sorted)
