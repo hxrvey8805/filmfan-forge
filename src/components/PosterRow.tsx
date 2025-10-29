@@ -36,19 +36,19 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-3 px-1">
-        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
         {onFilterChange && (
           <Select value={filterValue} onValueChange={onFilterChange}>
-            <SelectTrigger className="w-[140px] h-8 text-sm bg-background">
-              <SelectValue placeholder="Filter type" />
+            <SelectTrigger className="w-[120px] h-9 text-sm bg-card border-border hover:border-primary/50 transition-colors rounded-lg">
+              <SelectValue placeholder="All" />
             </SelectTrigger>
-            <SelectContent className="bg-background z-50">
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="movie">Movies</SelectItem>
-              <SelectItem value="tv">TV Shows</SelectItem>
+            <SelectContent className="bg-card border-border z-50 rounded-lg">
+              <SelectItem value="all" className="rounded-md">All</SelectItem>
+              <SelectItem value="movie" className="rounded-md">Movies</SelectItem>
+              <SelectItem value="tv" className="rounded-md">TV Shows</SelectItem>
             </SelectContent>
           </Select>
         )}
+        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
       </div>
 
       <div className="relative">
