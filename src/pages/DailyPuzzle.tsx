@@ -56,10 +56,18 @@ const DailyPuzzle = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Only load actors if they haven't been loaded yet
-    if (!startActor && !targetActor) {
-      loadRandomActors();
-    }
+    // Restore persisted actors if available to avoid re-randomizing on navigation
+    try {
+      const savedStart = localStorage.getItem('dp_startActor');
+      const savedTarget = localStorage.getItem('dp_targetActor');
+      if (savedStart && savedTarget) {
+        setStartActor(JSON.parse(savedStart));
+        setTargetActor(JSON.parse(savedTarget));
+        setGameState('ready');
+        return; // do not fetch new actors
+      }
+    } catch (_) {}
+    loadRandomActors();
   }, []);
 
   // Timer countdown
@@ -94,6 +102,9 @@ const DailyPuzzle = () => {
       
       setStartActor(data.actors[0]);
       setTargetActor(data.actors[1]);
+      // Persist to avoid auto-randomizing on navigation
+      localStorage.setItem('dp_startActor', JSON.stringify(data.actors[0]));
+      localStorage.setItem('dp_targetActor', JSON.stringify(data.actors[1]));
       setGameState('ready');
     } catch (error) {
       console.error('Error loading actors:', error);
@@ -269,7 +280,7 @@ const DailyPuzzle = () => {
               <div className="aspect-square bg-muted rounded-xl flex items-center justify-center overflow-hidden shadow-md">
                 {startActor.profilePath ? (
                   <img
-                    src={`https://image.tmdb.org/t/p/w185${startActor.profilePath}`}
+                    src={`https://image.tmdb.org/t/p/w500${startActor.profilePath}`}
                     alt={startActor.name}
                     className="w-full h-full object-cover"
                   />
@@ -289,7 +300,7 @@ const DailyPuzzle = () => {
               <div className="aspect-square bg-muted rounded-xl flex items-center justify-center overflow-hidden shadow-md">
                 {targetActor.profilePath ? (
                   <img
-                    src={`https://image.tmdb.org/t/p/w185${targetActor.profilePath}`}
+                    src={`https://image.tmdb.org/t/p/w500${targetActor.profilePath}`}
                     alt={targetActor.name}
                     className="w-full h-full object-cover"
                   />

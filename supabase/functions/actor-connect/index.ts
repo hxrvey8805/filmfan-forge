@@ -68,18 +68,36 @@ serve(async (req) => {
 
       const data = await response.json();
       
-      // Combine movies and TV shows, sort by popularity
-      const credits = [...data.cast, ...data.crew]
-        .filter((item: any) => item.poster_path)
-        .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
-        .map((item: any) => ({
-          id: item.id,
-          title: item.title || item.name,
-          type: item.media_type,
-          year: (item.release_date || item.first_air_date)?.split('-')[0],
-          posterPath: item.poster_path,
-          character: item.character
-        }));
+      // Combine movies and TV shows
+      const rawCredits = [...data.cast, ...data.crew].filter((item: any) => item.poster_path);
+
+      // Filter out talk/news/reality/game-show style TV entries and dedupe
+      const TALK_GENRES = new Set([10767, 10763, 10764, 10766]);
+      const TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Awards|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?)/i;
+
+      const dedup = new Map<string, any>();
+      for (const item of rawCredits) {
+        const isTalkLike = item.media_type === 'tv' && (
+          (Array.isArray(item.genre_ids) && item.genre_ids.some((id: number) => TALK_GENRES.has(id))) ||
+          TALK_TITLE_RE.test(item.name || item.title || '')
+        );
+        if (isTalkLike) continue;
+        const key = `${item.media_type}-${item.id}`;
+        if (!dedup.has(key)) dedup.set(key, item);
+      }
+
+      const filteredSorted = Array.from(dedup.values()).sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0));
+
+      const credits = filteredSorted.map((item: any) => ({
+        id: item.id,
+        title: item.title || item.name,
+        type: item.media_type,
+        year: (item.release_date || item.first_air_date)?.split('-')[0],
+        posterPath: item.poster_path,
+        character: item.character,
+        popularity: item.popularity || 0,
+        voteCount: item.vote_count || 0,
+      }));
 
       return new Response(
         JSON.stringify({ credits }),
