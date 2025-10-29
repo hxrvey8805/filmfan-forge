@@ -260,6 +260,12 @@ const DailyPuzzle = () => {
     );
   }
 
+  // Strengthen filtering on client as well to ensure only movies/TV and exclude talk/news/etc.
+  const TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Awards|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The Tonight Show|The View|Live!|Variety|Actors on Actors)/i;
+  const filteredFilmography = filmography.filter((c) =>
+    (c.type === 'movie' || c.type === 'tv') && !TALK_TITLE_RE.test(c.title)
+  );
+
   return (
     <div className="max-w-4xl mx-auto space-y-5 animate-fade-in pb-4">
       <div className="text-center space-y-2">
@@ -314,6 +320,21 @@ const DailyPuzzle = () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Target reminder while playing */}
+      {gameState === 'playing' && targetActor && (
+        <Card className="p-3 bg-card/50 shadow-md mx-1 flex items-center gap-3">
+          <img
+            src={`https://image.tmdb.org/t/p/w92${targetActor.profilePath}`}
+            alt={targetActor.name}
+            className="w-10 h-10 rounded-full object-cover"
+          />
+          <div>
+            <p className="text-xs text-muted-foreground">Target</p>
+            <p className="text-sm font-semibold leading-tight">{targetActor.name}</p>
+          </div>
+        </Card>
       )}
 
       {/* Timer and Progress */}
@@ -377,14 +398,14 @@ const DailyPuzzle = () => {
                 {currentActor?.name}'s Filmography
               </h3>
               <div className="grid grid-cols-3 gap-4">
-                {filmography.map((credit) => (
+                {filteredFilmography.map((credit) => (
                   <button
                     key={`${credit.type}-${credit.id}`}
                     onClick={() => loadCast(credit.id, credit.type, credit.title, credit.posterPath)}
                     className="text-left active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
                   >
                     <img
-                      src={`https://image.tmdb.org/t/p/w185${credit.posterPath}`}
+                      src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
                       alt={credit.title}
                       className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
                     />
@@ -411,7 +432,7 @@ const DailyPuzzle = () => {
                     }`}
                   >
                     <img
-                      src={`https://image.tmdb.org/t/p/w185${actor.profilePath}`}
+                      src={`https://image.tmdb.org/t/p/w342${actor.profilePath}`}
                       alt={actor.name}
                       className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
                     />

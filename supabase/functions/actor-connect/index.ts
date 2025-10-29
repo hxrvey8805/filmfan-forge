@@ -71,14 +71,16 @@ serve(async (req) => {
       // Combine movies and TV shows
       const rawCredits = [...data.cast, ...data.crew].filter((item: any) => item.poster_path);
 
-      // Filter out talk/news/reality/game-show style TV entries and dedupe
-      const TALK_GENRES = new Set([10767, 10763, 10764, 10766]);
-      const TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Awards|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?)/i;
+      // Only keep movies/TV, and filter out talk/news/reality/soap/kids/documentary/game/awards-type shows
+      const ALLOWED_MEDIA = new Set(['movie', 'tv']);
+      const EXCLUDED_TV_GENRES = new Set([99, 10762, 10763, 10764, 10766, 10767]); // Documentary, Kids, News, Reality, Soap, Talk
+      const TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Awards|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The Tonight Show|The View|Live!|Variety|Studio: Actors on Actors)/i;
 
       const dedup = new Map<string, any>();
       for (const item of rawCredits) {
+        if (!ALLOWED_MEDIA.has(item.media_type)) continue;
         const isTalkLike = item.media_type === 'tv' && (
-          (Array.isArray(item.genre_ids) && item.genre_ids.some((id: number) => TALK_GENRES.has(id))) ||
+          (Array.isArray(item.genre_ids) && item.genre_ids.some((id: number) => EXCLUDED_TV_GENRES.has(id))) ||
           TALK_TITLE_RE.test(item.name || item.title || '')
         );
         if (isTalkLike) continue;
