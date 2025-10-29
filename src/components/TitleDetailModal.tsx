@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Film, Tv, Clock, Send, Loader2, Plus, Eye } from "lucide-react";
+import { Film, Tv, Clock, Send, Loader2, Plus, Eye, Heart, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -39,9 +39,10 @@ interface TitleDetailModalProps {
   onOpenChange: (open: boolean) => void;
   onAddToWatchList?: (title: Title) => void;
   onAddToCurrentlyWatching?: (title: Title) => void;
+  sourceList?: "watchlist" | "watching";
 }
 
-const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddToCurrentlyWatching }: TitleDetailModalProps) => {
+const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddToCurrentlyWatching, sourceList }: TitleDetailModalProps) => {
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -237,27 +238,37 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddTo
                 </div>
                 
                 <div className="flex gap-2">
+                  {sourceList === "watching" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        toast({ description: "Favourite feature coming soon!" });
+                      }}
+                    >
+                      <Heart className="h-4 w-4 mr-1" />
+                      Favourite
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onAddToWatchList?.(title);
+                        toast({ description: "Added to Watch List" });
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Watch List
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      onAddToWatchList?.(title);
-                      toast({ description: "Added to Watch List" });
-                    }}
+                    onClick={() => onOpenChange(false)}
                   >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Watch List
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      onAddToCurrentlyWatching?.({ ...title, progress: 0 });
-                      toast({ description: "Added to Currently Watching" });
-                    }}
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    Watching
+                    <X className="h-4 w-4 mr-1" />
+                    Exit
                   </Button>
                 </div>
               </div>

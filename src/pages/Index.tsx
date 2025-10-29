@@ -19,6 +19,7 @@ interface Title {
 const Index = () => {
   const navigate = useNavigate();
   const [selectedTitle, setSelectedTitle] = useState<Title | null>(null);
+  const [selectedTitleSource, setSelectedTitleSource] = useState<"watchlist" | "watching">("watchlist");
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [searchModalType, setSearchModalType] = useState<"watchlist" | "watching">("watchlist");
   const [watchList, setWatchList] = useState<Title[]>([]);
@@ -217,7 +218,10 @@ const Index = () => {
       <PosterRow 
         title="Watch List" 
         items={filteredWatchList}
-        onPosterClick={setSelectedTitle}
+        onPosterClick={(title) => {
+          setSelectedTitle(title);
+          setSelectedTitleSource("watchlist");
+        }}
         onAddClick={() => openSearchModal("watchlist")}
         onDeleteClick={handleDeleteFromWatchList}
         filterValue={watchListFilter}
@@ -228,7 +232,10 @@ const Index = () => {
       <PosterRow 
         title="Currently Watching" 
         items={currentlyWatching}
-        onPosterClick={setSelectedTitle}
+        onPosterClick={(title) => {
+          setSelectedTitle(title);
+          setSelectedTitleSource("watching");
+        }}
         onAddClick={() => openSearchModal("watching")}
         onDeleteClick={handleDeleteFromCurrentlyWatching}
       />
@@ -241,6 +248,7 @@ const Index = () => {
           onOpenChange={(open) => !open && setSelectedTitle(null)}
           onAddToWatchList={handleAddToWatchList}
           onAddToCurrentlyWatching={handleAddToCurrentlyWatching}
+          sourceList={selectedTitleSource}
         />
       )}
 
