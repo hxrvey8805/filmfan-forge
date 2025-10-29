@@ -38,13 +38,13 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
       <div className="flex items-center gap-3 px-1">
         {onFilterChange && (
           <Select value={filterValue} onValueChange={onFilterChange}>
-            <SelectTrigger className="w-[100px] h-8 text-xs font-medium bg-secondary/50 border-0 hover:bg-secondary transition-all rounded-full shadow-sm">
+            <SelectTrigger className="w-[110px] h-9 text-sm font-semibold bg-gradient-to-r from-primary/20 to-accent/20 border-primary/30 hover:border-primary transition-all rounded-full shadow-md text-primary">
               <SelectValue placeholder="All" />
             </SelectTrigger>
-            <SelectContent className="bg-card/95 backdrop-blur-xl border-border/50 z-50 rounded-xl shadow-xl min-w-[100px]">
-              <SelectItem value="all" className="rounded-lg text-sm focus:bg-primary/10">All</SelectItem>
-              <SelectItem value="movie" className="rounded-lg text-sm focus:bg-primary/10">Movies</SelectItem>
-              <SelectItem value="tv" className="rounded-lg text-sm focus:bg-primary/10">TV Shows</SelectItem>
+            <SelectContent className="bg-card/95 backdrop-blur-xl border-primary/30 z-50 rounded-xl shadow-2xl min-w-[120px]">
+              <SelectItem value="all" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">All</SelectItem>
+              <SelectItem value="movie" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">Movies</SelectItem>
+              <SelectItem value="tv" className="rounded-lg text-sm font-medium focus:bg-accent/20 focus:text-accent cursor-pointer">TV Shows</SelectItem>
             </SelectContent>
           </Select>
         )}
