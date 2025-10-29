@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { User, Trophy, RotateCcw, Timer, ArrowRight, Loader2 } from 'lucide-react';
+import { User, Trophy, RotateCcw, Timer, ArrowRight, Loader2, Film, Tv } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import PackOpeningModal from '@/components/PackOpeningModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -263,9 +263,19 @@ const DailyPuzzle = () => {
   // Strengthen filtering on client as well to ensure only movies/TV and exclude talk/news/etc.
   const TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Awards|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The Tonight Show|The View|Live!|Variety|Actors on Actors)/i;
   const BTS_TITLE_RE = /(Behind the Scenes|Making[- ]?of|Featurette|Interview|Press|Promo|Teaser|Clip|Bloopers|Outtakes|Red Carpet|Special)/i;
-  const filteredFilmography = filmography.filter((c) =>
-    (c.type === 'movie' || c.type === 'tv') && !TALK_TITLE_RE.test(c.title) && !BTS_TITLE_RE.test(c.title) && !/\bself\b|himself|herself/i.test(c.character || '')
-  );
+  
+  // Deduplicate by ID and filter
+  const seenIds = new Set<string>();
+  const filteredFilmography = filmography.filter((c) => {
+    const key = `${c.type}-${c.id}`;
+    if (seenIds.has(key)) return false;
+    seenIds.add(key);
+    return (c.type === 'movie' || c.type === 'tv') && !TALK_TITLE_RE.test(c.title) && !BTS_TITLE_RE.test(c.title) && !/\bself\b|himself|herself/i.test(c.character || '');
+  });
+
+  // Split into movies and TV shows
+  const movies = filteredFilmography.filter((c) => c.type === 'movie');
+  const tvShows = filteredFilmography.filter((c) => c.type === 'tv');
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 animate-fade-in pb-4">
@@ -394,29 +404,64 @@ const DailyPuzzle = () => {
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
           ) : viewMode === 'filmography' ? (
-            <div>
-              <h3 className="text-lg font-semibold mb-4 tracking-tight">
-                {currentActor?.name}'s Filmography
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                {filteredFilmography.map((credit) => (
-                  <button
-                    key={`${credit.type}-${credit.id}`}
-                    onClick={() => loadCast(credit.id, credit.type, credit.title, credit.posterPath)}
-                    className="text-left active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
-                  >
-                    <img
-                      src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
-                      alt={credit.title}
-                      className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
-                    />
-                    <p className="text-xs font-medium line-clamp-2 leading-tight">{credit.title}</p>
-                    {credit.year && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{credit.year}</p>
-                    )}
-                  </button>
-                ))}
-              </div>
+            <div className="space-y-6">
+              {/* Movies Section */}
+              {movies.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 tracking-tight flex items-center gap-2">
+                    <Film className="h-5 w-5 text-primary" />
+                    Movies
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    {movies.map((credit) => (
+                      <button
+                        key={`${credit.type}-${credit.id}`}
+                        onClick={() => loadCast(credit.id, credit.type, credit.title, credit.posterPath)}
+                        className="text-left active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
+                      >
+                        <img
+                          src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
+                          alt={credit.title}
+                          className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
+                        />
+                        <p className="text-xs font-medium line-clamp-2 leading-tight">{credit.title}</p>
+                        {credit.year && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{credit.year}</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TV Shows Section */}
+              {tvShows.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 tracking-tight flex items-center gap-2">
+                    <Tv className="h-5 w-5 text-accent" />
+                    TV Shows
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    {tvShows.map((credit) => (
+                      <button
+                        key={`${credit.type}-${credit.id}`}
+                        onClick={() => loadCast(credit.id, credit.type, credit.title, credit.posterPath)}
+                        className="text-left active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
+                      >
+                        <img
+                          src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
+                          alt={credit.title}
+                          className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
+                        />
+                        <p className="text-xs font-medium line-clamp-2 leading-tight">{credit.title}</p>
+                        {credit.year && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{credit.year}</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div>
