@@ -14,6 +14,7 @@ interface Title {
   posterPath: string;
   year?: number;
   progress?: number;
+  tags?: string[];
 }
 
 const Index = () => {
@@ -25,6 +26,7 @@ const Index = () => {
   const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([]);
   const [loading, setLoading] = useState(true);
   const [watchListFilter, setWatchListFilter] = useState<string>("all");
+  const [allTags, setAllTags] = useState<string[]>([]);
 
   useEffect(() => {
     checkAuth();
@@ -60,6 +62,7 @@ const Index = () => {
           posterPath: item.poster_path,
           year: item.year,
           progress: item.progress,
+          tags: item.tags || [],
         })) || [];
 
       const watchingItems = data
@@ -71,10 +74,18 @@ const Index = () => {
           posterPath: item.poster_path,
           year: item.year,
           progress: item.progress,
+          tags: item.tags || [],
         })) || [];
 
       setWatchList(watchlistItems);
       setCurrentlyWatching(watchingItems);
+
+      // Extract all unique tags
+      const uniqueTags = new Set<string>();
+      [...watchlistItems, ...watchingItems].forEach(item => {
+        item.tags?.forEach(tag => uniqueTags.add(tag));
+      });
+      setAllTags(Array.from(uniqueTags));
     } catch (error) {
       console.error("Error loading titles:", error);
       toast.error("Failed to load your lists");
@@ -208,9 +219,46 @@ const Index = () => {
     );
   }
 
+  const handleTagsUpdate = async (titleId: number, tags: string[]) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("user_titles")
+        .update({ tags })
+        .eq("user_id", user.id)
+        .eq("title_id", titleId);
+
+      if (error) throw error;
+
+      // Update local state
+      setWatchList(watchList.map(item => 
+        item.id === titleId ? { ...item, tags } : item
+      ));
+      setCurrentlyWatching(currentlyWatching.map(item => 
+        item.id === titleId ? { ...item, tags } : item
+      ));
+
+      // Update available tags
+      const uniqueTags = new Set<string>();
+      [...watchList, ...currentlyWatching].forEach(item => {
+        (item.id === titleId ? tags : item.tags || []).forEach(tag => uniqueTags.add(tag));
+      });
+      setAllTags(Array.from(uniqueTags));
+
+      toast.success("Tags updated");
+    } catch (error) {
+      console.error("Error updating tags:", error);
+      toast.error("Failed to update tags");
+    }
+  };
+
   const filteredWatchList = watchListFilter === "all" 
     ? watchList 
-    : watchList.filter(item => item.type === watchListFilter);
+    : watchListFilter === "movie" || watchListFilter === "tv"
+    ? watchList.filter(item => item.type === watchListFilter)
+    : watchList.filter(item => item.tags?.includes(watchListFilter.replace("tag:", "")));
 
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
@@ -223,6 +271,8 @@ const Index = () => {
         onDeleteClick={handleDeleteFromWatchList}
         filterValue={watchListFilter}
         onFilterChange={setWatchListFilter}
+        availableTags={allTags}
+        onTagsUpdate={handleTagsUpdate}
       />
 
       {/* Currently Watching Row */}
