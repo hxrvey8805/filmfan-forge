@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Film } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
@@ -15,48 +17,183 @@ interface Title {
 }
 
 const Index = () => {
+  const navigate = useNavigate();
   const [selectedTitle, setSelectedTitle] = useState<Title | null>(null);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [searchModalType, setSearchModalType] = useState<"watchlist" | "watching">("watchlist");
-  const [watchList, setWatchList] = useState<Title[]>([
-    { id: 1, title: "Inception", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg", year: 2010 },
-    { id: 2, title: "Breaking Bad", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/ggFHVNu6YYI5L9pCfOacjizRGt.jpg", year: 2008 },
-    { id: 3, title: "The Dark Knight", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg", year: 2008 },
-    { id: 4, title: "Stranger Things", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/49WJfeN0moxb9IPfGn8AIqMGskD.jpg", year: 2016 },
-    { id: 5, title: "Interstellar", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg", year: 2014 },
-  ]);
-  const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([
-    { id: 6, title: "The Office", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/7DJKHzAi83BmQrWLrYYOqcoKfhR.jpg", year: 2005, progress: 45 },
-    { id: 7, title: "Parasite", type: "movie", posterPath: "https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg", year: 2019, progress: 67 },
-    { id: 8, title: "The Crown", type: "tv", posterPath: "https://image.tmdb.org/t/p/w500/1M876KPjulVwppEpldhdc8V4o68.jpg", year: 2016, progress: 23 },
-  ]);
+  const [watchList, setWatchList] = useState<Title[]>([]);
+  const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleAddToWatchList = (title: Title) => {
-    if (!watchList.find(item => item.id === title.id)) {
+  useEffect(() => {
+    // Check authentication and load data
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+
+      setUserId(session.user.id);
+      await loadUserTitles(session.user.id);
+      setLoading(false);
+    };
+
+    initializeAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        navigate("/auth");
+      } else {
+        setUserId(session.user.id);
+        loadUserTitles(session.user.id);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const loadUserTitles = async (uid: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("user_titles")
+        .select("*")
+        .eq("user_id", uid);
+
+      if (error) throw error;
+
+      const watchlist = data
+        ?.filter((item) => item.list_type === "watchlist")
+        .map((item) => ({
+          id: item.title_id,
+          title: item.title,
+          type: item.type as "movie" | "tv",
+          posterPath: item.poster_path,
+          year: item.year,
+          progress: item.progress,
+        })) || [];
+
+      const watching = data
+        ?.filter((item) => item.list_type === "watching")
+        .map((item) => ({
+          id: item.title_id,
+          title: item.title,
+          type: item.type as "movie" | "tv",
+          posterPath: item.poster_path,
+          year: item.year,
+          progress: item.progress,
+        })) || [];
+
+      setWatchList(watchlist);
+      setCurrentlyWatching(watching);
+    } catch (error: any) {
+      toast.error("Failed to load your lists");
+      console.error(error);
+    }
+  };
+
+  const handleAddToWatchList = async (title: Title) => {
+    if (!userId) return;
+
+    if (watchList.find(item => item.id === title.id)) {
+      toast.info(`"${title.title}" is already in your Watch List`);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("user_titles").insert({
+        user_id: userId,
+        title_id: title.id,
+        title: title.title,
+        type: title.type,
+        poster_path: title.posterPath,
+        year: title.year,
+        list_type: "watchlist",
+      });
+
+      if (error) throw error;
+
       setWatchList([...watchList, title]);
       toast.success(`Added "${title.title}" to Watch List`);
-    } else {
-      toast.info(`"${title.title}" is already in your Watch List`);
+    } catch (error: any) {
+      toast.error("Failed to add to Watch List");
+      console.error(error);
     }
   };
 
-  const handleAddToCurrentlyWatching = (title: Title) => {
-    if (!currentlyWatching.find(item => item.id === title.id)) {
+  const handleAddToCurrentlyWatching = async (title: Title) => {
+    if (!userId) return;
+
+    if (currentlyWatching.find(item => item.id === title.id)) {
+      toast.info(`"${title.title}" is already in Currently Watching`);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("user_titles").insert({
+        user_id: userId,
+        title_id: title.id,
+        title: title.title,
+        type: title.type,
+        poster_path: title.posterPath,
+        year: title.year,
+        progress: title.progress,
+        list_type: "watching",
+      });
+
+      if (error) throw error;
+
       setCurrentlyWatching([...currentlyWatching, title]);
       toast.success(`Added "${title.title}" to Currently Watching`);
-    } else {
-      toast.info(`"${title.title}" is already in Currently Watching`);
+    } catch (error: any) {
+      toast.error("Failed to add to Currently Watching");
+      console.error(error);
     }
   };
 
-  const handleDeleteFromWatchList = (title: Title) => {
-    setWatchList(watchList.filter(item => item.id !== title.id));
-    toast.success(`Removed "${title.title}" from Watch List`);
+  const handleDeleteFromWatchList = async (title: Title) => {
+    if (!userId) return;
+
+    try {
+      const { error } = await supabase
+        .from("user_titles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("title_id", title.id)
+        .eq("list_type", "watchlist");
+
+      if (error) throw error;
+
+      setWatchList(watchList.filter(item => item.id !== title.id));
+      toast.success(`Removed "${title.title}" from Watch List`);
+    } catch (error: any) {
+      toast.error("Failed to remove from Watch List");
+      console.error(error);
+    }
   };
 
-  const handleDeleteFromCurrentlyWatching = (title: Title) => {
-    setCurrentlyWatching(currentlyWatching.filter(item => item.id !== title.id));
-    toast.success(`Removed "${title.title}" from Currently Watching`);
+  const handleDeleteFromCurrentlyWatching = async (title: Title) => {
+    if (!userId) return;
+
+    try {
+      const { error } = await supabase
+        .from("user_titles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("title_id", title.id)
+        .eq("list_type", "watching");
+
+      if (error) throw error;
+
+      setCurrentlyWatching(currentlyWatching.filter(item => item.id !== title.id));
+      toast.success(`Removed "${title.title}" from Currently Watching`);
+    } catch (error: any) {
+      toast.error("Failed to remove from Currently Watching");
+      console.error(error);
+    }
   };
 
   const openSearchModal = (type: "watchlist" | "watching") => {
@@ -72,6 +209,10 @@ const Index = () => {
     }
   };
 
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
 
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
