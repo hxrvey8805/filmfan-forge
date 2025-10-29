@@ -39,6 +39,7 @@ type PathStep = {
 
 type GameState = 'loading' | 'ready' | 'playing' | 'won';
 type ViewMode = 'filmography' | 'cast';
+type FilmographyFilter = 'movies' | 'tv';
 
 const DailyPuzzle = () => {
   const [gameState, setGameState] = useState<GameState>('loading');
@@ -49,6 +50,7 @@ const DailyPuzzle = () => {
   const [cast, setCast] = useState<CastMember[]>([]);
   const [path, setPath] = useState<PathStep[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('filmography');
+  const [filmographyFilter, setFilmographyFilter] = useState<FilmographyFilter>('movies');
   const [timeLeft, setTimeLeft] = useState<number>(120);
   const [gameStartTime, setGameStartTime] = useState<number | null>(null);
   const [showPackModal, setShowPackModal] = useState(false);
@@ -404,64 +406,47 @@ const DailyPuzzle = () => {
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
           ) : viewMode === 'filmography' ? (
-            <div className="space-y-6">
-              {/* Movies Section */}
-              {movies.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-4 tracking-tight flex items-center gap-2">
-                    <Film className="h-5 w-5 text-primary" />
-                    Movies
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    {movies.map((credit) => (
-                      <button
-                        key={`${credit.type}-${credit.id}`}
-                        onClick={() => loadCast(credit.id, credit.type, credit.title, credit.posterPath)}
-                        className="text-left active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
-                      >
-                        <img
-                          src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
-                          alt={credit.title}
-                          className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
-                        />
-                        <p className="text-xs font-medium line-clamp-2 leading-tight">{credit.title}</p>
-                        {credit.year && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{credit.year}</p>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+            <div className="space-y-4">
+              {/* Filter Toggle Buttons */}
+              <div className="flex gap-2">
+                <Button
+                  variant={filmographyFilter === 'movies' ? 'default' : 'outline'}
+                  onClick={() => setFilmographyFilter('movies')}
+                  className="flex-1"
+                >
+                  <Film className="h-4 w-4 mr-2" />
+                  Movies ({movies.length})
+                </Button>
+                <Button
+                  variant={filmographyFilter === 'tv' ? 'default' : 'outline'}
+                  onClick={() => setFilmographyFilter('tv')}
+                  className="flex-1"
+                >
+                  <Tv className="h-4 w-4 mr-2" />
+                  TV Shows ({tvShows.length})
+                </Button>
+              </div>
 
-              {/* TV Shows Section */}
-              {tvShows.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-4 tracking-tight flex items-center gap-2">
-                    <Tv className="h-5 w-5 text-accent" />
-                    TV Shows
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    {tvShows.map((credit) => (
-                      <button
-                        key={`${credit.type}-${credit.id}`}
-                        onClick={() => loadCast(credit.id, credit.type, credit.title, credit.posterPath)}
-                        className="text-left active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
-                      >
-                        <img
-                          src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
-                          alt={credit.title}
-                          className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
-                        />
-                        <p className="text-xs font-medium line-clamp-2 leading-tight">{credit.title}</p>
-                        {credit.year && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{credit.year}</p>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Display selected category */}
+              <div className="grid grid-cols-3 gap-4">
+                {(filmographyFilter === 'movies' ? movies : tvShows).map((credit) => (
+                  <button
+                    key={`${credit.type}-${credit.id}`}
+                    onClick={() => loadCast(credit.id, credit.type, credit.title, credit.posterPath)}
+                    className="text-left active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
+                  >
+                    <img
+                      src={`https://image.tmdb.org/t/p/w342${credit.posterPath}`}
+                      alt={credit.title}
+                      className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
+                    />
+                    <p className="text-xs font-medium line-clamp-2 leading-tight">{credit.title}</p>
+                    {credit.year && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{credit.year}</p>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <div>
