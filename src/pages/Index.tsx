@@ -59,7 +59,6 @@ const Index = () => {
           type: item.type as "movie" | "tv",
           posterPath: item.poster_path,
           year: item.year,
-          progress: item.progress,
         })) || [];
 
       const watchingItems = data
