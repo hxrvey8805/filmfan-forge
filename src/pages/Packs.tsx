@@ -48,10 +48,10 @@ const Packs = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-4">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Actor Packs</h2>
-        <p className="text-muted-foreground">
+    <div className="space-y-6 animate-fade-in pb-4 max-w-4xl mx-auto">
+      <div className="space-y-2">
+        <h2 className="text-2xl font-bold tracking-tight">Actor Packs</h2>
+        <p className="text-sm text-muted-foreground">
           Open free packs or earn them by winning the game
         </p>
       </div>
@@ -63,19 +63,20 @@ const Packs = () => {
           return (
             <Card
               key={pack.id}
-              className="p-4 bg-gradient-to-r bg-card border-border active:scale-[0.98] transition-all"
+              className="p-5 bg-gradient-to-r bg-card border-border active:scale-[0.98] transition-all shadow-md"
             >
               <div className="flex items-center gap-4">
-                <div className={`p-4 rounded-lg bg-gradient-to-br ${pack.color}`}>
-                  <Icon className="h-8 w-8 text-white" />
+                <div className={`p-4 rounded-xl bg-gradient-to-br ${pack.color} shadow-lg`}>
+                  <Icon className="h-9 w-9 text-white" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-bold text-lg">{pack.name}</h3>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-lg tracking-tight">{pack.name}</h3>
                   <p className="text-sm text-muted-foreground">{pack.description}</p>
                 </div>
                 <Button
                   onClick={() => handleOpenPack(pack.id)}
-                  className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                  size="lg"
+                  className="bg-gradient-to-r from-primary to-accent hover:opacity-90 shrink-0 min-h-[48px] px-6"
                 >
                   Open
                 </Button>
@@ -87,24 +88,24 @@ const Packs = () => {
 
       {/* Inventory */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
+        <h3 className="text-xl font-semibold flex items-center gap-2 tracking-tight">
           <Star className="h-5 w-5 text-primary" />
           Your Collection
         </h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           {inventory.map((item, idx) => (
             <Card
               key={idx}
-              className="p-3 bg-gradient-to-br from-card to-secondary border-border hover:border-accent/50 transition-colors"
+              className="p-4 bg-gradient-to-br from-card to-secondary border-border hover:border-accent/50 transition-colors shadow-md"
             >
-              <div className="space-y-2">
-                <div className="h-32 bg-muted rounded flex items-center justify-center">
-                  <Users className="h-12 w-12 text-muted-foreground" />
+              <div className="space-y-3">
+                <div className="aspect-square bg-muted rounded-lg flex items-center justify-center">
+                  <Users className="h-16 w-16 text-muted-foreground" />
                 </div>
-                <div>
-                  <p className="font-semibold text-sm">{item.name}</p>
+                <div className="space-y-1">
+                  <p className="font-semibold text-sm truncate">{item.name}</p>
                   <p className="text-xs text-muted-foreground">{item.role}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded ${
+                  <span className={`inline-block text-xs px-2.5 py-1 rounded-full font-medium ${
                     item.rarity === "Legendary" 
                       ? "bg-primary/20 text-primary"
                       : "bg-accent/20 text-accent"

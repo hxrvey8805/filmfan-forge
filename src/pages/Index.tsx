@@ -74,7 +74,7 @@ const Index = () => {
 
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
       {/* Watch List Row */}
       <PosterRow 
         title="Watch List" 

@@ -78,9 +78,34 @@ All colors MUST be HSL.
 @layer base {
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    touch-action: pan-x pan-y;
+    overscroll-behavior-y: none;
+  }
+
+  /* Mobile-optimized touch targets */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Safe area insets for mobile devices */
+  .safe-area-inset-top {
+    padding-top: max(env(safe-area-inset-top), 0px);
+  }
+
+  .safe-area-inset-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+
+  /* Better text rendering on mobile */
+  h1, h2, h3, h4, h5, h6 {
+    text-rendering: optimizeLegibility;
   }
 }

@@ -247,23 +247,23 @@ const DailyPuzzle = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4 animate-fade-in pb-4">
+    <div className="max-w-4xl mx-auto space-y-5 animate-fade-in pb-4">
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent tracking-tight">
           Actor Connect
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground px-4">
           Connect in under 2 minutes to earn a free pack!
         </p>
       </div>
 
       {/* Start and Target Actors */}
       {(gameState === 'ready' || gameState === 'won') && startActor && targetActor && (
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="p-4 bg-gradient-to-br from-card to-secondary border-primary/50">
-            <div className="space-y-2">
-              <Badge variant="outline" className="bg-primary/10 text-xs">Start</Badge>
-              <div className="aspect-square bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+        <div className="grid grid-cols-2 gap-4 px-1">
+          <Card className="p-4 bg-gradient-to-br from-card to-secondary border-primary/50 shadow-lg">
+            <div className="space-y-3">
+              <Badge variant="outline" className="bg-primary/10 text-xs font-semibold">Start</Badge>
+              <div className="aspect-square bg-muted rounded-xl flex items-center justify-center overflow-hidden shadow-md">
                 {startActor.profilePath ? (
                   <img
                     src={`https://image.tmdb.org/t/p/w185${startActor.profilePath}`}
@@ -271,19 +271,19 @@ const DailyPuzzle = () => {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <User className="h-12 w-12 text-muted-foreground" />
+                  <User className="h-16 w-16 text-muted-foreground" />
                 )}
               </div>
               <div>
-                <p className="font-bold text-sm">{startActor.name}</p>
+                <p className="font-bold text-base leading-tight">{startActor.name}</p>
               </div>
             </div>
           </Card>
           
-          <Card className="p-4 bg-gradient-to-br from-card to-secondary border-accent/50">
-            <div className="space-y-2">
-              <Badge variant="outline" className="bg-accent/10 text-xs">Target</Badge>
-              <div className="aspect-square bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+          <Card className="p-4 bg-gradient-to-br from-card to-secondary border-accent/50 shadow-lg">
+            <div className="space-y-3">
+              <Badge variant="outline" className="bg-accent/10 text-xs font-semibold">Target</Badge>
+              <div className="aspect-square bg-muted rounded-xl flex items-center justify-center overflow-hidden shadow-md">
                 {targetActor.profilePath ? (
                   <img
                     src={`https://image.tmdb.org/t/p/w185${targetActor.profilePath}`}
@@ -291,11 +291,11 @@ const DailyPuzzle = () => {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <User className="h-12 w-12 text-muted-foreground" />
+                  <User className="h-16 w-16 text-muted-foreground" />
                 )}
               </div>
               <div>
-                <p className="font-bold text-sm">{targetActor.name}</p>
+                <p className="font-bold text-base leading-tight">{targetActor.name}</p>
               </div>
             </div>
           </Card>
@@ -304,19 +304,19 @@ const DailyPuzzle = () => {
 
       {/* Timer and Progress */}
       {gameState === 'playing' && (
-        <div className="flex gap-3">
-          <Card className="flex-1 p-3 bg-card/50">
-            <div className="flex items-center gap-2">
-              <Timer className={`h-4 w-4 ${timeLeft <= 30 ? 'text-destructive' : 'text-primary'}`} />
-              <span className={`font-mono font-bold ${timeLeft <= 30 ? 'text-destructive' : 'text-primary'}`}>
+        <div className="flex gap-3 px-1">
+          <Card className="flex-1 p-4 bg-card/50 shadow-md">
+            <div className="flex items-center gap-2 justify-center">
+              <Timer className={`h-5 w-5 ${timeLeft <= 30 ? 'text-destructive' : 'text-primary'}`} />
+              <span className={`font-mono font-bold text-lg ${timeLeft <= 30 ? 'text-destructive' : 'text-primary'}`}>
                 {formatTime(timeLeft)}
               </span>
             </div>
           </Card>
-          <Card className="flex-1 p-3 bg-card/50">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-accent" />
-              <span className="font-bold text-accent">{path.length} steps</span>
+          <Card className="flex-1 p-4 bg-card/50 shadow-md">
+            <div className="flex items-center gap-2 justify-center">
+              <Trophy className="h-5 w-5 text-accent" />
+              <span className="font-bold text-lg text-accent">{path.length} steps</span>
             </div>
           </Card>
         </div>
@@ -324,23 +324,23 @@ const DailyPuzzle = () => {
 
       {/* Game Progress Path */}
       {gameState === 'playing' && path.length > 0 && (
-        <Card className="p-3 bg-card/50">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground">Path:</p>
-            <ScrollArea className="h-20">
-              <div className="flex items-center gap-1.5 pb-2">
+        <Card className="p-4 bg-card/50 shadow-md mx-1">
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Path:</p>
+            <ScrollArea className="h-24">
+              <div className="flex items-center gap-2 pb-2">
                 {path.map((step, idx) => (
-                  <div key={`${step.type}-${step.id}-${idx}`} className="flex items-center gap-1.5">
+                  <div key={`${step.type}-${step.id}-${idx}`} className="flex items-center gap-2">
                     <div className="text-center shrink-0">
                       <img
                         src={`https://image.tmdb.org/t/p/w92${step.image}`}
                         alt={step.name}
-                        className={`${step.type === 'actor' ? 'w-10 h-10 rounded-full' : 'w-7 h-10 rounded'} object-cover shadow`}
+                        className={`${step.type === 'actor' ? 'w-12 h-12 rounded-full' : 'w-8 h-12 rounded'} object-cover shadow-md`}
                       />
-                      <p className="text-xs mt-1 max-w-[60px] truncate">{step.name}</p>
+                      <p className="text-xs mt-1.5 max-w-[65px] truncate font-medium">{step.name}</p>
                     </div>
                     {idx < path.length - 1 && (
-                      <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     )}
                   </div>
                 ))}
@@ -352,31 +352,31 @@ const DailyPuzzle = () => {
 
       {/* Current View */}
       {gameState === 'playing' && (
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-5 bg-card border-border shadow-lg mx-1">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
           ) : viewMode === 'filmography' ? (
             <div>
-              <h3 className="text-lg font-semibold mb-4">
+              <h3 className="text-lg font-semibold mb-4 tracking-tight">
                 {currentActor?.name}'s Filmography
               </h3>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 gap-4">
                 {filmography.map((credit) => (
                   <button
                     key={`${credit.type}-${credit.id}`}
                     onClick={() => loadCast(credit.id, credit.type, credit.title, credit.posterPath)}
-                    className="text-left active:scale-95 transition-transform"
+                    className="text-left active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg"
                   >
                     <img
                       src={`https://image.tmdb.org/t/p/w185${credit.posterPath}`}
                       alt={credit.title}
                       className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
                     />
-                    <p className="text-xs font-medium line-clamp-2">{credit.title}</p>
+                    <p className="text-xs font-medium line-clamp-2 leading-tight">{credit.title}</p>
                     {credit.year && (
-                      <p className="text-xs text-muted-foreground">{credit.year}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{credit.year}</p>
                     )}
                   </button>
                 ))}
@@ -384,16 +384,16 @@ const DailyPuzzle = () => {
             </div>
           ) : (
             <div>
-              <h3 className="text-lg font-semibold mb-4">
+              <h3 className="text-lg font-semibold mb-4 tracking-tight">
                 Cast of {path[path.length - 1].name}
               </h3>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 gap-4">
                 {cast.map((actor) => (
                   <button
                     key={actor.id}
                     onClick={() => selectActor(actor)}
-                    className={`text-center active:scale-95 transition-transform ${
-                      actor.id === targetActor?.id ? 'ring-2 ring-primary rounded-lg' : ''
+                    className={`text-center active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg ${
+                      actor.id === targetActor?.id ? 'ring-2 ring-primary' : ''
                     }`}
                   >
                     <img
@@ -401,8 +401,8 @@ const DailyPuzzle = () => {
                       alt={actor.name}
                       className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
                     />
-                    <p className="text-xs font-medium">{actor.name}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
+                    <p className="text-xs font-medium leading-tight">{actor.name}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
                       {actor.character}
                     </p>
                   </button>
@@ -415,23 +415,27 @@ const DailyPuzzle = () => {
 
       {/* Start/Reset Buttons */}
       {gameState === 'ready' && (
-        <Button 
-          onClick={startGame} 
-          className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90"
-        >
-          <Timer className="mr-2 h-4 w-4" />
-          Start Game
-        </Button>
+        <div className="px-1">
+          <Button 
+            onClick={startGame} 
+            size="lg"
+            className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 min-h-[56px] text-base font-semibold"
+          >
+            <Timer className="mr-2 h-5 w-5" />
+            Start Game
+          </Button>
+        </div>
       )}
 
       {gameState === 'won' && (
-        <div className="flex gap-3">
+        <div className="flex gap-3 px-1">
           <Button 
             onClick={resetGame}
             variant="outline"
-            className="flex-1"
+            size="lg"
+            className="flex-1 min-h-[52px]"
           >
-            <RotateCcw className="mr-2 h-4 w-4" />
+            <RotateCcw className="mr-2 h-5 w-5" />
             Retry
           </Button>
           <Button 
@@ -439,7 +443,8 @@ const DailyPuzzle = () => {
               loadRandomActors();
               setGameState('loading');
             }}
-            className="flex-1 bg-gradient-to-r from-primary to-accent hover:opacity-90"
+            size="lg"
+            className="flex-1 bg-gradient-to-r from-primary to-accent hover:opacity-90 min-h-[52px]"
           >
             New Game
           </Button>
