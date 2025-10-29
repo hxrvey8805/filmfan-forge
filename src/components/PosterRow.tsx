@@ -72,31 +72,33 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick }: P
                     )}
                   </button>
 
-                  {/* Mobile: Show action buttons on long press / Desktop: on hover */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3 gap-2">
+                  {/* Hover Overlay Actions */}
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex">
+                    {/* Ask Question Button - Left Half */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onPosterClick(item);
                       }}
-                      className="w-full bg-primary/90 hover:bg-primary text-primary-foreground py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 font-medium text-sm active:scale-95 transition-all min-h-[44px]"
+                      className="flex-1 flex flex-col items-center justify-center gap-2 hover:bg-primary/20 transition-colors"
                       aria-label="Ask question about this title"
                     >
-                      <MessageSquare className="h-4 w-4" />
-                      <span>Ask</span>
+                      <MessageSquare className="h-6 w-6 text-white" />
+                      <span className="text-xs text-white font-medium">Ask</span>
                     </button>
 
+                    {/* Delete Button - Right Half */}
                     {onDeleteClick && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onDeleteClick(item);
                         }}
-                        className="w-full bg-destructive/90 hover:bg-destructive text-destructive-foreground py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 font-medium text-sm active:scale-95 transition-all min-h-[44px]"
+                        className="flex-1 flex flex-col items-center justify-center gap-2 hover:bg-destructive/20 transition-colors"
                         aria-label="Remove from list"
                       >
-                        <Trash2 className="h-4 w-4" />
-                        <span>Remove</span>
+                        <Trash2 className="h-6 w-6 text-white" />
+                        <span className="text-xs text-white font-medium">Remove</span>
                       </button>
                     )}
                   </div>
