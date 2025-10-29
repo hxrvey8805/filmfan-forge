@@ -262,8 +262,9 @@ const DailyPuzzle = () => {
 
   // Strengthen filtering on client as well to ensure only movies/TV and exclude talk/news/etc.
   const TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Awards|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The Tonight Show|The View|Live!|Variety|Actors on Actors)/i;
+  const BTS_TITLE_RE = /(Behind the Scenes|Making[- ]?of|Featurette|Interview|Press|Promo|Teaser|Clip|Bloopers|Outtakes|Red Carpet|Special)/i;
   const filteredFilmography = filmography.filter((c) =>
-    (c.type === 'movie' || c.type === 'tv') && !TALK_TITLE_RE.test(c.title)
+    (c.type === 'movie' || c.type === 'tv') && !TALK_TITLE_RE.test(c.title) && !BTS_TITLE_RE.test(c.title) && !/\bself\b|himself|herself/i.test(c.character || '')
   );
 
   return (

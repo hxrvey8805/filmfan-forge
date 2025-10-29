@@ -68,22 +68,31 @@ serve(async (req) => {
 
       const data = await response.json();
       
-      // Combine movies and TV shows
-      const rawCredits = [...data.cast, ...data.crew].filter((item: any) => item.poster_path);
+      // Use ACTING (cast) credits only, keep only movie/TV with posters
+      const rawCredits = (data.cast || []).filter((item: any) => item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv'));
 
-      // Only keep movies/TV, and filter out talk/news/reality/soap/kids/documentary/game/awards-type shows
-      const ALLOWED_MEDIA = new Set(['movie', 'tv']);
+      // Exclusions: talk/news/reality/etc., documentaries, behind-the-scenes, featurettes, promos, interviews, and 'Self' appearances
       const EXCLUDED_TV_GENRES = new Set([99, 10762, 10763, 10764, 10766, 10767]); // Documentary, Kids, News, Reality, Soap, Talk
-      const TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Awards|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The Tonight Show|The View|Live!|Variety|Studio: Actors on Actors)/i;
+      const EXCLUDED_MOVIE_GENRES = new Set([99]); // Documentary
+      const EXCLUDED_TITLE_RE = /(Behind the Scenes|Making[- ]?of|Featurette|Interview|Press|Promo|Teaser|Clip|Bloopers|Outtakes|Awards?|Red Carpet|Special|Variety|Studio: Actors on Actors)/i;
+      const EXCLUDED_TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The Tonight Show|The View|Live!)/i;
 
       const dedup = new Map<string, any>();
       for (const item of rawCredits) {
-        if (!ALLOWED_MEDIA.has(item.media_type)) continue;
-        const isTalkLike = item.media_type === 'tv' && (
-          (Array.isArray(item.genre_ids) && item.genre_ids.some((id: number) => EXCLUDED_TV_GENRES.has(id))) ||
-          TALK_TITLE_RE.test(item.name || item.title || '')
-        );
-        if (isTalkLike) continue;
+        // Exclude 'video' only items
+        if (item.media_type === 'movie' && item.video === true) continue;
+
+        // Exclude documentaries and talk/news/etc.
+        if (Array.isArray(item.genre_ids)) {
+          if (item.media_type === 'tv' && item.genre_ids.some((id: number) => EXCLUDED_TV_GENRES.has(id))) continue;
+          if (item.media_type === 'movie' && item.genre_ids.some((id: number) => EXCLUDED_MOVIE_GENRES.has(id))) continue;
+        }
+
+        const title = (item.title || item.name || '') as string;
+        const character = (item.character || '') as string;
+        if (EXCLUDED_TITLE_RE.test(title) || EXCLUDED_TALK_TITLE_RE.test(title)) continue;
+        if (/\bself\b|himself|herself/i.test(character)) continue;
+
         const key = `${item.media_type}-${item.id}`;
         if (!dedup.has(key)) dedup.set(key, item);
       }
