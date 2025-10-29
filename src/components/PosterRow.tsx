@@ -1,4 +1,4 @@
-import { Film, Tv, Plus, Trash2, MessageSquare, Tag as TagIcon } from "lucide-react";
+import { Film, Tv, Plus, Trash2, MessageSquare } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   Carousel,
@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import TagManager from "@/components/TagManager";
 
 interface Title {
   id: number;
@@ -21,7 +20,6 @@ interface Title {
   posterPath: string;
   year?: number;
   progress?: number;
-  tags?: string[];
 }
 
 interface PosterRowProps {
@@ -32,35 +30,21 @@ interface PosterRowProps {
   onDeleteClick?: (title: Title) => void;
   filterValue?: string;
   onFilterChange?: (value: string) => void;
-  availableTags?: string[];
-  onTagsUpdate?: (titleId: number, tags: string[]) => void;
 }
 
-const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, availableTags = [], onTagsUpdate }: PosterRowProps) => {
+const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange }: PosterRowProps) => {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-3 px-1">
         {onFilterChange && (
           <Select value={filterValue} onValueChange={onFilterChange}>
-            <SelectTrigger className="w-[110px] h-9 text-sm font-semibold bg-gradient-to-r from-primary/20 to-accent/20 border-primary/30 hover:border-primary transition-all rounded-full shadow-md text-primary text-center">
-              <SelectValue placeholder="All" className="text-center" />
+            <SelectTrigger className="w-[110px] h-9 text-sm font-semibold bg-gradient-to-r from-primary/20 to-accent/20 border-primary/30 hover:border-primary transition-all rounded-full shadow-md text-primary">
+              <SelectValue placeholder="All" />
             </SelectTrigger>
-            <SelectContent className="bg-card/95 backdrop-blur-xl border-primary/30 z-50 rounded-xl shadow-2xl min-w-[140px]">
-              <SelectItem value="all" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer justify-center">All</SelectItem>
-              <SelectItem value="movie" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer justify-center">Movies</SelectItem>
-              <SelectItem value="tv" className="rounded-lg text-sm font-medium focus:bg-accent/20 focus:text-accent cursor-pointer justify-center">TV Shows</SelectItem>
-              {availableTags.map((tag) => (
-                <SelectItem 
-                  key={tag} 
-                  value={`tag:${tag}`} 
-                  className="rounded-lg text-sm font-medium focus:bg-primary/10 focus:text-primary cursor-pointer justify-center"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <TagIcon className="h-3 w-3" />
-                    {tag}
-                  </div>
-                </SelectItem>
-              ))}
+            <SelectContent className="bg-card/95 backdrop-blur-xl border-primary/30 z-50 rounded-xl shadow-2xl min-w-[120px]">
+              <SelectItem value="all" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">All</SelectItem>
+              <SelectItem value="movie" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">Movies</SelectItem>
+              <SelectItem value="tv" className="rounded-lg text-sm font-medium focus:bg-accent/20 focus:text-accent cursor-pointer">TV Shows</SelectItem>
             </SelectContent>
           </Select>
         )}
@@ -110,17 +94,6 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                       </div>
                     )}
                   </button>
-
-                  {/* Tag Manager - Bottom Overlay */}
-                  {onTagsUpdate && (
-                    <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-                      <TagManager
-                        tags={item.tags || []}
-                        onTagsChange={(newTags) => onTagsUpdate(item.id, newTags)}
-                        availableTags={availableTags}
-                      />
-                    </div>
-                  )}
 
                   {/* Hover Overlay Actions */}
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex">
