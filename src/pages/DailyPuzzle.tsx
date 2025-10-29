@@ -56,7 +56,10 @@ const DailyPuzzle = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    loadRandomActors();
+    // Only load actors if they haven't been loaded yet
+    if (!startActor && !targetActor) {
+      loadRandomActors();
+    }
   }, []);
 
   // Timer countdown
@@ -415,11 +418,20 @@ const DailyPuzzle = () => {
 
       {/* Start/Reset Buttons */}
       {gameState === 'ready' && (
-        <div className="px-1">
+        <div className="px-1 flex gap-3">
+          <Button 
+            onClick={loadRandomActors}
+            size="lg"
+            variant="outline"
+            className="flex-1 min-h-[56px] text-base font-semibold"
+          >
+            <RotateCcw className="mr-2 h-5 w-5" />
+            Randomize
+          </Button>
           <Button 
             onClick={startGame} 
             size="lg"
-            className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 min-h-[56px] text-base font-semibold"
+            className="flex-1 bg-gradient-to-r from-primary to-accent hover:opacity-90 min-h-[56px] text-base font-semibold"
           >
             <Timer className="mr-2 h-5 w-5" />
             Start Game
