@@ -24,6 +24,8 @@ const Index = () => {
   const [watchList, setWatchList] = useState<Title[]>([]);
   const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([]);
   const [loading, setLoading] = useState(true);
+  const [watchListFilter, setWatchListFilter] = useState<string>("all");
+  const [watchingFilter, setWatchingFilter] = useState<string>("all");
 
   useEffect(() => {
     checkAuth();
@@ -207,24 +209,36 @@ const Index = () => {
     );
   }
 
+  const filteredWatchList = watchListFilter === "all" 
+    ? watchList 
+    : watchList.filter(item => item.type === watchListFilter);
+
+  const filteredWatching = watchingFilter === "all"
+    ? currentlyWatching
+    : currentlyWatching.filter(item => item.type === watchingFilter);
+
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
       {/* Watch List Row */}
       <PosterRow 
         title="Watch List" 
-        items={watchList}
+        items={filteredWatchList}
         onPosterClick={setSelectedTitle}
         onAddClick={() => openSearchModal("watchlist")}
         onDeleteClick={handleDeleteFromWatchList}
+        filterValue={watchListFilter}
+        onFilterChange={setWatchListFilter}
       />
 
       {/* Currently Watching Row */}
       <PosterRow 
         title="Currently Watching" 
-        items={currentlyWatching}
+        items={filteredWatching}
         onPosterClick={setSelectedTitle}
         onAddClick={() => openSearchModal("watching")}
         onDeleteClick={handleDeleteFromCurrentlyWatching}
+        filterValue={watchingFilter}
+        onFilterChange={setWatchingFilter}
       />
 
       {/* Title Detail Modal */}

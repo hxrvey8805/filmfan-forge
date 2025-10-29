@@ -5,6 +5,13 @@ import {
   CarouselContent,
   CarouselItem,
 } from "@/components/ui/carousel";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Title {
   id: number;
@@ -21,12 +28,28 @@ interface PosterRowProps {
   onPosterClick: (title: Title) => void;
   onAddClick?: () => void;
   onDeleteClick?: (title: Title) => void;
+  filterValue?: string;
+  onFilterChange?: (value: string) => void;
 }
 
-const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick }: PosterRowProps) => {
+const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange }: PosterRowProps) => {
   return (
     <section className="space-y-4">
-      <h2 className="text-xl font-bold px-1 tracking-tight">{title}</h2>
+      <div className="flex items-center gap-3 px-1">
+        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
+        {onFilterChange && (
+          <Select value={filterValue} onValueChange={onFilterChange}>
+            <SelectTrigger className="w-[140px] h-8 text-sm bg-background">
+              <SelectValue placeholder="Filter type" />
+            </SelectTrigger>
+            <SelectContent className="bg-background z-50">
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="movie">Movies</SelectItem>
+              <SelectItem value="tv">TV Shows</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+      </div>
 
       <div className="relative">
         <Carousel
