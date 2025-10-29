@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Film } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 interface Title {
   id: number;
@@ -23,49 +23,34 @@ const Index = () => {
   const [searchModalType, setSearchModalType] = useState<"watchlist" | "watching">("watchlist");
   const [watchList, setWatchList] = useState<Title[]>([]);
   const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check authentication and load data
-    const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        navigate("/auth");
-        return;
-      }
+    checkAuth();
+  }, []);
 
-      setUserId(session.user.id);
-      await loadUserTitles(session.user.id);
-      setLoading(false);
-    };
+  const checkAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      navigate("/auth");
+      return;
+    }
+    loadUserTitles();
+  };
 
-    initializeAuth();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setUserId(session.user.id);
-        loadUserTitles(session.user.id);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
-
-  const loadUserTitles = async (uid: string) => {
+  const loadUserTitles = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data, error } = await supabase
         .from("user_titles")
         .select("*")
-        .eq("user_id", uid);
+        .eq("user_id", user.id);
 
       if (error) throw error;
 
-      const watchlist = data
+      const watchlistItems = data
         ?.filter((item) => item.list_type === "watchlist")
         .map((item) => ({
           id: item.title_id,
@@ -76,7 +61,7 @@ const Index = () => {
           progress: item.progress,
         })) || [];
 
-      const watching = data
+      const watchingItems = data
         ?.filter((item) => item.list_type === "watching")
         .map((item) => ({
           id: item.title_id,
@@ -87,25 +72,28 @@ const Index = () => {
           progress: item.progress,
         })) || [];
 
-      setWatchList(watchlist);
-      setCurrentlyWatching(watching);
-    } catch (error: any) {
+      setWatchList(watchlistItems);
+      setCurrentlyWatching(watchingItems);
+    } catch (error) {
+      console.error("Error loading titles:", error);
       toast.error("Failed to load your lists");
-      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleAddToWatchList = async (title: Title) => {
-    if (!userId) return;
-
     if (watchList.find(item => item.id === title.id)) {
       toast.info(`"${title.title}" is already in your Watch List`);
       return;
     }
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { error } = await supabase.from("user_titles").insert({
-        user_id: userId,
+        user_id: user.id,
         title_id: title.id,
         title: title.title,
         type: title.type,
@@ -118,29 +106,29 @@ const Index = () => {
 
       setWatchList([...watchList, title]);
       toast.success(`Added "${title.title}" to Watch List`);
-    } catch (error: any) {
+    } catch (error) {
+      console.error("Error adding to watchlist:", error);
       toast.error("Failed to add to Watch List");
-      console.error(error);
     }
   };
 
   const handleAddToCurrentlyWatching = async (title: Title) => {
-    if (!userId) return;
-
     if (currentlyWatching.find(item => item.id === title.id)) {
       toast.info(`"${title.title}" is already in Currently Watching`);
       return;
     }
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { error } = await supabase.from("user_titles").insert({
-        user_id: userId,
+        user_id: user.id,
         title_id: title.id,
         title: title.title,
         type: title.type,
         poster_path: title.posterPath,
         year: title.year,
-        progress: title.progress,
         list_type: "watching",
       });
 
@@ -148,20 +136,21 @@ const Index = () => {
 
       setCurrentlyWatching([...currentlyWatching, title]);
       toast.success(`Added "${title.title}" to Currently Watching`);
-    } catch (error: any) {
+    } catch (error) {
+      console.error("Error adding to watching:", error);
       toast.error("Failed to add to Currently Watching");
-      console.error(error);
     }
   };
 
   const handleDeleteFromWatchList = async (title: Title) => {
-    if (!userId) return;
-
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { error } = await supabase
         .from("user_titles")
         .delete()
-        .eq("user_id", userId)
+        .eq("user_id", user.id)
         .eq("title_id", title.id)
         .eq("list_type", "watchlist");
 
@@ -169,20 +158,21 @@ const Index = () => {
 
       setWatchList(watchList.filter(item => item.id !== title.id));
       toast.success(`Removed "${title.title}" from Watch List`);
-    } catch (error: any) {
+    } catch (error) {
+      console.error("Error removing from watchlist:", error);
       toast.error("Failed to remove from Watch List");
-      console.error(error);
     }
   };
 
   const handleDeleteFromCurrentlyWatching = async (title: Title) => {
-    if (!userId) return;
-
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { error } = await supabase
         .from("user_titles")
         .delete()
-        .eq("user_id", userId)
+        .eq("user_id", user.id)
         .eq("title_id", title.id)
         .eq("list_type", "watching");
 
@@ -190,9 +180,9 @@ const Index = () => {
 
       setCurrentlyWatching(currentlyWatching.filter(item => item.id !== title.id));
       toast.success(`Removed "${title.title}" from Currently Watching`);
-    } catch (error: any) {
+    } catch (error) {
+      console.error("Error removing from watching:", error);
       toast.error("Failed to remove from Currently Watching");
-      console.error(error);
     }
   };
 
@@ -209,9 +199,12 @@ const Index = () => {
     }
   };
 
-
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Film className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (

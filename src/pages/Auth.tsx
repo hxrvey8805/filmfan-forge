@@ -1,39 +1,29 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Film } from "lucide-react";
 
 const Auth = () => {
+  const navigate = useNavigate();
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         navigate("/");
       }
     });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        navigate("/");
-      }
-    });
-
-    return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
@@ -44,7 +34,8 @@ const Auth = () => {
           password,
         });
         if (error) throw error;
-        toast.success("Welcome back!");
+        toast.success("Logged in successfully!");
+        navigate("/");
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -55,18 +46,19 @@ const Auth = () => {
         });
         if (error) throw error;
         toast.success("Account created successfully!");
+        navigate("/");
       }
     } catch (error: any) {
-      toast.error(error.message || "An error occurred");
+      toast.error(error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
+        <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <Film className="h-12 w-12 text-primary" />
           </div>
@@ -76,7 +68,7 @@ const Auth = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -110,7 +102,9 @@ const Auth = () => {
               onClick={() => setIsLogin(!isLogin)}
               className="text-primary hover:underline"
             >
-              {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+              {isLogin
+                ? "Don't have an account? Sign up"
+                : "Already have an account? Sign in"}
             </button>
           </div>
         </CardContent>
