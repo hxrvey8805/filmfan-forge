@@ -43,9 +43,9 @@ async function getSubtitleContext(showTitle: string, episode: string, timestamp:
     console.log('Searching subtitles for:', { showTitle, episode, episodeInfo, currentSeconds });
     
     // Search for subtitles
-    let searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(showTitle)}`;
+    let searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(showTitle)}&languages=en&order_by=download_count&order_direction=desc`;
     if (episodeInfo) {
-      searchUrl += `&season_number=${episodeInfo.season}&episode_number=${episodeInfo.episode}`;
+      searchUrl += `&season_number=${episodeInfo.season}&episode_number=${episodeInfo.episode}&type=episode`;
     }
     
     const searchResponse = await fetch(searchUrl, {
@@ -64,15 +64,30 @@ async function getSubtitleContext(showTitle: string, episode: string, timestamp:
     const searchData = await searchResponse.json();
     console.log('Found subtitles:', searchData.data?.length || 0);
     
-    if (!searchData.data || searchData.data.length === 0) {
+    const results: any[] = searchData.data || [];
+    if (results.length === 0) {
       return null;
     }
 
-    // Get the first English subtitle
-    const subtitle = searchData.data.find((s: any) => s.attributes?.language === 'en') || searchData.data[0];
+    // Choose the best matching subtitle by title similarity, season/episode match, and popularity
+    const norm = (s: string | undefined) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const target = norm(showTitle);
+
+    const scored = results.map((r) => {
+      const a = r.attributes || {};
+      const f = a.feature_details || {};
+      const parentTitle = f.parent_title || f.title || a.feature || a.title || '';
+      const scoreTitle = target && norm(parentTitle) ? (norm(parentTitle) === target ? 2 : norm(parentTitle).includes(target) ? 1 : 0) : 0;
+      const scoreEpisode = episodeInfo && (f.season_number === episodeInfo.season && f.episode_number === episodeInfo.episode) ? 2 : 0;
+      const popularity = a.download_count || 0;
+      return { r, score: scoreTitle * 10 + scoreEpisode * 20 + popularity };
+    });
+
+    scored.sort((x, y) => y.score - x.score);
+    const best = scored[0]?.r;
     
-    if (!subtitle?.attributes?.files?.[0]?.file_id) {
-      console.log('No subtitle file ID found');
+    if (!best?.attributes?.files?.[0]?.file_id) {
+      console.log('No subtitle file ID found on best match');
       return null;
     }
 
@@ -83,9 +98,7 @@ async function getSubtitleContext(showTitle: string, episode: string, timestamp:
         'Api-Key': apiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        file_id: subtitle.attributes.files[0].file_id
-      }),
+      body: JSON.stringify({ file_id: best.attributes.files[0].file_id }),
     });
 
     if (!downloadResponse.ok) {
@@ -196,7 +209,10 @@ Your goal is to enhance viewing experience by providing detailed explanations of
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: [
+        messages: subtitleDialogue ? [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `User question: ${question}\n\nContext - Dialogue up to ${timestamp}:\n${subtitleDialogue}\n\nAnswer strictly based on the dialogue above and general knowledge up to this point.` }
+        ] : [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: question }
         ],
