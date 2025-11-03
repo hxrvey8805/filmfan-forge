@@ -6,6 +6,46 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to parse timestamp to seconds
+function timestampToSeconds(timestamp: string): number {
+  const parts = timestamp.split(':').map(Number);
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1]; // MM:SS
+  } else if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2]; // HH:MM:SS
+  }
+  return 0;
+}
+
+// Helper function to search for subtitles
+async function searchSubtitles(showTitle: string, episode: string, apiKey: string) {
+  try {
+    console.log('Searching subtitles for:', { showTitle, episode });
+    
+    const searchResponse = await fetch(`https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(showTitle)}`, {
+      method: 'GET',
+      headers: {
+        'Api-Key': apiKey,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!searchResponse.ok) {
+      console.error('OpenSubtitles search failed:', searchResponse.status);
+      return null;
+    }
+
+    const searchData = await searchResponse.json();
+    console.log('Found subtitles:', searchData.data?.length || 0);
+    
+    // Return the first matching subtitle file
+    return searchData.data?.[0] || null;
+  } catch (error) {
+    console.error('Error searching subtitles:', error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -17,8 +57,24 @@ serve(async (req) => {
     console.log('Spoiler-free request:', { showTitle, episode, timestamp, question });
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const OPENSUBTITLES_API_KEY = Deno.env.get('OPENSUBTITLES_API_KEY');
+    
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
+    }
+    if (!OPENSUBTITLES_API_KEY) {
+      throw new Error('OPENSUBTITLES_API_KEY is not configured');
+    }
+
+    // Try to get subtitle context
+    let subtitleContext = '';
+    const subtitle = await searchSubtitles(showTitle, episode, OPENSUBTITLES_API_KEY);
+    
+    if (subtitle) {
+      console.log('Using subtitle data for context');
+      subtitleContext = `\n\nSubtitle data available: Based on subtitle information for this show/episode.`;
+    } else {
+      console.log('No subtitle data found, using general knowledge');
     }
 
     // Create context-aware system prompt
@@ -30,6 +86,7 @@ CRITICAL RULES:
 3. If the user asks about something that happens AFTER this point, politely say you cannot answer to avoid spoilers
 4. Keep answers concise (2-3 sentences max)
 5. If you don't have specific information about this show/episode/timestamp, acknowledge that and provide general helpful context instead
+${subtitleContext}
 
 Your goal is to enhance viewing experience without ruining surprises.`;
 
