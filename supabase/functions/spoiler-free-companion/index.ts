@@ -17,12 +17,38 @@ function timestampToSeconds(timestamp: string): number {
   return 0;
 }
 
-// Helper function to search for subtitles
-async function searchSubtitles(showTitle: string, episode: string, apiKey: string) {
+// Helper function to parse episode string (e.g., "S1E3" or "Season 1 Episode 3")
+function parseEpisode(episode: string): { season: number; episode: number } | null {
+  // Try "S1E3" format
+  let match = episode.match(/S(\d+)E(\d+)/i);
+  if (match) {
+    return { season: parseInt(match[1]), episode: parseInt(match[2]) };
+  }
+  
+  // Try "Season 1 Episode 3" format
+  match = episode.match(/Season\s+(\d+)\s+Episode\s+(\d+)/i);
+  if (match) {
+    return { season: parseInt(match[1]), episode: parseInt(match[2]) };
+  }
+  
+  return null;
+}
+
+// Helper function to search and download subtitles
+async function getSubtitleContext(showTitle: string, episode: string, timestamp: string, apiKey: string) {
   try {
-    console.log('Searching subtitles for:', { showTitle, episode });
+    const episodeInfo = parseEpisode(episode);
+    const currentSeconds = timestampToSeconds(timestamp);
     
-    const searchResponse = await fetch(`https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(showTitle)}`, {
+    console.log('Searching subtitles for:', { showTitle, episode, episodeInfo, currentSeconds });
+    
+    // Search for subtitles
+    let searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(showTitle)}`;
+    if (episodeInfo) {
+      searchUrl += `&season_number=${episodeInfo.season}&episode_number=${episodeInfo.episode}`;
+    }
+    
+    const searchResponse = await fetch(searchUrl, {
       method: 'GET',
       headers: {
         'Api-Key': apiKey,
@@ -38,10 +64,80 @@ async function searchSubtitles(showTitle: string, episode: string, apiKey: strin
     const searchData = await searchResponse.json();
     console.log('Found subtitles:', searchData.data?.length || 0);
     
-    // Return the first matching subtitle file
-    return searchData.data?.[0] || null;
+    if (!searchData.data || searchData.data.length === 0) {
+      return null;
+    }
+
+    // Get the first English subtitle
+    const subtitle = searchData.data.find((s: any) => s.attributes?.language === 'en') || searchData.data[0];
+    
+    if (!subtitle?.attributes?.files?.[0]?.file_id) {
+      console.log('No subtitle file ID found');
+      return null;
+    }
+
+    // Download the subtitle file
+    const downloadResponse = await fetch(`https://api.opensubtitles.com/api/v1/download`, {
+      method: 'POST',
+      headers: {
+        'Api-Key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        file_id: subtitle.attributes.files[0].file_id
+      }),
+    });
+
+    if (!downloadResponse.ok) {
+      console.error('Subtitle download failed:', downloadResponse.status);
+      return null;
+    }
+
+    const downloadData = await downloadResponse.json();
+    
+    if (!downloadData.link) {
+      console.log('No download link provided');
+      return null;
+    }
+
+    // Fetch the actual subtitle content
+    const subtitleResponse = await fetch(downloadData.link);
+    const subtitleText = await subtitleResponse.text();
+    
+    // Parse SRT format and extract relevant dialogue up to current timestamp
+    const dialogueLines: string[] = [];
+    const srtBlocks = subtitleText.split('\n\n');
+    
+    for (const block of srtBlocks) {
+      const lines = block.trim().split('\n');
+      if (lines.length < 3) continue;
+      
+      // Parse timestamp (format: 00:00:20,000 --> 00:00:22,000)
+      const timeLine = lines[1];
+      const startTime = timeLine.split(' --> ')[0];
+      const timeMatch = startTime.match(/(\d+):(\d+):(\d+)/);
+      
+      if (timeMatch) {
+        const subtitleSeconds = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
+        
+        // Only include dialogue up to current timestamp
+        if (subtitleSeconds <= currentSeconds) {
+          const dialogue = lines.slice(2).join(' ').replace(/<[^>]*>/g, '').trim();
+          if (dialogue) {
+            dialogueLines.push(dialogue);
+          }
+        }
+      }
+    }
+    
+    // Return the last 50 lines of dialogue (most recent context)
+    const recentDialogue = dialogueLines.slice(-50).join('\n');
+    console.log(`Extracted ${dialogueLines.length} lines of dialogue up to timestamp`);
+    
+    return recentDialogue;
+
   } catch (error) {
-    console.error('Error searching subtitles:', error);
+    console.error('Error fetching subtitles:', error);
     return null;
   }
 }
@@ -66,13 +162,13 @@ serve(async (req) => {
       throw new Error('OPENSUBTITLES_API_KEY is not configured');
     }
 
-    // Try to get subtitle context
-    let subtitleContext = '';
-    const subtitle = await searchSubtitles(showTitle, episode, OPENSUBTITLES_API_KEY);
+    // Try to get subtitle context with actual dialogue
+    const subtitleDialogue = await getSubtitleContext(showTitle, episode, timestamp, OPENSUBTITLES_API_KEY);
     
-    if (subtitle) {
-      console.log('Using subtitle data for context');
-      subtitleContext = `\n\nSubtitle data available: Based on subtitle information for this show/episode.`;
+    let subtitleContext = '';
+    if (subtitleDialogue) {
+      console.log('Using actual subtitle dialogue for context');
+      subtitleContext = `\n\nACTUAL DIALOGUE FROM THE SHOW (up to timestamp ${timestamp}):\n${subtitleDialogue}\n\nUse this dialogue to provide accurate, detailed answers about what has happened so far.`;
     } else {
       console.log('No subtitle data found, using general knowledge');
     }
@@ -82,14 +178,15 @@ serve(async (req) => {
 
 CRITICAL RULES:
 1. The user is currently watching "${showTitle}" at ${episode} @ ${timestamp}
-2. IMPORTANT: You SHOULD answer questions about events, characters, and plot points that have ALREADY OCCURRED up to this timestamp. The user has already seen these events, so they are NOT spoilers.
-3. ONLY refuse to answer if the question is about events that happen AFTER the current timestamp
-4. Be helpful and informative about past events - the user is asking because they want clarity on what they've already watched
-5. Keep answers concise (2-3 sentences max) and focus on what has happened so far
-6. If you're unsure whether an event has occurred yet, ask the user to clarify or provide context based on what typically happens by that point in the show
+2. IMPORTANT: You MUST answer questions about events, characters, and plot points that have ALREADY OCCURRED up to this timestamp. The user has already seen these events, so they are NOT spoilers.
+3. When the user asks a question, assume it's about something that has already happened unless it's obvious they're asking about future events
+4. ONLY refuse to answer if the question is explicitly about events that happen AFTER the current timestamp
+5. Provide DETAILED, helpful answers about past events - the user is asking because they want clarity on what they've already watched
+6. Use the actual dialogue provided below to give accurate, specific information
+7. Do not say "that didn't happen at this timestamp" - if the user is asking, they likely saw it. Use the dialogue to confirm what happened.
 ${subtitleContext}
 
-Your goal is to enhance viewing experience by clarifying past events without ruining future surprises.`;
+Your goal is to enhance viewing experience by providing detailed explanations of past events without ruining future surprises.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
