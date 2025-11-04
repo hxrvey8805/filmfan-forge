@@ -69,27 +69,65 @@ async function getSubtitleContext(showTitle: string, episode: string, timestamp:
       return null;
     }
 
-    // Choose the best matching subtitle by title similarity, season/episode match, and popularity
+    // Stronger matching: exact title match > partial includes > season/episode only.
     const norm = (s: string | undefined) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     const target = norm(showTitle);
 
-    const scored = results.map((r) => {
-      const a = r.attributes || {};
-      const f = a.feature_details || {};
-      const parentTitle = f.parent_title || f.title || a.feature || a.title || '';
-      const scoreTitle = target && norm(parentTitle) ? (norm(parentTitle) === target ? 2 : norm(parentTitle).includes(target) ? 1 : 0) : 0;
-      const scoreEpisode = episodeInfo && (f.season_number === episodeInfo.season && f.episode_number === episodeInfo.episode) ? 2 : 0;
-      const popularity = a.download_count || 0;
-      return { r, score: scoreTitle * 10 + scoreEpisode * 20 + popularity };
+    const items = results.map((r) => ({
+      r,
+      a: r.attributes || {},
+      f: (r.attributes?.feature_details) || {},
+    }));
+
+    const matchesSeasonEpisode = (it: any) => (
+      episodeInfo ? (it.f.season_number === episodeInfo.season && it.f.episode_number === episodeInfo.episode) : true
+    );
+
+    const normParent = (it: any) => norm(it.f.parent_title || it.f.title || it.a.feature || it.a.title || '');
+
+    const exactTitleMatches = items.filter((it) => matchesSeasonEpisode(it) && normParent(it) === target);
+    const includeTitleMatches = items.filter((it) => matchesSeasonEpisode(it) && (normParent(it).includes(target) || target.includes(normParent(it))));
+
+    let candidates = exactTitleMatches.length
+      ? exactTitleMatches
+      : includeTitleMatches.length
+        ? includeTitleMatches
+        : items.filter(matchesSeasonEpisode);
+
+    // Sort primarily by download_count; boost exact and include matches
+    candidates.sort((x, y) => {
+      const score = (it: any) => {
+        const exact = normParent(it) === target ? 1000 : 0;
+        const partial = (normParent(it).includes(target) || target.includes(normParent(it))) ? 200 : 0;
+        const seasonEp = matchesSeasonEpisode(it) ? 500 : 0;
+        const fileName = it.a?.files?.[0]?.file_name || '';
+        const fnBoost = norm(fileName).includes(target) ? 50 : 0;
+        const popularity = (it.a.download_count || 0) / 10; // cap impact
+        return exact + partial + seasonEp + fnBoost + popularity;
+      };
+      return score(y) - score(x);
     });
 
-    scored.sort((x, y) => y.score - x.score);
-    const best = scored[0]?.r;
-    
-    if (!best?.attributes?.files?.[0]?.file_id) {
-      console.log('No subtitle file ID found on best match');
+    const best = candidates[0]?.r;
+
+    // Guard against mismatched titles to avoid wrong-show spoilers
+    const bestNormTitle = candidates[0] ? normParent(candidates[0]) : '';
+    const trustMatch = !!best && (bestNormTitle === target || bestNormTitle.includes(target) || target.includes(bestNormTitle));
+
+    if (!best?.attributes?.files?.[0]?.file_id || !trustMatch) {
+      console.log('No reliable subtitle match found', { bestNormTitle, target });
       return null;
     }
+
+    const chosenF = best.attributes?.feature_details || {};
+    const chosenFileName = best.attributes?.files?.[0]?.file_name;
+    console.log('Selected subtitle candidate:', {
+      parentTitle: chosenF.parent_title || chosenF.title || best.attributes?.feature || best.attributes?.title,
+      season: chosenF.season_number,
+      episode: chosenF.episode_number,
+      downloads: best.attributes?.download_count,
+      fileName: chosenFileName,
+    });
 
     // Download the subtitle file
     const downloadResponse = await fetch(`https://api.opensubtitles.com/api/v1/download`, {
@@ -135,7 +173,13 @@ async function getSubtitleContext(showTitle: string, episode: string, timestamp:
         
         // Only include dialogue up to current timestamp
         if (subtitleSeconds <= currentSeconds) {
-          const dialogue = lines.slice(2).join(' ').replace(/<[^>]*>/g, '').trim();
+          const raw = lines.slice(2).join(' ');
+          const dialogue = raw
+            .replace(/<[^>]*>/g, '') // HTML tags
+            .replace(/\[[^\]]*\]/g, '') // [SOUND]
+            .replace(/\([^)]*\)/g, '') // (music)
+            .replace(/\s+/g, ' ')
+            .trim();
           if (dialogue) {
             dialogueLines.push(dialogue);
           }
@@ -143,9 +187,13 @@ async function getSubtitleContext(showTitle: string, episode: string, timestamp:
       }
     }
     
-    // Return the last 50 lines of dialogue (most recent context)
-    const recentDialogue = dialogueLines.slice(-50).join('\n');
-    console.log(`Extracted ${dialogueLines.length} lines of dialogue up to timestamp`);
+    // Deduplicate consecutive lines and return recent context
+    const uniqueLines: string[] = [];
+    for (const d of dialogueLines) {
+      if (uniqueLines[uniqueLines.length - 1] !== d) uniqueLines.push(d);
+    }
+    const recentDialogue = uniqueLines.slice(-50).join('\n');
+    console.log(`Extracted ${uniqueLines.length} lines of dialogue up to timestamp`);
     
     return recentDialogue;
 
@@ -191,12 +239,13 @@ serve(async (req) => {
 
 CRITICAL RULES:
 1. The user is currently watching "${showTitle}" at ${episode} @ ${timestamp}
-2. IMPORTANT: You MUST answer questions about events, characters, and plot points that have ALREADY OCCURRED up to this timestamp. The user has already seen these events, so they are NOT spoilers.
-3. When the user asks a question, assume it's about something that has already happened unless it's obvious they're asking about future events
-4. ONLY refuse to answer if the question is explicitly about events that happen AFTER the current timestamp
-5. Provide DETAILED, helpful answers about past events - the user is asking because they want clarity on what they've already watched
-6. Use the actual dialogue provided below to give accurate, specific information
-7. Do not say "that didn't happen at this timestamp" - if the user is asking, they likely saw it. Use the dialogue to confirm what happened.
+2. IMPORTANT: Answer questions about events, characters, and plot points that have ALREADY OCCURRED up to this timestamp. These are NOT spoilers.
+3. Assume questions refer to past events unless explicitly about the future.
+4. ONLY refuse if the question explicitly asks about events AFTER the current timestamp.
+5. Provide DETAILED, specific answers grounded in what has happened so far.
+6. Prefer quoting or paraphrasing ACTUAL DIALOGUE when helpful.
+7. Never say "that hasn't happened" or "that didn't happen." If something isn't present in the provided dialogue, say: "I can't confirm that from the subtitles up to this time, but here's what's confirmed so far..." and answer using confirmed context.
+8. If the question refers to an earlier scene, answer it directly using prior context; do not gate responses on an exact minute.
 ${subtitleContext}
 
 Your goal is to enhance viewing experience by providing detailed explanations of past events without ruining future surprises.`;
