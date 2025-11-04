@@ -155,17 +155,19 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddTo
     setIsLoading(true);
 
     try {
-      const episodeString = title.type === "tv" ? `S${selectedSeason}E${selectedEpisode}` : undefined;
       const contextInfo = title.type === "tv" 
-        ? `${episodeString} @ ${timestamp}`
+        ? `S${selectedSeason}E${selectedEpisode} @ ${timestamp}`
         : `@ ${timestamp}`;
 
       const { data, error } = await supabase.functions.invoke('spoiler-free-companion', {
         body: {
-          showTitle: title.title,
-          episode: title.type === "tv" ? episodeString : "N/A (Movie)",
+          tmdbId: title.id,
+          mediaType: title.type,
+          seasonNumber: title.type === 'tv' ? parseInt(selectedSeason) : undefined,
+          episodeNumber: title.type === 'tv' ? parseInt(selectedEpisode) : undefined,
+          title: title.title,
           timestamp,
-          question
+          question: question.trim(),
         }
       });
 

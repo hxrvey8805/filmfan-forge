@@ -17,6 +17,35 @@ function timestampToSeconds(timestamp: string): number {
   return 0;
 }
 
+// Fetch TMDb metadata for validation
+async function getTMDbMetadata(tmdbId: number, mediaType: string, seasonNumber?: number, episodeNumber?: number, apiKey?: string) {
+  try {
+    if (!apiKey) {
+      console.log('No TMDb API key available');
+      return null;
+    }
+
+    let url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${apiKey}`;
+    
+    if (mediaType === 'tv' && seasonNumber && episodeNumber) {
+      url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${apiKey}`;
+    }
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error('TMDb API error:', response.status);
+      return null;
+    }
+    
+    const data = await response.json();
+    console.log('TMDb metadata fetched:', { title: data.title || data.name, year: data.release_date || data.first_air_date });
+    return data;
+  } catch (error) {
+    console.error('Error fetching TMDb metadata:', error);
+    return null;
+  }
+}
+
 // Helper function to parse episode string (e.g., "S1E3" or "Season 1 Episode 3")
 function parseEpisode(episode: string): { season: number; episode: number } | null {
   // Try "S1E3" format
@@ -34,18 +63,27 @@ function parseEpisode(episode: string): { season: number; episode: number } | nu
   return null;
 }
 
-// Helper function to search and download subtitles
-async function getSubtitleContext(showTitle: string, episode: string, timestamp: string, apiKey: string) {
+// Helper function to search and download subtitles using TMDb ID
+async function getSubtitleContext(
+  tmdbId: number, 
+  mediaType: string, 
+  seasonNumber: number | undefined, 
+  episodeNumber: number | undefined,
+  timestamp: string, 
+  apiKey: string
+) {
   try {
-    const episodeInfo = parseEpisode(episode);
     const currentSeconds = timestampToSeconds(timestamp);
     
-    console.log('Searching subtitles for:', { showTitle, episode, episodeInfo, currentSeconds });
+    console.log('Searching subtitles with TMDb ID:', { tmdbId, mediaType, seasonNumber, episodeNumber, currentSeconds });
     
-    // Search for subtitles
-    let searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(showTitle)}&languages=en&order_by=download_count&order_direction=desc`;
-    if (episodeInfo) {
-      searchUrl += `&season_number=${episodeInfo.season}&episode_number=${episodeInfo.episode}&type=episode`;
+    // Search for subtitles using TMDb ID
+    let searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?tmdb_id=${tmdbId}&languages=en&order_by=download_count&order_direction=desc`;
+    
+    if (mediaType === 'tv' && seasonNumber && episodeNumber) {
+      searchUrl += `&season_number=${seasonNumber}&episode_number=${episodeNumber}&type=episode`;
+    } else if (mediaType === 'movie') {
+      searchUrl += `&type=movie`;
     }
     
     const searchResponse = await fetch(searchUrl, {
@@ -62,67 +100,30 @@ async function getSubtitleContext(showTitle: string, episode: string, timestamp:
     }
 
     const searchData = await searchResponse.json();
-    console.log('Found subtitles:', searchData.data?.length || 0);
+    console.log('Found subtitles using TMDb ID:', searchData.data?.length || 0);
     
     const results: any[] = searchData.data || [];
     if (results.length === 0) {
+      console.log('No subtitles found for TMDb ID:', tmdbId);
       return null;
     }
 
-    // Stronger matching: exact title match > partial includes > season/episode only.
-    const norm = (s: string | undefined) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-    const target = norm(showTitle);
-
-    const items = results.map((r) => ({
-      r,
-      a: r.attributes || {},
-      f: (r.attributes?.feature_details) || {},
-    }));
-
-    const matchesSeasonEpisode = (it: any) => (
-      episodeInfo ? (it.f.season_number === episodeInfo.season && it.f.episode_number === episodeInfo.episode) : true
-    );
-
-    const normParent = (it: any) => norm(it.f.parent_title || it.f.title || it.a.feature || it.a.title || '');
-
-    const exactTitleMatches = items.filter((it) => matchesSeasonEpisode(it) && normParent(it) === target);
-    const includeTitleMatches = items.filter((it) => matchesSeasonEpisode(it) && (normParent(it).includes(target) || target.includes(normParent(it))));
-
-    let candidates = exactTitleMatches.length
-      ? exactTitleMatches
-      : includeTitleMatches.length
-        ? includeTitleMatches
-        : items.filter(matchesSeasonEpisode);
-
-    // Sort primarily by download_count; boost exact and include matches
-    candidates.sort((x, y) => {
-      const score = (it: any) => {
-        const exact = normParent(it) === target ? 1000 : 0;
-        const partial = (normParent(it).includes(target) || target.includes(normParent(it))) ? 200 : 0;
-        const seasonEp = matchesSeasonEpisode(it) ? 500 : 0;
-        const fileName = it.a?.files?.[0]?.file_name || '';
-        const fnBoost = norm(fileName).includes(target) ? 50 : 0;
-        const popularity = (it.a.download_count || 0) / 10; // cap impact
-        return exact + partial + seasonEp + fnBoost + popularity;
-      };
-      return score(y) - score(x);
-    });
-
-    const best = candidates[0]?.r;
-
-    // Guard against mismatched titles to avoid wrong-show spoilers
-    const bestNormTitle = candidates[0] ? normParent(candidates[0]) : '';
-    const trustMatch = !!best && (bestNormTitle === target || bestNormTitle.includes(target) || target.includes(bestNormTitle));
-
-    if (!best?.attributes?.files?.[0]?.file_id || !trustMatch) {
-      console.log('No reliable subtitle match found', { bestNormTitle, target });
+    // Since we're searching by TMDb ID, the results should be accurate
+    // Sort by download count and take the best one
+    results.sort((a, b) => (b.attributes?.download_count || 0) - (a.attributes?.download_count || 0));
+    
+    const best = results[0];
+    
+    if (!best?.attributes?.files?.[0]?.file_id) {
+      console.log('No valid subtitle file found');
       return null;
     }
 
     const chosenF = best.attributes?.feature_details || {};
     const chosenFileName = best.attributes?.files?.[0]?.file_name;
-    console.log('Selected subtitle candidate:', {
-      parentTitle: chosenF.parent_title || chosenF.title || best.attributes?.feature || best.attributes?.title,
+    console.log('Selected subtitle:', {
+      tmdbId: chosenF.tmdb_id,
+      title: chosenF.parent_title || chosenF.title || best.attributes?.feature,
       season: chosenF.season_number,
       episode: chosenF.episode_number,
       downloads: best.attributes?.download_count,
@@ -209,12 +210,21 @@ serve(async (req) => {
   }
 
   try {
-    const { showTitle, episode, timestamp, question } = await req.json();
+    const { tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question } = await req.json();
     
-    console.log('Spoiler-free request:', { showTitle, episode, timestamp, question });
+    console.log('Spoiler-free request:', { tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question });
+
+    // Validate required fields
+    if (!tmdbId || !mediaType || !timestamp || !question) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields: tmdbId, mediaType, timestamp, question' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     const OPENSUBTITLES_API_KEY = Deno.env.get('OPENSUBTITLES_API_KEY');
+    const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
@@ -223,32 +233,60 @@ serve(async (req) => {
       throw new Error('OPENSUBTITLES_API_KEY is not configured');
     }
 
-    // Try to get subtitle context with actual dialogue
-    const subtitleDialogue = await getSubtitleContext(showTitle, episode, timestamp, OPENSUBTITLES_API_KEY);
+    // Fetch TMDb metadata for validation
+    const tmdbMetadata = await getTMDbMetadata(tmdbId, mediaType, seasonNumber, episodeNumber, TMDB_API_KEY);
     
-    let subtitleContext = '';
-    if (subtitleDialogue) {
-      console.log('Using actual subtitle dialogue for context');
-      subtitleContext = `\n\nACTUAL DIALOGUE FROM THE SHOW (up to timestamp ${timestamp}):\n${subtitleDialogue}\n\nUse this dialogue to provide accurate, detailed answers about what has happened so far.`;
-    } else {
-      console.log('No subtitle data found, using general knowledge');
+    if (!tmdbMetadata) {
+      console.log('Could not validate TMDb metadata');
     }
+
+    // Try to get subtitle context with actual dialogue using TMDb ID
+    const subtitleDialogue = await getSubtitleContext(
+      tmdbId, 
+      mediaType, 
+      seasonNumber, 
+      episodeNumber, 
+      timestamp, 
+      OPENSUBTITLES_API_KEY
+    );
+    
+    if (!subtitleDialogue) {
+      console.log('No subtitle data found for TMDb ID:', tmdbId);
+      return new Response(
+        JSON.stringify({ 
+          answer: "I can't find matching subtitles for this content at the specified timestamp, so I don't want to risk giving a spoiler. The subtitle database may not have this episode yet, or the timing might be off." 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Using actual subtitle dialogue for context');
+
+    // Build context string with metadata
+    const metadataContext = tmdbMetadata ? `
+Title: ${tmdbMetadata.title || tmdbMetadata.name}
+${mediaType === 'tv' && seasonNumber && episodeNumber ? `Season ${seasonNumber}, Episode ${episodeNumber}` : ''}
+Year: ${tmdbMetadata.release_date?.split('-')[0] || tmdbMetadata.first_air_date?.split('-')[0] || 'N/A'}
+` : '';
 
     // Create context-aware system prompt
     const systemPrompt = `You are a spoiler-free TV/movie companion assistant. Your role is to answer questions about shows and movies WITHOUT revealing any spoilers.
 
 CRITICAL RULES:
-1. The user is currently watching "${showTitle}" at ${episode} @ ${timestamp}
-2. IMPORTANT: Answer questions about events, characters, and plot points that have ALREADY OCCURRED up to this timestamp. These are NOT spoilers.
-3. Assume questions refer to past events unless explicitly about the future.
-4. ONLY refuse if the question explicitly asks about events AFTER the current timestamp.
-5. Provide DETAILED, specific answers grounded in what has happened so far.
-6. Prefer quoting or paraphrasing ACTUAL DIALOGUE when helpful.
-7. Never say "that hasn't happened" or "that didn't happen." If something isn't present in the provided dialogue, say: "I can't confirm that from the subtitles up to this time, but here's what's confirmed so far..." and answer using confirmed context.
-8. If the question refers to an earlier scene, answer it directly using prior context; do not gate responses on an exact minute.
-${subtitleContext}
+1. The user is currently watching "${title}" at timestamp ${timestamp}
+2. You have access to the ACTUAL DIALOGUE AND SUBTITLES up to this exact timestamp
+3. Base your answers ONLY on the provided subtitle text - this represents everything that has happened so far
+4. Answer questions about events, characters, and plot points that have ALREADY OCCURRED up to this timestamp
+5. Provide DETAILED, specific answers using the actual dialogue provided
+6. Quote or reference specific lines from the subtitles when helpful
+7. NEVER say "that hasn't happened" or "that didn't happen" - if something isn't in the subtitles, say: "I can't confirm that from the subtitles up to this point, but based on what's been shown so far..."
+8. NEVER reveal or speculate about events beyond the provided timestamp
+9. If asked about the future, endings, or plot twists, refuse politely: "I can't answer that without spoiling what happens next"
+10. Use TMDb metadata (title, year, cast) only for context - NOT for plot events
 
-Your goal is to enhance viewing experience by providing detailed explanations of past events without ruining future surprises.`;
+${metadataContext}
+
+Your goal is to enhance viewing experience by providing accurate, detailed explanations of past events using the actual subtitle data, without ruining future surprises.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -258,12 +296,12 @@ Your goal is to enhance viewing experience by providing detailed explanations of
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: subtitleDialogue ? [
+        messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `User question: ${question}\n\nContext - Dialogue up to ${timestamp}:\n${subtitleDialogue}\n\nAnswer strictly based on the dialogue above and general knowledge up to this point.` }
-        ] : [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: question }
+          { 
+            role: 'user', 
+            content: `User's question: "${question}"\n\nACTUAL SUBTITLE TEXT (up to timestamp ${timestamp}):\n${subtitleDialogue}\n\nAnswer the question using ONLY the subtitle text provided above. Be specific and detailed, referencing actual dialogue when helpful.` 
+          }
         ],
       }),
     });

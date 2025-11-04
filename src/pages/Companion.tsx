@@ -225,17 +225,19 @@ const Companion = () => {
     setIsLoading(true);
 
     try {
-      const episodeString = selectedContent.type === "tv" ? `S${selectedSeason}E${selectedEpisode}` : undefined;
       const contextInfo = selectedContent.type === "tv" 
-        ? `${episodeString} @ ${timestamp}`
+        ? `S${selectedSeason}E${selectedEpisode} @ ${timestamp}`
         : `@ ${timestamp}`;
 
       const { data, error } = await supabase.functions.invoke('spoiler-free-companion', {
         body: {
-          showTitle: selectedContent.title,
-          episode: selectedContent.type === "tv" ? episodeString : "N/A (Movie)",
+          tmdbId: selectedContent.id,
+          mediaType: selectedContent.type,
+          seasonNumber: selectedContent.type === 'tv' ? parseInt(selectedSeason) : undefined,
+          episodeNumber: selectedContent.type === 'tv' ? parseInt(selectedEpisode) : undefined,
+          title: selectedContent.title,
           timestamp,
-          question
+          question: question.trim(),
         }
       });
 
