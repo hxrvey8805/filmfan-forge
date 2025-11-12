@@ -6,6 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Configurable parameters
+const EPISODE_CONTEXT_WINDOW = 5;  // how many previous episodes to pull
+const CHUNK_SECONDS = 60;          // group subtitle lines into ~60s semantic chunks
+const PER_EPISODE_BULLETS = 5;     // compress each prior episode into ≤5 plot bullets
+const CURRENT_EPISODE_BULLETS = 6; // compress current-so-far into ≤6 bullets
+
+// In-memory subtitle cache
+const subtitleCache = new Map<string, string>();
+
 // Helper function to parse timestamp to seconds
 function timestampToSeconds(timestamp: string): number {
   const parts = timestamp.split(':').map(Number);
@@ -46,45 +55,60 @@ async function getTMDbMetadata(tmdbId: number, mediaType: string, seasonNumber?:
   }
 }
 
-// Helper function to parse episode string (e.g., "S1E3" or "Season 1 Episode 3")
-function parseEpisode(episode: string): { season: number; episode: number } | null {
-  // Try "S1E3" format
-  let match = episode.match(/S(\d+)E(\d+)/i);
-  if (match) {
-    return { season: parseInt(match[1]), episode: parseInt(match[2]) };
-  }
-  
-  // Try "Season 1 Episode 3" format
-  match = episode.match(/Season\s+(\d+)\s+Episode\s+(\d+)/i);
-  if (match) {
-    return { season: parseInt(match[1]), episode: parseInt(match[2]) };
-  }
-  
-  return null;
+// Parse SRT subtitle format into structured entries
+interface SubtitleEntry {
+  start: number;
+  end: number;
+  text: string;
 }
 
-// Helper function to search and download subtitles using TMDb ID
-async function getSubtitleContext(
-  tmdbId: number, 
-  mediaType: string, 
-  seasonNumber: number | undefined, 
-  episodeNumber: number | undefined,
-  timestamp: string, 
-  apiKey: string
-) {
-  try {
-    const currentSeconds = timestampToSeconds(timestamp);
+function parseSRT(srtText: string): SubtitleEntry[] {
+  const entries: SubtitleEntry[] = [];
+  const blocks = srtText.split('\n\n');
+  
+  for (const block of blocks) {
+    const lines = block.trim().split('\n');
+    if (lines.length < 3) continue;
     
-    console.log('Searching subtitles with TMDb ID:', { tmdbId, mediaType, seasonNumber, episodeNumber, currentSeconds });
+    const timeLine = lines[1];
+    const timeMatch = timeLine.match(/(\d+):(\d+):(\d+),?\d* --> (\d+):(\d+):(\d+)/);
     
-    // Search for subtitles using TMDb ID
-    let searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?tmdb_id=${tmdbId}&languages=en&order_by=download_count&order_direction=desc`;
-    
-    if (mediaType === 'tv' && seasonNumber && episodeNumber) {
-      searchUrl += `&season_number=${seasonNumber}&episode_number=${episodeNumber}&type=episode`;
-    } else if (mediaType === 'movie') {
-      searchUrl += `&type=movie`;
+    if (timeMatch) {
+      const startSeconds = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
+      const endSeconds = parseInt(timeMatch[4]) * 3600 + parseInt(timeMatch[5]) * 60 + parseInt(timeMatch[6]);
+      
+      const text = lines.slice(2).join(' ')
+        .replace(/<[^>]*>/g, '')
+        .replace(/\[[^\]]*\]/g, '')
+        .replace(/\([^)]*\)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      if (text) {
+        entries.push({ start: startSeconds, end: endSeconds, text });
+      }
     }
+  }
+  
+  return entries;
+}
+
+// Fetch and cache subtitles for a single episode
+async function fetchEpisodeSubtitles(
+  tmdbId: number,
+  seasonNumber: number,
+  episodeNumber: number,
+  apiKey: string
+): Promise<SubtitleEntry[] | null> {
+  const cacheKey = `${tmdbId}:${seasonNumber}:${episodeNumber}`;
+  
+  if (subtitleCache.has(cacheKey)) {
+    console.log(`Using cached subtitles for S${seasonNumber}E${episodeNumber}`);
+    return parseSRT(subtitleCache.get(cacheKey)!);
+  }
+  
+  try {
+    const searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?tmdb_id=${tmdbId}&languages=en&season_number=${seasonNumber}&episode_number=${episodeNumber}&type=episode&order_by=download_count&order_direction=desc`;
     
     const searchResponse = await fetch(searchUrl, {
       method: 'GET',
@@ -95,42 +119,25 @@ async function getSubtitleContext(
     });
 
     if (!searchResponse.ok) {
-      console.error('OpenSubtitles search failed:', searchResponse.status);
+      console.error(`Subtitle search failed for S${seasonNumber}E${episodeNumber}:`, searchResponse.status);
       return null;
     }
 
     const searchData = await searchResponse.json();
-    console.log('Found subtitles using TMDb ID:', searchData.data?.length || 0);
+    const results = searchData.data || [];
     
-    const results: any[] = searchData.data || [];
     if (results.length === 0) {
-      console.log('No subtitles found for TMDb ID:', tmdbId);
+      console.log(`No subtitles found for S${seasonNumber}E${episodeNumber}`);
       return null;
     }
 
-    // Since we're searching by TMDb ID, the results should be accurate
-    // Sort by download count and take the best one
-    results.sort((a, b) => (b.attributes?.download_count || 0) - (a.attributes?.download_count || 0));
-    
+    results.sort((a: any, b: any) => (b.attributes?.download_count || 0) - (a.attributes?.download_count || 0));
     const best = results[0];
     
     if (!best?.attributes?.files?.[0]?.file_id) {
-      console.log('No valid subtitle file found');
       return null;
     }
 
-    const chosenF = best.attributes?.feature_details || {};
-    const chosenFileName = best.attributes?.files?.[0]?.file_name;
-    console.log('Selected subtitle:', {
-      tmdbId: chosenF.tmdb_id,
-      title: chosenF.parent_title || chosenF.title || best.attributes?.feature,
-      season: chosenF.season_number,
-      episode: chosenF.episode_number,
-      downloads: best.attributes?.download_count,
-      fileName: chosenFileName,
-    });
-
-    // Download the subtitle file
     const downloadResponse = await fetch(`https://api.opensubtitles.com/api/v1/download`, {
       method: 'POST',
       headers: {
@@ -141,67 +148,153 @@ async function getSubtitleContext(
     });
 
     if (!downloadResponse.ok) {
-      console.error('Subtitle download failed:', downloadResponse.status);
+      console.error(`Subtitle download failed for S${seasonNumber}E${episodeNumber}`);
       return null;
     }
 
     const downloadData = await downloadResponse.json();
-    
-    if (!downloadData.link) {
-      console.log('No download link provided');
-      return null;
-    }
+    if (!downloadData.link) return null;
 
-    // Fetch the actual subtitle content
     const subtitleResponse = await fetch(downloadData.link);
     const subtitleText = await subtitleResponse.text();
     
-    // Parse SRT format and extract relevant dialogue up to current timestamp
-    const dialogueLines: string[] = [];
-    const srtBlocks = subtitleText.split('\n\n');
+    subtitleCache.set(cacheKey, subtitleText);
+    console.log(`Cached subtitles for S${seasonNumber}E${episodeNumber}`);
     
-    for (const block of srtBlocks) {
-      const lines = block.trim().split('\n');
-      if (lines.length < 3) continue;
-      
-      // Parse timestamp (format: 00:00:20,000 --> 00:00:22,000)
-      const timeLine = lines[1];
-      const startTime = timeLine.split(' --> ')[0];
-      const timeMatch = startTime.match(/(\d+):(\d+):(\d+)/);
-      
-      if (timeMatch) {
-        const subtitleSeconds = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
-        
-        // Only include dialogue up to current timestamp
-        if (subtitleSeconds <= currentSeconds) {
-          const raw = lines.slice(2).join(' ');
-          const dialogue = raw
-            .replace(/<[^>]*>/g, '') // HTML tags
-            .replace(/\[[^\]]*\]/g, '') // [SOUND]
-            .replace(/\([^)]*\)/g, '') // (music)
-            .replace(/\s+/g, ' ')
-            .trim();
-          if (dialogue) {
-            dialogueLines.push(dialogue);
-          }
-        }
-      }
-    }
-    
-    // Deduplicate consecutive lines and return recent context
-    const uniqueLines: string[] = [];
-    for (const d of dialogueLines) {
-      if (uniqueLines[uniqueLines.length - 1] !== d) uniqueLines.push(d);
-    }
-    const recentDialogue = uniqueLines.slice(-50).join('\n');
-    console.log(`Extracted ${uniqueLines.length} lines of dialogue up to timestamp`);
-    
-    return recentDialogue;
-
+    return parseSRT(subtitleText);
   } catch (error) {
-    console.error('Error fetching subtitles:', error);
+    console.error(`Error fetching subtitles for S${seasonNumber}E${episodeNumber}:`, error);
     return null;
   }
+}
+
+// Chunk subtitle entries into semantic blocks
+function chunkSubtitles(entries: SubtitleEntry[], maxSeconds: number): string[] {
+  const chunks: string[] = [];
+  let currentChunk: string[] = [];
+  let chunkStartTime = 0;
+  
+  for (const entry of entries) {
+    if (entry.start - chunkStartTime >= maxSeconds && currentChunk.length > 0) {
+      chunks.push(currentChunk.join(' '));
+      currentChunk = [entry.text];
+      chunkStartTime = entry.start;
+    } else {
+      currentChunk.push(entry.text);
+    }
+  }
+  
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join(' '));
+  }
+  
+  return chunks;
+}
+
+// Summarize episode subtitles into plot bullets
+async function summarizeEpisode(
+  chunks: string[],
+  maxBullets: number,
+  episodeLabel: string,
+  lovableApiKey: string
+): Promise<string[]> {
+  try {
+    const prompt = `Summarize the following TV episode content into exactly ${maxBullets} concise plot bullets. Focus ONLY on:
+- Major actions and decisions
+- Key discoveries or revelations
+- Location changes
+- Character relationship developments
+
+DO NOT include:
+- Dialogue quotes
+- Minor details
+- Speculation
+
+Episode: ${episodeLabel}
+Content: ${chunks.join(' ')}
+
+Return ONLY the bullet points, one per line, starting with "- ".`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: 'You are a plot summarizer. Extract key events only, no dialogue quotes.' },
+          { role: 'user', content: prompt }
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`Summarization failed for ${episodeLabel}:`, response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    const summary = data.choices[0].message.content;
+    
+    const bullets = summary.split('\n')
+      .filter((line: string) => line.trim().startsWith('-'))
+      .map((line: string) => line.trim())
+      .slice(0, maxBullets);
+    
+    return bullets;
+  } catch (error) {
+    console.error(`Error summarizing ${episodeLabel}:`, error);
+    return [];
+  }
+}
+
+// Fetch multi-episode context
+async function getMultiEpisodeContext(
+  tmdbId: number,
+  currentSeason: number,
+  currentEpisode: number,
+  currentTimestamp: number,
+  apiKey: string,
+  lovableApiKey: string
+): Promise<{ priorBullets: string[], currentBullets: string[] }> {
+  const priorBullets: string[] = [];
+  const currentBullets: string[] = [];
+  
+  // Fetch previous episodes
+  const episodesToFetch: Array<{season: number, episode: number}> = [];
+  for (let ep = currentEpisode - 1; ep >= Math.max(1, currentEpisode - EPISODE_CONTEXT_WINDOW); ep--) {
+    episodesToFetch.push({ season: currentSeason, episode: ep });
+  }
+  
+  console.log(`Fetching ${episodesToFetch.length} prior episodes for context`);
+  
+  for (const { season, episode } of episodesToFetch.reverse()) {
+    const entries = await fetchEpisodeSubtitles(tmdbId, season, episode, apiKey);
+    if (entries && entries.length > 0) {
+      const chunks = chunkSubtitles(entries, CHUNK_SECONDS);
+      const bullets = await summarizeEpisode(chunks, PER_EPISODE_BULLETS, `S${season}E${episode}`, lovableApiKey);
+      if (bullets.length > 0) {
+        priorBullets.push(`**S${season}E${episode}:**\n${bullets.join('\n')}`);
+      }
+    }
+  }
+  
+  // Fetch current episode up to timestamp
+  const currentEntries = await fetchEpisodeSubtitles(tmdbId, currentSeason, currentEpisode, apiKey);
+  if (currentEntries && currentEntries.length > 0) {
+    const filteredEntries = currentEntries.filter(e => e.end <= currentTimestamp);
+    console.log(`Current episode: ${filteredEntries.length} subtitle entries up to timestamp`);
+    
+    if (filteredEntries.length > 0) {
+      const chunks = chunkSubtitles(filteredEntries, CHUNK_SECONDS);
+      const bullets = await summarizeEpisode(chunks, CURRENT_EPISODE_BULLETS, `S${currentSeason}E${currentEpisode} (so far)`, lovableApiKey);
+      currentBullets.push(...bullets);
+    }
+  }
+  
+  return { priorBullets, currentBullets };
 }
 
 serve(async (req) => {
@@ -240,53 +333,70 @@ serve(async (req) => {
       console.log('Could not validate TMDb metadata');
     }
 
-    // Try to get subtitle context with actual dialogue using TMDb ID
-    const subtitleDialogue = await getSubtitleContext(
-      tmdbId, 
-      mediaType, 
-      seasonNumber, 
-      episodeNumber, 
-      timestamp, 
-      OPENSUBTITLES_API_KEY
-    );
-    
-    if (!subtitleDialogue) {
-      console.log('No subtitle data found for TMDb ID:', tmdbId);
+    // Parse timestamp to seconds
+    const currentSeconds = timestampToSeconds(timestamp);
+
+    // Check if this is a TV show
+    if (mediaType !== 'tv' || !seasonNumber || !episodeNumber) {
       return new Response(
         JSON.stringify({ 
-          answer: "I can't find matching subtitles for this content at the specified timestamp, so I don't want to risk giving a spoiler. The subtitle database may not have this episode yet, or the timing might be off." 
+          answer: "Multi-episode summaries are currently only supported for TV shows. For movies, please ask specific questions about the content." 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Using actual subtitle dialogue for context');
+    // Fetch multi-episode context with hierarchical summarization
+    const { priorBullets, currentBullets } = await getMultiEpisodeContext(
+      tmdbId,
+      seasonNumber,
+      episodeNumber,
+      currentSeconds,
+      OPENSUBTITLES_API_KEY,
+      LOVABLE_API_KEY
+    );
 
-    // Build context string with metadata
+    if (currentBullets.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          answer: "I don't have enough subtitle data up to this point to explain without risking spoilers. The subtitle database may not have this episode yet." 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Context: ${priorBullets.length} prior episode summaries, ${currentBullets.length} current episode bullets`);
+
+    // Build context for AI
     const metadataContext = tmdbMetadata ? `
 Title: ${tmdbMetadata.title || tmdbMetadata.name}
-${mediaType === 'tv' && seasonNumber && episodeNumber ? `Season ${seasonNumber}, Episode ${episodeNumber}` : ''}
+Season ${seasonNumber}, Episode ${episodeNumber}
 Year: ${tmdbMetadata.release_date?.split('-')[0] || tmdbMetadata.first_air_date?.split('-')[0] || 'N/A'}
 ` : '';
 
+    const priorContext = priorBullets.length > 0 
+      ? `\n\nPREVIOUS EPISODES:\n${priorBullets.join('\n\n')}`
+      : '';
+
+    const currentContext = `\n\nCURRENT EPISODE (S${seasonNumber}E${episodeNumber} up to ${timestamp}):\n${currentBullets.join('\n')}`;
+
     // Create context-aware system prompt
-    const systemPrompt = `You are a spoiler-free TV/movie companion assistant. Your role is to answer questions about shows and movies WITHOUT revealing any spoilers.
+    const systemPrompt = `You are a spoiler-free TV companion assistant. Your role is to answer questions about shows WITHOUT revealing any spoilers.
 
 CRITICAL RULES:
-1. The user is currently watching "${title}" at timestamp ${timestamp}
-2. You have access to the ACTUAL DIALOGUE AND SUBTITLES up to this exact timestamp
-3. Base your answers ONLY on the provided subtitle text - this represents everything that has happened so far
-4. Answer questions about events, characters, and plot points that have ALREADY OCCURRED up to this timestamp
-5. Provide DETAILED, specific answers using the actual dialogue provided
-6. Quote or reference specific lines from the subtitles when helpful
-7. NEVER say "that hasn't happened" or "that didn't happen" - if something isn't in the subtitles, say: "I can't confirm that from the subtitles up to this point, but based on what's been shown so far..."
-8. NEVER reveal or speculate about events beyond the provided timestamp
-9. If asked about the future, endings, or plot twists, refuse politely: "I can't answer that without spoiling what happens next"
-10. Use TMDb metadata (title, year, cast) only for context - NOT for plot events
+1. The user is watching "${title}" at Season ${seasonNumber}, Episode ${episodeNumber}, timestamp ${timestamp}
+2. You have plot bullet summaries from previous episodes and the current episode up to this timestamp
+3. Base your answers ONLY on the provided plot bullets - these represent everything that has happened so far
+4. If asked "what's happened so far?", provide a coherent narrative summary (4-6 sentences) describing the story progression without quoting dialogue
+5. For specific questions, answer directly using the plot bullets provided
+6. NEVER include or infer events after the provided timestamp or from later episodes
+7. NEVER speculate about future plot points, endings, or twists
+8. If asked about the future, refuse politely: "I can't answer that without spoiling what happens next"
+9. Keep responses concise, narrative, and spoiler-safe
 
 ${metadataContext}
 
-Your goal is to enhance viewing experience by providing accurate, detailed explanations of past events using the actual subtitle data, without ruining future surprises.`;
+Your goal is to enhance viewing experience by providing accurate explanations of past events without ruining future surprises.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -300,7 +410,7 @@ Your goal is to enhance viewing experience by providing accurate, detailed expla
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
-            content: `User's question: "${question}"\n\nACTUAL SUBTITLE TEXT (up to timestamp ${timestamp}):\n${subtitleDialogue}\n\nAnswer the question using ONLY the subtitle text provided above. Be specific and detailed, referencing actual dialogue when helpful.` 
+            content: `User's question: "${question}"${priorContext}${currentContext}\n\nAnswer the question using ONLY the plot bullets provided above. Provide a coherent narrative response without quoting dialogue.` 
           }
         ],
       }),
