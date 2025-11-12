@@ -8,9 +8,7 @@ const corsHeaders = {
 
 // Configurable parameters
 const EPISODE_CONTEXT_WINDOW = 5;  // how many previous episodes to pull
-const CHUNK_SECONDS = 60;          // group subtitle lines into ~60s semantic chunks
-const PER_EPISODE_BULLETS = 5;     // compress each prior episode into ≤5 plot bullets
-const CURRENT_EPISODE_BULLETS = 6; // compress current-so-far into ≤6 bullets
+const MAX_SUBTITLE_LINES_PER_EPISODE = 200; // limit lines per episode to manage token count
 
 // In-memory subtitle cache
 const subtitleCache = new Map<string, string>();
@@ -168,99 +166,30 @@ async function fetchEpisodeSubtitles(
   }
 }
 
-// Chunk subtitle entries into semantic blocks
-function chunkSubtitles(entries: SubtitleEntry[], maxSeconds: number): string[] {
-  const chunks: string[] = [];
-  let currentChunk: string[] = [];
-  let chunkStartTime = 0;
+// Format subtitle entries into readable text
+function formatSubtitles(entries: SubtitleEntry[], episodeLabel: string): string {
+  if (entries.length === 0) return '';
   
-  for (const entry of entries) {
-    if (entry.start - chunkStartTime >= maxSeconds && currentChunk.length > 0) {
-      chunks.push(currentChunk.join(' '));
-      currentChunk = [entry.text];
-      chunkStartTime = entry.start;
-    } else {
-      currentChunk.push(entry.text);
-    }
-  }
+  // Sample subtitles evenly if too many to fit token limits
+  const sampled = entries.length > MAX_SUBTITLE_LINES_PER_EPISODE
+    ? entries.filter((_, i) => i % Math.ceil(entries.length / MAX_SUBTITLE_LINES_PER_EPISODE) === 0)
+    : entries;
   
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk.join(' '));
-  }
-  
-  return chunks;
+  const text = sampled.map(e => e.text).join(' ');
+  return `**${episodeLabel}:**\n${text}`;
 }
 
-// Summarize episode subtitles into plot bullets
-async function summarizeEpisode(
-  chunks: string[],
-  maxBullets: number,
-  episodeLabel: string,
-  lovableApiKey: string
-): Promise<string[]> {
-  try {
-    const prompt = `Summarize the following TV episode content into exactly ${maxBullets} concise plot bullets. Focus ONLY on:
-- Major actions and decisions
-- Key discoveries or revelations
-- Location changes
-- Character relationship developments
 
-DO NOT include:
-- Dialogue quotes
-- Minor details
-- Speculation
-
-Episode: ${episodeLabel}
-Content: ${chunks.join(' ')}
-
-Return ONLY the bullet points, one per line, starting with "- ".`;
-
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: 'You are a plot summarizer. Extract key events only, no dialogue quotes.' },
-          { role: 'user', content: prompt }
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`Summarization failed for ${episodeLabel}:`, response.status);
-      return [];
-    }
-
-    const data = await response.json();
-    const summary = data.choices[0].message.content;
-    
-    const bullets = summary.split('\n')
-      .filter((line: string) => line.trim().startsWith('-'))
-      .map((line: string) => line.trim())
-      .slice(0, maxBullets);
-    
-    return bullets;
-  } catch (error) {
-    console.error(`Error summarizing ${episodeLabel}:`, error);
-    return [];
-  }
-}
-
-// Fetch multi-episode context
+// Fetch multi-episode context with full subtitle text
 async function getMultiEpisodeContext(
   tmdbId: number,
   currentSeason: number,
   currentEpisode: number,
   currentTimestamp: number,
-  apiKey: string,
-  lovableApiKey: string
-): Promise<{ priorBullets: string[], currentBullets: string[] }> {
-  const priorBullets: string[] = [];
-  const currentBullets: string[] = [];
+  apiKey: string
+): Promise<{ priorContext: string[], currentContext: string }> {
+  const priorContext: string[] = [];
+  let currentContext = '';
   
   // Fetch previous episodes
   const episodesToFetch: Array<{season: number, episode: number}> = [];
@@ -273,10 +202,9 @@ async function getMultiEpisodeContext(
   for (const { season, episode } of episodesToFetch.reverse()) {
     const entries = await fetchEpisodeSubtitles(tmdbId, season, episode, apiKey);
     if (entries && entries.length > 0) {
-      const chunks = chunkSubtitles(entries, CHUNK_SECONDS);
-      const bullets = await summarizeEpisode(chunks, PER_EPISODE_BULLETS, `S${season}E${episode}`, lovableApiKey);
-      if (bullets.length > 0) {
-        priorBullets.push(`**S${season}E${episode}:**\n${bullets.join('\n')}`);
+      const formatted = formatSubtitles(entries, `S${season}E${episode}`);
+      if (formatted) {
+        priorContext.push(formatted);
       }
     }
   }
@@ -288,13 +216,11 @@ async function getMultiEpisodeContext(
     console.log(`Current episode: ${filteredEntries.length} subtitle entries up to timestamp`);
     
     if (filteredEntries.length > 0) {
-      const chunks = chunkSubtitles(filteredEntries, CHUNK_SECONDS);
-      const bullets = await summarizeEpisode(chunks, CURRENT_EPISODE_BULLETS, `S${currentSeason}E${currentEpisode} (so far)`, lovableApiKey);
-      currentBullets.push(...bullets);
+      currentContext = formatSubtitles(filteredEntries, `S${currentSeason}E${currentEpisode} (up to ${Math.floor(currentTimestamp / 60)}:${String(Math.floor(currentTimestamp % 60)).padStart(2, '0')})`);
     }
   }
   
-  return { priorBullets, currentBullets };
+  return { priorContext, currentContext };
 }
 
 serve(async (req) => {
@@ -346,26 +272,25 @@ serve(async (req) => {
       );
     }
 
-    // Fetch multi-episode context with hierarchical summarization
-    const { priorBullets, currentBullets } = await getMultiEpisodeContext(
+    // Fetch multi-episode context with full subtitle text
+    const { priorContext, currentContext } = await getMultiEpisodeContext(
       tmdbId,
       seasonNumber,
       episodeNumber,
       currentSeconds,
-      OPENSUBTITLES_API_KEY,
-      LOVABLE_API_KEY
+      OPENSUBTITLES_API_KEY
     );
 
-    if (currentBullets.length === 0) {
+    if (!currentContext) {
       return new Response(
         JSON.stringify({ 
-          answer: "I don't have enough subtitle data up to this point to explain without risking spoilers. The subtitle database may not have this episode yet." 
+          answer: "I don't have enough subtitle data up to this point to answer accurately without risking spoilers." 
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Context: ${priorBullets.length} prior episode summaries, ${currentBullets.length} current episode bullets`);
+    console.log(`Context: ${priorContext.length} prior episodes, current episode data up to timestamp`);
 
     // Build context for AI
     const metadataContext = tmdbMetadata ? `
@@ -374,29 +299,29 @@ Season ${seasonNumber}, Episode ${episodeNumber}
 Year: ${tmdbMetadata.release_date?.split('-')[0] || tmdbMetadata.first_air_date?.split('-')[0] || 'N/A'}
 ` : '';
 
-    const priorContext = priorBullets.length > 0 
-      ? `\n\nPREVIOUS EPISODES:\n${priorBullets.join('\n\n')}`
+    const priorContextText = priorContext.length > 0 
+      ? `\n\nPREVIOUS EPISODES:\n${priorContext.join('\n\n')}`
       : '';
 
-    const currentContext = `\n\nCURRENT EPISODE (S${seasonNumber}E${episodeNumber} up to ${timestamp}):\n${currentBullets.join('\n')}`;
+    const currentContextText = `\n\nCURRENT EPISODE (S${seasonNumber}E${episodeNumber} up to ${timestamp}):\n${currentContext}`;
 
     // Create context-aware system prompt
     const systemPrompt = `You are a spoiler-free TV companion assistant. Your role is to answer questions about shows WITHOUT revealing any spoilers.
 
 CRITICAL RULES:
 1. The user is watching "${title}" at Season ${seasonNumber}, Episode ${episodeNumber}, timestamp ${timestamp}
-2. You have plot bullet summaries from previous episodes and the current episode up to this timestamp
-3. Base your answers ONLY on the provided plot bullets - these represent everything that has happened so far
-4. If asked "what's happened so far?", provide a coherent narrative summary (4-6 sentences) describing the story progression without quoting dialogue
-5. For specific questions, answer directly using the plot bullets provided
+2. You have subtitle dialogue from previous episodes and the current episode up to this timestamp
+3. Base your answers ONLY on the provided subtitle context - this represents everything that has happened so far
+4. Use TMDb metadata only for confirming episode details (title, season, runtime, character names) - NOT for plot events
+5. Reason through the dialogue to answer the user's specific question directly and accurately
 6. NEVER include or infer events after the provided timestamp or from later episodes
 7. NEVER speculate about future plot points, endings, or twists
 8. If asked about the future, refuse politely: "I can't answer that without spoiling what happens next"
-9. Keep responses concise, narrative, and spoiler-safe
+9. Keep responses concise and natural - answer the question directly
 
 ${metadataContext}
 
-Your goal is to enhance viewing experience by providing accurate explanations of past events without ruining future surprises.`;
+Your goal is to provide accurate, context-aware answers based solely on what has occurred up to the user's current timestamp.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -410,7 +335,7 @@ Your goal is to enhance viewing experience by providing accurate explanations of
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
-            content: `User's question: "${question}"${priorContext}${currentContext}\n\nAnswer the question using ONLY the plot bullets provided above. Provide a coherent narrative response without quoting dialogue.` 
+            content: `User's question: "${question}"${priorContextText}${currentContextText}\n\nAnswer the question using ONLY the subtitle context provided above. Ground your answer in the dialogue and events that have occurred up to the timestamp.` 
           }
         ],
       }),
