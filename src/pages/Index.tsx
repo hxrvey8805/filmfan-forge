@@ -227,13 +227,24 @@ const Index = () => {
   };
 
   const handleFilterChange = async (value: string) => {
+    console.log("Filter changed to:", value);
+    console.log("Available custom filters:", customFilters);
     setWatchListFilter(value);
     
     // Check if it's a custom filter
     const customFilter = customFilters.find(f => f.id === value);
+    console.log("Found custom filter:", customFilter);
+    
     if (customFilter) {
+      console.log("Starting custom sort with:", {
+        titleCount: watchList.length,
+        criteria: customFilter.criteria,
+        inspirationType: customFilter.inspirationType
+      });
+      
       setIsSorting(true);
       try {
+        console.log("Invoking edge function...");
         const { data, error } = await supabase.functions.invoke("sort-by-custom-filter", {
           body: {
             titles: watchList,
@@ -242,8 +253,18 @@ const Index = () => {
           },
         });
 
-        if (error) throw error;
+        console.log("Edge function response:", { data, error });
+
+        if (error) {
+          console.error("Edge function error:", error);
+          throw error;
+        }
         
+        if (!data || !data.sortedTitles) {
+          throw new Error("Invalid response from edge function");
+        }
+        
+        console.log("Setting sorted titles:", data.sortedTitles.length);
         setSortedWatchList(data.sortedTitles);
         toast.success(`Sorted by: ${customFilter.name}`);
       } catch (error) {
@@ -254,6 +275,7 @@ const Index = () => {
         setIsSorting(false);
       }
     } else {
+      console.log("Standard filter selected, resetting to original list");
       // Reset to original list for standard filters
       setSortedWatchList(watchList);
     }
