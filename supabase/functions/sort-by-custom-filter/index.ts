@@ -80,14 +80,60 @@ serve(async (req) => {
     
     console.log("Metadata fetched for all titles");
 
-    // Use AI to sort titles based on custom criteria
+    // Deterministic strict matching for common inspiration types
+    const norm = (s?: string) => (s || "").toLowerCase().trim();
+    const crit = norm(criteria);
+    const yearFromCrit = (() => {
+      const m = (criteria || '').match(/\d{4}/);
+      return m ? m[0] : '';
+    })();
+
+    const matches = titlesWithMetadata.filter((t: any) => {
+      if (!t.metadata) return false;
+      switch (inspirationType) {
+        case 'director':
+          return t.metadata.directors?.some((d: string) => norm(d).includes(crit));
+        case 'genre':
+          return t.metadata.genres?.some((g: string) => norm(g).includes(crit));
+        case 'actor':
+          return t.metadata.cast?.some((c: string) => norm(c).includes(crit));
+        case 'year': {
+          const y = (t.metadata.release_date || '').slice(0, 4);
+          return yearFromCrit && y === yearFromCrit;
+        }
+        case 'theme':
+          return norm(t.metadata.overview).includes(crit);
+        default:
+          return false;
+      }
+    });
+
+    if (matches.length > 0) {
+      console.log(`Strict match found for ${inspirationType}="${criteria}": ${matches.length} titles`);
+      // Sort by rating desc, then by recent release
+      matches.sort((a: any, b: any) => {
+        const ra = a.metadata?.vote_average ?? 0;
+        const rb = b.metadata?.vote_average ?? 0;
+        if (rb !== ra) return rb - ra;
+        const ya = parseInt((a.metadata?.release_date || '').slice(0,4) || '0');
+        const yb = parseInt((b.metadata?.release_date || '').slice(0,4) || '0');
+        return yb - ya;
+      });
+
+      return new Response(
+        JSON.stringify({ sortedTitles: matches.map(({ metadata, ...rest }: any) => rest) }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // No strict matches: fall back to AI ranking across all titles
     const prompt = `You are a movie/TV show sorting assistant. Given a list of titles with their metadata and a user's custom filter criteria, rank the titles from most relevant to least relevant based on that criteria.
 
 Filter Type: ${inspirationType}
 Filter Criteria: ${criteria}
 
 Titles to sort:
-${titlesWithMetadata.map((t, idx) => `
+${titlesWithMetadata.map((t: any, idx: number) => `
 ${idx + 1}. "${t.title}" (${t.year || 'N/A'})
    Type: ${t.type}
    ${t.metadata ? `
