@@ -8,3 +8,7 @@ verify_jwt = false
 
 [functions.actor-connect]
 verify_jwt = false
+
+[functions.sort-by-custom-filter]
+verify_jwt = false
+
