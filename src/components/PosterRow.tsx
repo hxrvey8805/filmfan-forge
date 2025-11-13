@@ -22,6 +22,13 @@ interface Title {
   progress?: number;
 }
 
+interface CustomFilter {
+  id: string;
+  name: string;
+  criteria: string;
+  inspirationType: string;
+}
+
 interface PosterRowProps {
   title: string;
   items: Title[];
@@ -30,9 +37,11 @@ interface PosterRowProps {
   onDeleteClick?: (title: Title) => void;
   filterValue?: string;
   onFilterChange?: (value: string) => void;
+  customFilters?: CustomFilter[];
+  onAddCustomFilter?: () => void;
 }
 
-const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange }: PosterRowProps) => {
+const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter }: PosterRowProps) => {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-3 px-1">
@@ -45,6 +54,26 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
               <SelectItem value="all" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">All</SelectItem>
               <SelectItem value="movie" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">Movies</SelectItem>
               <SelectItem value="tv" className="rounded-lg text-sm font-medium focus:bg-accent/20 focus:text-accent cursor-pointer">TV Shows</SelectItem>
+              {customFilters.map((filter) => (
+                <SelectItem 
+                  key={filter.id} 
+                  value={filter.id}
+                  className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer"
+                >
+                  {filter.name}
+                </SelectItem>
+              ))}
+              {onAddCustomFilter && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onAddCustomFilter();
+                  }}
+                  className="w-full text-left px-2 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 rounded-lg cursor-pointer"
+                >
+                  + Add Custom Filter
+                </button>
+              )}
             </SelectContent>
           </Select>
         )}

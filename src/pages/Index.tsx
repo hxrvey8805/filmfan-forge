@@ -3,6 +3,7 @@ import { Film } from "lucide-react";
 import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
+import CustomFilterDialog from "@/components/CustomFilterDialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -16,6 +17,13 @@ interface Title {
   progress?: number;
 }
 
+interface CustomFilter {
+  id: string;
+  name: string;
+  criteria: string;
+  inspirationType: string;
+}
+
 const Index = () => {
   const navigate = useNavigate();
   const [selectedTitle, setSelectedTitle] = useState<Title | null>(null);
@@ -26,10 +34,26 @@ const Index = () => {
   const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([]);
   const [loading, setLoading] = useState(true);
   const [watchListFilter, setWatchListFilter] = useState<string>("all");
+  const [customFilters, setCustomFilters] = useState<CustomFilter[]>([]);
+  const [customFilterDialogOpen, setCustomFilterDialogOpen] = useState(false);
+  const [sortedWatchList, setSortedWatchList] = useState<Title[]>([]);
+  const [isSorting, setIsSorting] = useState(false);
 
   useEffect(() => {
     checkAuth();
+    loadCustomFilters();
   }, []);
+
+  const loadCustomFilters = () => {
+    const stored = localStorage.getItem("customFilters");
+    if (stored) {
+      try {
+        setCustomFilters(JSON.parse(stored));
+      } catch (error) {
+        console.error("Error loading custom filters:", error);
+      }
+    }
+  };
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -75,6 +99,7 @@ const Index = () => {
 
       setWatchList(watchlistItems);
       setCurrentlyWatching(watchingItems);
+      setSortedWatchList(watchlistItems);
     } catch (error) {
       console.error("Error loading titles:", error);
       toast.error("Failed to load your lists");
@@ -106,6 +131,7 @@ const Index = () => {
       if (error) throw error;
 
       setWatchList([...watchList, title]);
+      setSortedWatchList([...watchList, title]);
       toast.success(`Added "${title.title}" to Watch List`);
     } catch (error) {
       console.error("Error adding to watchlist:", error);
@@ -157,7 +183,9 @@ const Index = () => {
 
       if (error) throw error;
 
-      setWatchList(watchList.filter(item => item.id !== title.id));
+      const updatedList = watchList.filter((item) => item.id !== title.id);
+      setWatchList(updatedList);
+      setSortedWatchList(updatedList);
       toast.success(`Removed "${title.title}" from Watch List`);
     } catch (error) {
       console.error("Error removing from watchlist:", error);
@@ -192,6 +220,45 @@ const Index = () => {
     setSearchModalOpen(true);
   };
 
+  const handleFilterAdded = (filter: CustomFilter) => {
+    const updated = [...customFilters, filter];
+    setCustomFilters(updated);
+    localStorage.setItem("customFilters", JSON.stringify(updated));
+  };
+
+  const handleFilterChange = async (value: string) => {
+    setWatchListFilter(value);
+    
+    // Check if it's a custom filter
+    const customFilter = customFilters.find(f => f.id === value);
+    if (customFilter) {
+      setIsSorting(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("sort-by-custom-filter", {
+          body: {
+            titles: watchList,
+            criteria: customFilter.criteria,
+            inspirationType: customFilter.inspirationType,
+          },
+        });
+
+        if (error) throw error;
+        
+        setSortedWatchList(data.sortedTitles);
+        toast.success(`Sorted by: ${customFilter.name}`);
+      } catch (error) {
+        console.error("Error sorting with custom filter:", error);
+        toast.error("Failed to sort with custom filter");
+        setSortedWatchList(watchList);
+      } finally {
+        setIsSorting(false);
+      }
+    } else {
+      // Reset to original list for standard filters
+      setSortedWatchList(watchList);
+    }
+  };
+
   const handleSearchSelect = (title: Title) => {
     if (searchModalType === "watchlist") {
       handleAddToWatchList(title);
@@ -208,16 +275,18 @@ const Index = () => {
     );
   }
 
-  const filteredWatchList = watchListFilter === "all" 
-    ? watchList 
-    : watchList.filter(item => item.type === watchListFilter);
+  const displayedWatchList = watchListFilter === "all" 
+    ? sortedWatchList
+    : watchListFilter === "movie" || watchListFilter === "tv"
+    ? sortedWatchList.filter(item => item.type === watchListFilter)
+    : sortedWatchList;
 
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
       {/* Watch List Row */}
       <PosterRow 
         title="Watch List" 
-        items={filteredWatchList}
+        items={isSorting ? [] : displayedWatchList}
         onPosterClick={(title) => {
           setSelectedTitle(title);
           setSelectedTitleSource("watchlist");
@@ -225,7 +294,9 @@ const Index = () => {
         onAddClick={() => openSearchModal("watchlist")}
         onDeleteClick={handleDeleteFromWatchList}
         filterValue={watchListFilter}
-        onFilterChange={setWatchListFilter}
+        onFilterChange={handleFilterChange}
+        customFilters={customFilters}
+        onAddCustomFilter={() => setCustomFilterDialogOpen(true)}
       />
 
       {/* Currently Watching Row */}
@@ -258,6 +329,13 @@ const Index = () => {
         onOpenChange={setSearchModalOpen}
         onSelect={handleSearchSelect}
         listType={searchModalType}
+      />
+
+      {/* Custom Filter Dialog */}
+      <CustomFilterDialog
+        open={customFilterDialogOpen}
+        onOpenChange={setCustomFilterDialogOpen}
+        onFilterAdded={handleFilterAdded}
       />
     </div>
   );
