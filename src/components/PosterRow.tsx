@@ -1,4 +1,4 @@
-import { Film, Tv, Plus, Trash2, MessageSquare } from "lucide-react";
+import { Film, Tv, Plus, Trash2, MessageSquare, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   Carousel,
@@ -39,9 +39,10 @@ interface PosterRowProps {
   onFilterChange?: (value: string) => void;
   customFilters?: CustomFilter[];
   onAddCustomFilter?: () => void;
+  onDeleteCustomFilter?: (filterId: string) => void;
 }
 
-const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter }: PosterRowProps) => {
+const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter, onDeleteCustomFilter }: PosterRowProps) => {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-3 px-1">
@@ -58,9 +59,24 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                 <SelectItem 
                   key={filter.id} 
                   value={filter.id}
-                  className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer"
+                  className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer group/item"
                 >
-                  {filter.name}
+                  <div className="flex items-center justify-between w-full">
+                    <span>{filter.name}</span>
+                    {onDeleteCustomFilter && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onDeleteCustomFilter(filter.id);
+                        }}
+                        className="ml-2 opacity-0 group-hover/item:opacity-100 transition-opacity hover:bg-destructive/20 rounded-sm p-0.5"
+                        aria-label="Delete filter"
+                      >
+                        <X className="h-3 w-3 text-destructive" />
+                      </button>
+                    )}
+                  </div>
                 </SelectItem>
               ))}
               {onAddCustomFilter && (
