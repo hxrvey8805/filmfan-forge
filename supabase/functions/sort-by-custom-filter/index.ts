@@ -18,34 +18,47 @@ interface Title {
 }
 
 serve(async (req) => {
+  console.log("=== Edge function invoked ===");
+  
   if (req.method === "OPTIONS") {
+    console.log("OPTIONS request, returning CORS headers");
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log("Parsing request body...");
     const { titles, criteria, inspirationType } = await req.json();
+    console.log(`Received: ${titles?.length || 0} titles, criteria: "${criteria}", type: "${inspirationType}"`);
 
     if (!titles || !Array.isArray(titles) || titles.length === 0) {
+      console.error("Invalid titles array");
       return new Response(
         JSON.stringify({ error: "No titles provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    console.log("Titles to sort:", titles.map(t => t.title).join(", "));
 
     // Fetch metadata for all titles from TMDb
+    console.log("Fetching metadata from TMDb...");
     const titlesWithMetadata = await Promise.all(
       titles.map(async (title: Title) => {
         try {
           const endpoint = title.type === "movie" ? "movie" : "tv";
+          console.log(`Fetching metadata for: ${title.title} (${endpoint}/${title.id})`);
+          
           const response = await fetch(
             `https://api.themoviedb.org/3/${endpoint}/${title.id}?api_key=${TMDB_API_KEY}&append_to_response=credits`
           );
           
           if (!response.ok) {
+            console.warn(`Failed to fetch metadata for ${title.title}: ${response.status}`);
             return { ...title, metadata: null };
           }
 
           const data = await response.json();
+          console.log(`Got metadata for ${title.title}: ${data.genres?.length || 0} genres, ${data.credits?.crew?.length || 0} crew`);
           
           return {
             ...title,
@@ -64,6 +77,8 @@ serve(async (req) => {
         }
       })
     );
+    
+    console.log("Metadata fetched for all titles");
 
     // Use AI to sort titles based on custom criteria
     const prompt = `You are a movie/TV show sorting assistant. Given a list of titles with their metadata and a user's custom filter criteria, rank the titles from most relevant to least relevant based on that criteria.
@@ -94,6 +109,7 @@ Consider:
 
 Respond with ONLY the JSON array, no other text.`;
 
+    console.log("Calling Lovable AI for sorting...");
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -111,32 +127,47 @@ Respond with ONLY the JSON array, no other text.`;
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error("AI API error:", errorText);
-      throw new Error("Failed to sort titles using AI");
+      console.error("AI API error:", aiResponse.status, errorText);
+      throw new Error(`Failed to sort titles using AI: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
+    console.log("AI response received");
     const sortedIdsText = aiData.choices[0].message.content.trim();
+    console.log("AI returned:", sortedIdsText);
     
     // Parse the AI response to extract the sorted IDs
     let sortedIds: number[];
     try {
-      sortedIds = JSON.parse(sortedIdsText);
+      // Try to extract JSON array from the response
+      const jsonMatch = sortedIdsText.match(/\[[\d,\s]+\]/);
+      if (jsonMatch) {
+        sortedIds = JSON.parse(jsonMatch[0]);
+        console.log("Parsed sorted IDs:", sortedIds);
+      } else {
+        throw new Error("No JSON array found in AI response");
+      }
     } catch (error) {
-      console.error("Failed to parse AI response:", sortedIdsText);
+      console.error("Failed to parse AI response:", sortedIdsText, error);
       // Fallback: return original order
       sortedIds = titles.map((t: Title) => t.id);
+      console.log("Using fallback: original order");
     }
 
     // Sort titles based on AI's ranking
+    console.log("Mapping IDs to titles...");
     const sortedTitles = sortedIds
       .map(id => titles.find((t: Title) => t.id === id))
       .filter(Boolean);
 
     // Add any titles that weren't in the AI response
     const missingTitles = titles.filter((t: Title) => !sortedIds.includes(t.id));
+    if (missingTitles.length > 0) {
+      console.log(`Adding ${missingTitles.length} missing titles to the end`);
+    }
     const finalSortedTitles = [...sortedTitles, ...missingTitles];
-
+    
+    console.log(`Returning ${finalSortedTitles.length} sorted titles`);
     return new Response(
       JSON.stringify({ sortedTitles: finalSortedTitles }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
