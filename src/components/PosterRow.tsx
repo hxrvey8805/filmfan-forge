@@ -39,9 +39,10 @@ interface PosterRowProps {
   onFilterChange?: (value: string) => void;
   customFilters?: CustomFilter[];
   onAddCustomFilter?: () => void;
+  onDeleteCustomFilter?: (filterId: string) => void;
 }
 
-const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter }: PosterRowProps) => {
+const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter, onDeleteCustomFilter }: PosterRowProps) => {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-3 px-1">
@@ -54,15 +55,27 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
               <SelectItem value="all" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">All</SelectItem>
               <SelectItem value="movie" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">Movies</SelectItem>
               <SelectItem value="tv" className="rounded-lg text-sm font-medium focus:bg-accent/20 focus:text-accent cursor-pointer">TV Shows</SelectItem>
-              {customFilters.map((filter) => (
-                <SelectItem 
-                  key={filter.id} 
-                  value={filter.id}
-                  className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer"
-                >
-                  {filter.name}
-                </SelectItem>
-              ))}
+              {customFilters.map((filter) => {
+                const isSelected = filterValue === filter.id;
+                return (
+                  <SelectItem 
+                    key={filter.id} 
+                    value={filter.id}
+                    className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer relative pl-8"
+                  >
+                    {!isSelected && onDeleteCustomFilter && (
+                      <Trash2 
+                        className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-destructive transition-colors cursor-pointer z-10" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteCustomFilter(filter.id);
+                        }}
+                      />
+                    )}
+                    {filter.name}
+                  </SelectItem>
+                );
+              })}
               {onAddCustomFilter && (
                 <button
                   onClick={(e) => {
