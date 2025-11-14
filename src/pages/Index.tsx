@@ -133,15 +133,23 @@ const Index = () => {
   };
 
   const handleAddToFavourites = async (title: Title) => {
+    console.log("handleAddToFavourites called with:", title);
+    
     if (favourites.find(item => item.id === title.id)) {
+      console.log("Title already in favourites");
       toast.info(`"${title.title}" is already in your Favourites`);
       return;
     }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      console.log("User:", user?.id);
+      if (!user) {
+        console.log("No user found!");
+        return;
+      }
 
+      console.log("Inserting to database with list_type: favourite");
       const { error } = await supabase.from("user_titles").insert({
         user_id: user.id,
         title_id: title.id,
@@ -152,8 +160,12 @@ const Index = () => {
         list_type: "favourite",
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Database error:", error);
+        throw error;
+      }
 
+      console.log("Successfully added to favourites");
       setFavourites([...favourites, title]);
       toast.success(`Added "${title.title}" to Favourites`);
     } catch (error) {
@@ -224,15 +236,23 @@ const Index = () => {
   };
 
   const handleAddToWatched = async (title: Title) => {
+    console.log("handleAddToWatched called with:", title);
+    
     if (watched.find(item => item.id === title.id)) {
+      console.log("Title already in watched");
       toast.info(`"${title.title}" is already in your Watched list`);
       return;
     }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      console.log("User:", user?.id);
+      if (!user) {
+        console.log("No user found!");
+        return;
+      }
 
+      console.log("Inserting to database with list_type: watched");
       const { error } = await supabase.from("user_titles").insert({
         user_id: user.id,
         title_id: title.id,
@@ -243,8 +263,12 @@ const Index = () => {
         list_type: "watched",
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Database error:", error);
+        throw error;
+      }
 
+      console.log("Successfully added to watched");
       setWatched([...watched, title]);
       toast.success(`Added "${title.title}" to Watched`);
     } catch (error) {
