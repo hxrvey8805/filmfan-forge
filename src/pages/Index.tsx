@@ -449,7 +449,6 @@ const Index = () => {
     setSearchModalType(type);
     setSearchModalOpen(true);
   };
-  };
 
   const handleFilterAdded = (filter: CustomFilter) => {
     const updated = [...customFilters, filter];
