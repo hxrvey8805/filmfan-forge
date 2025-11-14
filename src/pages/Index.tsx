@@ -226,6 +226,19 @@ const Index = () => {
     localStorage.setItem("customFilters", JSON.stringify(updated));
   };
 
+  const handleDeleteCustomFilter = (filterId: string) => {
+    const updated = customFilters.filter(f => f.id !== filterId);
+    setCustomFilters(updated);
+    localStorage.setItem("customFilters", JSON.stringify(updated));
+    
+    if (watchListFilter === filterId) {
+      setWatchListFilter("all");
+      setSortedWatchList(watchList);
+    }
+    
+    toast.success("Custom filter deleted");
+  };
+
   const handleFilterChange = async (value: string) => {
     console.log("Filter changed to:", value);
     console.log("Available custom filters:", customFilters);
@@ -319,6 +332,7 @@ const Index = () => {
         onFilterChange={handleFilterChange}
         customFilters={customFilters}
         onAddCustomFilter={() => setCustomFilterDialogOpen(true)}
+        onDeleteCustomFilter={handleDeleteCustomFilter}
       />
 
       {/* Currently Watching Row */}
