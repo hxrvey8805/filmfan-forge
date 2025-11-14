@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Package, Sparkles, Crown } from "lucide-react";
+import { Package, Sparkles, Crown, User } from "lucide-react";
 import PackOpeningModal from "@/components/PackOpeningModal";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -9,11 +9,16 @@ const Packs = () => {
   const [isOpening, setIsOpening] = useState(false);
   const [selectedPackId, setSelectedPackId] = useState<string>("");
   const [availablePacks, setAvailablePacks] = useState<any[]>([]);
+  const [collection, setCollection] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadAvailablePacks();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    await Promise.all([loadAvailablePacks(), loadCollection()]);
+  };
 
   const loadAvailablePacks = async () => {
     try {
@@ -36,6 +41,23 @@ const Packs = () => {
     }
   };
 
+  const loadCollection = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('user_collection')
+        .select('*')
+        .order('collected_at', { ascending: false });
+
+      if (error) throw error;
+      setCollection(data || []);
+    } catch (error) {
+      console.error('Error loading collection:', error);
+    }
+  };
+
   const handleOpenPack = (packId: string) => {
     setSelectedPackId(packId);
     setIsOpening(true);
@@ -43,7 +65,7 @@ const Packs = () => {
 
   const handlePackOpened = () => {
     setIsOpening(false);
-    loadAvailablePacks();
+    loadData();
   };
 
   const actorPacks = availablePacks.filter(p => p.pack_type === 'actor');
@@ -125,6 +147,34 @@ const Packs = () => {
         onClose={handlePackOpened}
         packId={selectedPackId}
       />
+
+      {/* Collection Section */}
+      {collection.length > 0 && (
+        <div className="space-y-4 pt-6 border-t border-border">
+          <h2 className="text-2xl font-bold tracking-tight">Your Collection</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {collection.map((item) => (
+              <Card key={item.id} className="overflow-hidden bg-card border-border hover:shadow-lg transition-shadow">
+                {item.profile_path ? (
+                  <img
+                    src={`https://image.tmdb.org/t/p/w500${item.profile_path}`}
+                    alt={item.person_name}
+                    className="w-full aspect-[2/3] object-cover"
+                  />
+                ) : (
+                  <div className="w-full aspect-[2/3] bg-muted flex items-center justify-center">
+                    <User className="h-12 w-12 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="p-3 space-y-1">
+                  <p className="font-semibold text-sm line-clamp-1">{item.person_name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{item.person_type}</p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

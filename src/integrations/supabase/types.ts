@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      user_collection: {
+        Row: {
+          collected_at: string
+          id: string
+          person_id: number
+          person_name: string
+          person_type: string
+          profile_path: string
+          user_id: string
+        }
+        Insert: {
+          collected_at?: string
+          id?: string
+          person_id: number
+          person_name: string
+          person_type: string
+          profile_path: string
+          user_id: string
+        }
+        Update: {
+          collected_at?: string
+          id?: string
+          person_id?: number
+          person_name?: string
+          person_type?: string
+          profile_path?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_packs: {
         Row: {
           earned_at: string
