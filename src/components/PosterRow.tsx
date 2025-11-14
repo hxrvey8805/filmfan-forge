@@ -59,19 +59,20 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                 <SelectItem 
                   key={filter.id} 
                   value={filter.id}
-                  className="group/item relative rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer"
+                  className="group/item relative rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer pl-8"
                 >
-                  <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center group-hover/item:opacity-0 transition-opacity">
-                    {filterValue === filter.id && <span className="absolute inset-0" />}
-                  </span>
                   {onRemoveCustomFilter && (
                     <button
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         onRemoveCustomFilter(filter.id);
                       }}
-                      className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity z-10 hover:text-destructive"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 flex h-4 w-4 items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity hover:text-destructive"
                       aria-label={`Remove ${filter.name} filter`}
                     >
                       <X className="h-3.5 w-3.5" />
