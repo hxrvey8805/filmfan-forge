@@ -21,6 +21,7 @@ export type Database = {
           list_type: string
           poster_path: string
           progress: number | null
+          tags: string[] | null
           title: string
           title_id: number
           type: string
@@ -33,6 +34,7 @@ export type Database = {
           list_type: string
           poster_path: string
           progress?: number | null
+          tags?: string[] | null
           title: string
           title_id: number
           type: string
@@ -45,6 +47,7 @@ export type Database = {
           list_type?: string
           poster_path?: string
           progress?: number | null
+          tags?: string[] | null
           title?: string
           title_id?: number
           type?: string
