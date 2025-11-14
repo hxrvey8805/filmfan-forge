@@ -22,7 +22,7 @@ interface SearchModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (title: Title) => void;
-  listType: "watchlist" | "watching";
+  listType: "favourite" | "watchlist" | "watching" | "watched";
 }
 
 const SearchModal = ({ open, onOpenChange, onSelect, listType }: SearchModalProps) => {
@@ -68,7 +68,12 @@ const SearchModal = ({ open, onOpenChange, onSelect, listType }: SearchModalProp
       <DialogContent className="max-w-2xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>
-            Add to {listType === "watchlist" ? "Watch List" : "Currently Watching"}
+            Add to {
+              listType === "favourite" ? "Favourites" :
+              listType === "watchlist" ? "Watch List" : 
+              listType === "watching" ? "Currently Watching" :
+              "Watched"
+            }
           </DialogTitle>
         </DialogHeader>
         
