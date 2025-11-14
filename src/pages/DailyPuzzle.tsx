@@ -5,7 +5,6 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { User, Trophy, RotateCcw, Timer, ArrowRight, Loader2, Film, Tv } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import PackOpeningModal from '@/components/PackOpeningModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Actor {
@@ -53,7 +52,6 @@ const DailyPuzzle = () => {
   const [filmographyFilter, setFilmographyFilter] = useState<FilmographyFilter>('movies');
   const [timeLeft, setTimeLeft] = useState<number>(120);
   const [gameStartTime, setGameStartTime] = useState<number | null>(null);
-  const [showPackModal, setShowPackModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -206,11 +204,24 @@ const DailyPuzzle = () => {
       setGameState('won');
       
       if (wonInTime) {
+        // Award a pack
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const packType = Math.random() > 0.5 ? 'actor' : 'director';
+            await supabase.from('user_packs').insert({
+              user_id: user.id,
+              pack_type: packType,
+            });
+          }
+        } catch (error) {
+          console.error('Error awarding pack:', error);
+        }
+        
         toast({
           title: "🎉 Perfect! You won!",
           description: `Connected in ${path.length + 1} steps and ${timeTaken}s. You earned a free pack!`,
         });
-        setTimeout(() => setShowPackModal(true), 1500);
       } else {
         toast({
           title: "🎉 You won!",
@@ -526,12 +537,7 @@ const DailyPuzzle = () => {
         </div>
       )}
 
-      {/* Pack Opening Modal */}
-      <PackOpeningModal
-        isOpen={showPackModal}
-        onClose={() => setShowPackModal(false)}
-        packType="reward"
-      />
+      {/* Removed Pack Opening Modal - go to Packs page to open earned packs */}
     </div>
   );
 };

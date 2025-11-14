@@ -2,34 +2,56 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface PackOpeningModalProps {
   isOpen: boolean;
   onClose: () => void;
-  packType: string;
+  packId: string;
 }
 
-const PackOpeningModal = ({ isOpen, onClose, packType }: PackOpeningModalProps) => {
+const PackOpeningModal = ({ isOpen, onClose, packId }: PackOpeningModalProps) => {
   const [stage, setStage] = useState<"opening" | "reveal">("opening");
-  const [cards, setCards] = useState<Array<{ name: string; rarity: string; role: string }>>([]);
+  const [person, setPerson] = useState<any>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && packId) {
       setStage("opening");
-      setCards([]);
-      
-      // Simulate pack opening animation
+      setPerson(null);
+      openPack();
+    }
+  }, [isOpen, packId]);
+
+  const openPack = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('open-pack', {
+        body: { packId }
+      });
+
+      if (error) throw error;
+
+      // Simulate opening animation
       setTimeout(() => {
-        const mockCards = [
-          { name: "Brad Pitt", rarity: "Legendary", role: "Lead Actor" },
-          { name: "Emma Stone", rarity: "Rare", role: "Lead Actress" },
-          { name: "John Williams", rarity: "Rare", role: "Composer" },
-        ];
-        setCards(mockCards);
+        setPerson(data.person);
         setStage("reveal");
       }, 2000);
+    } catch (error: any) {
+      console.error('Error opening pack:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to open pack",
+        variant: "destructive"
+      });
+      onClose();
     }
-  }, [isOpen]);
+  };
+
+  const getImageUrl = (profilePath: string | null) => {
+    if (!profilePath) return null;
+    return `https://image.tmdb.org/t/p/w500${profilePath}`;
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -41,38 +63,35 @@ const PackOpeningModal = ({ isOpen, onClose, packType }: PackOpeningModalProps) 
             </div>
             <div>
               <h3 className="text-2xl font-bold mb-2">Opening Pack...</h3>
-              <p className="text-muted-foreground">Get ready for your new actors!</p>
+              <p className="text-muted-foreground">Get ready for your new card!</p>
             </div>
           </div>
-        ) : (
+        ) : person ? (
           <div className="py-6 space-y-6">
-            <h3 className="text-2xl font-bold text-center">Your New Cards!</h3>
+            <h3 className="text-2xl font-bold text-center">Your New Card!</h3>
             
-            <div className="space-y-3">
-              {cards.map((card, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 rounded-lg bg-gradient-to-r from-card to-secondary border border-primary/50 animate-scale-in"
-                  style={{ animationDelay: `${idx * 0.1}s` }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                      <Sparkles className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-bold">{card.name}</p>
-                      <p className="text-xs text-muted-foreground">{card.role}</p>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      card.rarity === "Legendary"
-                        ? "bg-primary/20 text-primary"
-                        : "bg-accent/20 text-accent"
-                    }`}>
-                      {card.rarity}
-                    </span>
+            <div className="space-y-4">
+              <div
+                className="rounded-lg overflow-hidden bg-gradient-to-br from-card to-secondary border border-primary/50 animate-scale-in"
+              >
+                {person.profile_path ? (
+                  <img
+                    src={getImageUrl(person.profile_path)}
+                    alt={person.name}
+                    className="w-full aspect-[2/3] object-cover"
+                  />
+                ) : (
+                  <div className="w-full aspect-[2/3] bg-muted flex items-center justify-center">
+                    <Sparkles className="h-16 w-16 text-muted-foreground" />
                   </div>
+                )}
+                <div className="p-4 space-y-2">
+                  <p className="font-bold text-lg">{person.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {person.known_for_department}
+                  </p>
                 </div>
-              ))}
+              </div>
             </div>
 
             <Button
@@ -82,7 +101,7 @@ const PackOpeningModal = ({ isOpen, onClose, packType }: PackOpeningModalProps) 
               Add to Collection
             </Button>
           </div>
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   );

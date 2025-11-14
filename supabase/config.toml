@@ -12,3 +12,6 @@ verify_jwt = false
 [functions.sort-by-custom-filter]
 verify_jwt = false
 
+[functions.open-pack]
+verify_jwt = true
+
