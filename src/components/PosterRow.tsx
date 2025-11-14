@@ -1,4 +1,4 @@
-import { Film, Tv, Plus, Trash2, MessageSquare } from "lucide-react";
+import { Film, Tv, Plus, Trash2, MessageSquare, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   Carousel,
@@ -39,9 +39,10 @@ interface PosterRowProps {
   onFilterChange?: (value: string) => void;
   customFilters?: CustomFilter[];
   onAddCustomFilter?: () => void;
+  onRemoveCustomFilter?: (filterId: string) => void;
 }
 
-const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter }: PosterRowProps) => {
+const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter, onRemoveCustomFilter }: PosterRowProps) => {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-3 px-1">
@@ -58,8 +59,24 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                 <SelectItem 
                   key={filter.id} 
                   value={filter.id}
-                  className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer"
+                  className="group/item relative rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer"
                 >
+                  <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center group-hover/item:opacity-0 transition-opacity">
+                    {filterValue === filter.id && <span className="absolute inset-0" />}
+                  </span>
+                  {onRemoveCustomFilter && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onRemoveCustomFilter(filter.id);
+                      }}
+                      className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity z-10 hover:text-destructive"
+                      aria-label={`Remove ${filter.name} filter`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   {filter.name}
                 </SelectItem>
               ))}
