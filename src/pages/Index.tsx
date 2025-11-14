@@ -29,7 +29,7 @@ const Index = () => {
   const [selectedTitle, setSelectedTitle] = useState<Title | null>(null);
   const [selectedTitleSource, setSelectedTitleSource] = useState<"favourite" | "watchlist" | "watching" | "watched">("watchlist");
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [searchModalType, setSearchModalType] = useState<"watchlist" | "watching">("watchlist");
+  const [searchModalType, setSearchModalType] = useState<"favourite" | "watchlist" | "watching" | "watched">("watchlist");
   const [favourites, setFavourites] = useState<Title[]>([]);
   const [watchList, setWatchList] = useState<Title[]>([]);
   const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([]);
@@ -445,9 +445,10 @@ const Index = () => {
     }
   };
 
-  const openSearchModal = (type: "watchlist" | "watching") => {
+  const openSearchModal = (type: "favourite" | "watchlist" | "watching" | "watched") => {
     setSearchModalType(type);
     setSearchModalOpen(true);
+  };
   };
 
   const handleFilterAdded = (filter: CustomFilter) => {
@@ -525,10 +526,14 @@ const Index = () => {
   };
 
   const handleSearchSelect = (title: Title) => {
-    if (searchModalType === "watchlist") {
+    if (searchModalType === "favourite") {
+      handleAddToFavourites(title);
+    } else if (searchModalType === "watchlist") {
       handleAddToWatchList(title);
-    } else {
+    } else if (searchModalType === "watching") {
       handleAddToCurrentlyWatching(title);
+    } else if (searchModalType === "watched") {
+      handleAddToWatched(title);
     }
   };
 
@@ -556,7 +561,7 @@ const Index = () => {
           setSelectedTitle(title);
           setSelectedTitleSource("favourite");
         }}
-        onAddClick={() => openSearchModal("watchlist")}
+        onAddClick={() => openSearchModal("favourite")}
         onDeleteClick={handleDeleteFromFavourites}
       />
 
@@ -597,7 +602,7 @@ const Index = () => {
           setSelectedTitle(title);
           setSelectedTitleSource("watched");
         }}
-        onAddClick={() => openSearchModal("watchlist")}
+        onAddClick={() => openSearchModal("watched")}
         onDeleteClick={handleDeleteFromWatched}
       />
 
