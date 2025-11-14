@@ -100,6 +100,28 @@ serve(async (req) => {
       });
     }
 
+    // Add to user's collection
+    const { error: collectionError } = await supabase
+      .from('user_collection')
+      .insert({
+        user_id: user.id,
+        person_id: selectedPerson.id,
+        person_name: selectedPerson.name,
+        person_type: pack.pack_type,
+        profile_path: selectedPerson.profile_path || '',
+      });
+
+    if (collectionError) {
+      console.error('Error adding to collection:', collectionError);
+      // Don't fail if it's a duplicate (unique constraint violation)
+      if (collectionError.code !== '23505') {
+        return new Response(JSON.stringify({ error: 'Failed to add to collection' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     return new Response(
       JSON.stringify({
         person: {

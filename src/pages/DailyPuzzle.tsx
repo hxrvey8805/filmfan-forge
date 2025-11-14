@@ -228,6 +228,14 @@ const DailyPuzzle = () => {
           description: `Connected in ${path.length + 1} steps, but took ${timeTaken}s. Complete in under 2 minutes to earn a pack!`,
         });
       }
+      
+      // Auto-randomize actors for next game
+      localStorage.removeItem('dp_startActor');
+      localStorage.removeItem('dp_targetActor');
+      setTimeout(() => {
+        loadRandomActors();
+      }, 2000);
+      
       return;
     }
 
