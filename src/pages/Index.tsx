@@ -170,9 +170,17 @@ const Index = () => {
   };
 
   const handleMoveToCurrentlyWatching = async (title: Title) => {
+    // Check if already in currently watching
+    if (currentlyWatching.find(item => item.id === title.id)) {
+      toast.info(`"${title.title}" is already in Currently Watching`);
+      return;
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      console.log("Moving title to currently watching:", title.title);
 
       // Delete from watchlist
       const { error: deleteError } = await supabase
@@ -182,7 +190,12 @@ const Index = () => {
         .eq("title_id", title.id)
         .eq("list_type", "watchlist");
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error("Delete error:", deleteError);
+        throw deleteError;
+      }
+
+      console.log("Deleted from watchlist, now inserting to watching");
 
       // Add to currently watching
       const { error: insertError } = await supabase.from("user_titles").insert({
@@ -195,7 +208,12 @@ const Index = () => {
         list_type: "watching",
       });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Insert error:", insertError);
+        throw insertError;
+      }
+
+      console.log("Successfully moved to currently watching");
 
       // Update state
       const updatedWatchList = watchList.filter((item) => item.id !== title.id);
