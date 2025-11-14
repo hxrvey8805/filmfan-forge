@@ -39,10 +39,11 @@ interface TitleDetailModalProps {
   onOpenChange: (open: boolean) => void;
   onAddToWatchList?: (title: Title) => void;
   onAddToCurrentlyWatching?: (title: Title) => void;
+  onMoveToCurrentlyWatching?: (title: Title) => void;
   sourceList?: "watchlist" | "watching";
 }
 
-const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddToCurrentlyWatching, sourceList }: TitleDetailModalProps) => {
+const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddToCurrentlyWatching, onMoveToCurrentlyWatching, sourceList }: TitleDetailModalProps) => {
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -251,6 +252,18 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddTo
                       <Heart className="h-4 w-4 mr-1" />
                       Favourite
                     </Button>
+                  ) : sourceList === "watchlist" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onMoveToCurrentlyWatching?.(title);
+                        onOpenChange(false);
+                      }}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Move to Currently Watching
+                    </Button>
                   ) : (
                     <Button
                       variant="outline"
@@ -264,14 +277,6 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddTo
                       Watch List
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onOpenChange(false)}
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Exit
-                  </Button>
                 </div>
               </div>
 

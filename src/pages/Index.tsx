@@ -169,6 +169,46 @@ const Index = () => {
     }
   };
 
+  const handleMoveToCurrentlyWatching = async (title: Title) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Delete from watchlist
+      const { error: deleteError } = await supabase
+        .from("user_titles")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("title_id", title.id)
+        .eq("list_type", "watchlist");
+
+      if (deleteError) throw deleteError;
+
+      // Add to currently watching
+      const { error: insertError } = await supabase.from("user_titles").insert({
+        user_id: user.id,
+        title_id: title.id,
+        title: title.title,
+        type: title.type,
+        poster_path: title.posterPath,
+        year: title.year,
+        list_type: "watching",
+      });
+
+      if (insertError) throw insertError;
+
+      // Update state
+      const updatedWatchList = watchList.filter((item) => item.id !== title.id);
+      setWatchList(updatedWatchList);
+      setSortedWatchList(updatedWatchList);
+      setCurrentlyWatching([...currentlyWatching, title]);
+      toast.success(`Moved "${title.title}" to Currently Watching`);
+    } catch (error) {
+      console.error("Error moving to currently watching:", error);
+      toast.error("Failed to move to Currently Watching");
+    }
+  };
+
   const handleDeleteFromWatchList = async (title: Title) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -355,6 +395,7 @@ const Index = () => {
           onOpenChange={(open) => !open && setSelectedTitle(null)}
           onAddToWatchList={handleAddToWatchList}
           onAddToCurrentlyWatching={handleAddToCurrentlyWatching}
+          onMoveToCurrentlyWatching={handleMoveToCurrentlyWatching}
           sourceList={selectedTitleSource}
         />
       )}
