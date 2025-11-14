@@ -170,7 +170,8 @@ const Index = () => {
       toast.success(`Added "${title.title}" to Favourites`);
     } catch (error) {
       console.error("Error adding to favourites:", error);
-      toast.error("Failed to add to Favourites");
+      const msg = (error as any)?.message || (typeof error === 'string' ? error : 'Failed to add to Favourites');
+      toast.error(`Failed to add to Favourites: ${msg}`);
     }
   };
 
@@ -273,7 +274,8 @@ const Index = () => {
       toast.success(`Added "${title.title}" to Watched`);
     } catch (error) {
       console.error("Error adding to watched:", error);
-      toast.error("Failed to add to Watched");
+      const msg = (error as any)?.message || (typeof error === 'string' ? error : 'Failed to add to Watched');
+      toast.error(`Failed to add to Watched: ${msg}`);
     }
   };
 
