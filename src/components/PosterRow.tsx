@@ -66,9 +66,14 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                     {!isSelected && onDeleteCustomFilter && (
                       <Trash2 
                         className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-destructive transition-colors cursor-pointer z-10" 
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onDeleteCustomFilter(filter.id);
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDeleteCustomFilter(filter.id);
+                          e.preventDefault();
                         }}
                       />
                     )}
