@@ -4,6 +4,7 @@ import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
 import CustomFilterDialog from "@/components/CustomFilterDialog";
+import ManageFiltersDialog from "@/components/ManageFiltersDialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +37,7 @@ const Index = () => {
   const [watchListFilter, setWatchListFilter] = useState<string>("all");
   const [customFilters, setCustomFilters] = useState<CustomFilter[]>([]);
   const [customFilterDialogOpen, setCustomFilterDialogOpen] = useState(false);
+  const [manageFiltersOpen, setManageFiltersOpen] = useState(false);
   const [sortedWatchList, setSortedWatchList] = useState<Title[]>([]);
   const [isSorting, setIsSorting] = useState(false);
 
@@ -334,6 +336,7 @@ const Index = () => {
         customFilters={customFilters}
         onAddCustomFilter={() => setCustomFilterDialogOpen(true)}
         onRemoveCustomFilter={handleRemoveCustomFilter}
+        onManageCustomFilters={() => setManageFiltersOpen(true)}
       />
 
       {/* Currently Watching Row */}
@@ -373,6 +376,14 @@ const Index = () => {
         open={customFilterDialogOpen}
         onOpenChange={setCustomFilterDialogOpen}
         onFilterAdded={handleFilterAdded}
+      />
+
+      {/* Manage Filters Dialog */}
+      <ManageFiltersDialog
+        open={manageFiltersOpen}
+        onOpenChange={setManageFiltersOpen}
+        customFilters={customFilters}
+        onRemoveCustomFilter={handleRemoveCustomFilter}
       />
     </div>
   );
