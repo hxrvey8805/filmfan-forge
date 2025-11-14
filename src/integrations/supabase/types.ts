@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      user_packs: {
+        Row: {
+          earned_at: string
+          id: string
+          is_opened: boolean
+          opened_at: string | null
+          pack_type: string
+          user_id: string
+        }
+        Insert: {
+          earned_at?: string
+          id?: string
+          is_opened?: boolean
+          opened_at?: string | null
+          pack_type: string
+          user_id: string
+        }
+        Update: {
+          earned_at?: string
+          id?: string
+          is_opened?: boolean
+          opened_at?: string | null
+          pack_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_titles: {
         Row: {
           created_at: string
