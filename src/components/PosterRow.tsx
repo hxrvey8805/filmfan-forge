@@ -1,4 +1,4 @@
-import { Film, Tv, Plus, Trash2, MessageSquare, X } from "lucide-react";
+import { Film, Tv, Plus, Trash2, MessageSquare } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   Carousel,
@@ -40,9 +40,10 @@ interface PosterRowProps {
   customFilters?: CustomFilter[];
   onAddCustomFilter?: () => void;
   onRemoveCustomFilter?: (filterId: string) => void;
+  onManageCustomFilters?: () => void;
 }
 
-const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter, onRemoveCustomFilter }: PosterRowProps) => {
+const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, filterValue, onFilterChange, customFilters = [], onAddCustomFilter, onRemoveCustomFilter, onManageCustomFilters }: PosterRowProps) => {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-3 px-1">
@@ -61,31 +62,31 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                   value={filter.id}
                   className="group/item relative rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer pl-8"
                 >
-                  {onRemoveCustomFilter && filterValue !== filter.id && (
-                    <button
-                      type="button"
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onRemoveCustomFilter(filter.id);
-                      }}
-                      className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity hover:text-destructive z-10"
-                      aria-label={`Remove ${filter.name} filter`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
                   {filter.name}
                 </SelectItem>
               ))}
+              {onAddCustomFilter && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onAddCustomFilter();
+                  }}
+                  className="w-full text-left px-2 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 rounded-lg cursor-pointer"
+                >
+                  + Add Custom Filter
+                </button>
+              )}
+              {onManageCustomFilters && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onManageCustomFilters();
+                  }}
+                  className="w-full text-left px-2 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 rounded-lg cursor-pointer"
+                >
+                  Manage Custom Filters
+                </button>
+              )}
               {onAddCustomFilter && (
                 <button
                   onClick={(e) => {
