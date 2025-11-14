@@ -37,13 +37,16 @@ interface TitleDetailModalProps {
   title: Title;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAddToFavourites?: (title: Title) => void;
   onAddToWatchList?: (title: Title) => void;
   onAddToCurrentlyWatching?: (title: Title) => void;
+  onAddToWatched?: (title: Title) => void;
   onMoveToCurrentlyWatching?: (title: Title) => void;
-  sourceList?: "watchlist" | "watching";
+  onMoveToWatched?: (title: Title) => void;
+  sourceList?: "favourite" | "watchlist" | "watching" | "watched";
 }
 
-const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddToCurrentlyWatching, onMoveToCurrentlyWatching, sourceList }: TitleDetailModalProps) => {
+const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddToWatchList, onAddToCurrentlyWatching, onAddToWatched, onMoveToCurrentlyWatching, onMoveToWatched, sourceList }: TitleDetailModalProps) => {
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -241,41 +244,104 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToWatchList, onAddTo
                 </div>
                 
                 <div className="flex gap-2">
-                  {sourceList === "watching" ? (
+                  {sourceList === "favourite" ? (
+                    // Only Exit button for favourites
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        toast({ description: "Favourite feature coming soon!" });
-                      }}
+                      onClick={() => onOpenChange(false)}
                     >
-                      <Heart className="h-4 w-4 mr-1" />
-                      Favourite
+                      <X className="h-4 w-4 mr-1" />
+                      Exit
                     </Button>
                   ) : sourceList === "watchlist" ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        onMoveToCurrentlyWatching?.(title);
-                        onOpenChange(false);
-                      }}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      Move to Currently Watching
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          onMoveToCurrentlyWatching?.(title);
+                          onOpenChange(false);
+                        }}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Move to Currently Watching
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Exit
+                      </Button>
+                    </>
+                  ) : sourceList === "watching" ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          onMoveToWatched?.(title);
+                          onOpenChange(false);
+                        }}
+                      >
+                        <Clock className="h-4 w-4 mr-1" />
+                        Watched
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Exit
+                      </Button>
+                    </>
+                  ) : sourceList === "watched" ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          onAddToFavourites?.(title);
+                          toast({ description: "Added to Favourites" });
+                        }}
+                      >
+                        <Heart className="h-4 w-4 mr-1" />
+                        Favourite
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Exit
+                      </Button>
+                    </>
                   ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        onAddToWatchList?.(title);
-                        toast({ description: "Added to Watch List" });
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Watch List
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          onAddToWatchList?.(title);
+                          toast({ description: "Added to Watch List" });
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Watch List
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Exit
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>

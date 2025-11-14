@@ -27,11 +27,13 @@ interface CustomFilter {
 const Index = () => {
   const navigate = useNavigate();
   const [selectedTitle, setSelectedTitle] = useState<Title | null>(null);
-  const [selectedTitleSource, setSelectedTitleSource] = useState<"watchlist" | "watching">("watchlist");
+  const [selectedTitleSource, setSelectedTitleSource] = useState<"favourite" | "watchlist" | "watching" | "watched">("watchlist");
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [searchModalType, setSearchModalType] = useState<"watchlist" | "watching">("watchlist");
+  const [favourites, setFavourites] = useState<Title[]>([]);
   const [watchList, setWatchList] = useState<Title[]>([]);
   const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([]);
+  const [watched, setWatched] = useState<Title[]>([]);
   const [loading, setLoading] = useState(true);
   const [watchListFilter, setWatchListFilter] = useState<string>("all");
   const [customFilters, setCustomFilters] = useState<CustomFilter[]>([]);
@@ -76,6 +78,16 @@ const Index = () => {
 
       if (error) throw error;
 
+      const favouriteItems = data
+        ?.filter((item) => item.list_type === "favourite")
+        .map((item) => ({
+          id: item.title_id,
+          title: item.title,
+          type: item.type as "movie" | "tv",
+          posterPath: item.poster_path,
+          year: item.year,
+        })) || [];
+
       const watchlistItems = data
         ?.filter((item) => item.list_type === "watchlist")
         .map((item) => ({
@@ -97,14 +109,56 @@ const Index = () => {
           progress: item.progress,
         })) || [];
 
+      const watchedItems = data
+        ?.filter((item) => item.list_type === "watched")
+        .map((item) => ({
+          id: item.title_id,
+          title: item.title,
+          type: item.type as "movie" | "tv",
+          posterPath: item.poster_path,
+          year: item.year,
+        })) || [];
+
+      setFavourites(favouriteItems);
       setWatchList(watchlistItems);
       setCurrentlyWatching(watchingItems);
+      setWatched(watchedItems);
       setSortedWatchList(watchlistItems);
     } catch (error) {
       console.error("Error loading titles:", error);
       toast.error("Failed to load your lists");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddToFavourites = async (title: Title) => {
+    if (favourites.find(item => item.id === title.id)) {
+      toast.info(`"${title.title}" is already in your Favourites`);
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase.from("user_titles").insert({
+        user_id: user.id,
+        title_id: title.id,
+        title: title.title,
+        type: title.type,
+        poster_path: title.posterPath,
+        year: title.year,
+        list_type: "favourite",
+      });
+
+      if (error) throw error;
+
+      setFavourites([...favourites, title]);
+      toast.success(`Added "${title.title}" to Favourites`);
+    } catch (error) {
+      console.error("Error adding to favourites:", error);
+      toast.error("Failed to add to Favourites");
     }
   };
 
@@ -169,6 +223,36 @@ const Index = () => {
     }
   };
 
+  const handleAddToWatched = async (title: Title) => {
+    if (watched.find(item => item.id === title.id)) {
+      toast.info(`"${title.title}" is already in your Watched list`);
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase.from("user_titles").insert({
+        user_id: user.id,
+        title_id: title.id,
+        title: title.title,
+        type: title.type,
+        poster_path: title.posterPath,
+        year: title.year,
+        list_type: "watched",
+      });
+
+      if (error) throw error;
+
+      setWatched([...watched, title]);
+      toast.success(`Added "${title.title}" to Watched`);
+    } catch (error) {
+      console.error("Error adding to watched:", error);
+      toast.error("Failed to add to Watched");
+    }
+  };
+
   const handleMoveToCurrentlyWatching = async (title: Title) => {
     // Check if already in currently watching
     if (currentlyWatching.find(item => item.id === title.id)) {
@@ -227,6 +311,72 @@ const Index = () => {
     }
   };
 
+  const handleMoveToWatched = async (title: Title) => {
+    // Check if already in watched
+    if (watched.find(item => item.id === title.id)) {
+      toast.info(`"${title.title}" is already in Watched`);
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Delete from currently watching
+      const { error: deleteError } = await supabase
+        .from("user_titles")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("title_id", title.id)
+        .eq("list_type", "watching");
+
+      if (deleteError) throw deleteError;
+
+      // Add to watched
+      const { error: insertError } = await supabase.from("user_titles").insert({
+        user_id: user.id,
+        title_id: title.id,
+        title: title.title,
+        type: title.type,
+        poster_path: title.posterPath,
+        year: title.year,
+        list_type: "watched",
+      });
+
+      if (insertError) throw insertError;
+
+      // Update state
+      setCurrentlyWatching(currentlyWatching.filter((item) => item.id !== title.id));
+      setWatched([...watched, title]);
+      toast.success(`Moved "${title.title}" to Watched`);
+    } catch (error) {
+      console.error("Error moving to watched:", error);
+      toast.error("Failed to move to Watched");
+    }
+  };
+
+  const handleDeleteFromFavourites = async (title: Title) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("user_titles")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("title_id", title.id)
+        .eq("list_type", "favourite");
+
+      if (error) throw error;
+
+      setFavourites(favourites.filter((item) => item.id !== title.id));
+      toast.success(`Removed "${title.title}" from Favourites`);
+    } catch (error) {
+      console.error("Error removing from favourites:", error);
+      toast.error("Failed to remove from Favourites");
+    }
+  };
+
   const handleDeleteFromWatchList = async (title: Title) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -270,6 +420,28 @@ const Index = () => {
     } catch (error) {
       console.error("Error removing from watching:", error);
       toast.error("Failed to remove from Currently Watching");
+    }
+  };
+
+  const handleDeleteFromWatched = async (title: Title) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("user_titles")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("title_id", title.id)
+        .eq("list_type", "watched");
+
+      if (error) throw error;
+
+      setWatched(watched.filter((item) => item.id !== title.id));
+      toast.success(`Removed "${title.title}" from Watched`);
+    } catch (error) {
+      console.error("Error removing from watched:", error);
+      toast.error("Failed to remove from Watched");
     }
   };
 
@@ -376,6 +548,18 @@ const Index = () => {
 
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
+      {/* Favourites Row */}
+      <PosterRow 
+        title="Favourites" 
+        items={favourites}
+        onPosterClick={(title) => {
+          setSelectedTitle(title);
+          setSelectedTitleSource("favourite");
+        }}
+        onAddClick={() => openSearchModal("watchlist")}
+        onDeleteClick={handleDeleteFromFavourites}
+      />
+
       {/* Watch List Row */}
       <PosterRow 
         title="Watch List" 
@@ -405,15 +589,30 @@ const Index = () => {
         onDeleteClick={handleDeleteFromCurrentlyWatching}
       />
 
+      {/* Watched Row */}
+      <PosterRow 
+        title="Watched" 
+        items={watched}
+        onPosterClick={(title) => {
+          setSelectedTitle(title);
+          setSelectedTitleSource("watched");
+        }}
+        onAddClick={() => openSearchModal("watchlist")}
+        onDeleteClick={handleDeleteFromWatched}
+      />
+
       {/* Title Detail Modal */}
       {selectedTitle && (
         <TitleDetailModal
           title={selectedTitle}
           open={!!selectedTitle}
           onOpenChange={(open) => !open && setSelectedTitle(null)}
+          onAddToFavourites={handleAddToFavourites}
           onAddToWatchList={handleAddToWatchList}
           onAddToCurrentlyWatching={handleAddToCurrentlyWatching}
+          onAddToWatched={handleAddToWatched}
           onMoveToCurrentlyWatching={handleMoveToCurrentlyWatching}
+          onMoveToWatched={handleMoveToWatched}
           sourceList={selectedTitleSource}
         />
       )}
