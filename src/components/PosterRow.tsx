@@ -61,8 +61,13 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                   value={filter.id}
                   className="group/item relative rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer pl-8"
                 >
-                  {onRemoveCustomFilter && (
+                  {onRemoveCustomFilter && filterValue !== filter.id && (
                     <button
+                      type="button"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
                       onMouseDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -72,7 +77,7 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                         e.stopPropagation();
                         onRemoveCustomFilter(filter.id);
                       }}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 flex h-4 w-4 items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity hover:text-destructive"
+                      className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity hover:text-destructive z-10"
                       aria-label={`Remove ${filter.name} filter`}
                     >
                       <X className="h-3.5 w-3.5" />
