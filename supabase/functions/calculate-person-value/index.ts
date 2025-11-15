@@ -103,28 +103,47 @@ Known For: ${personData.known_for_department || 'Unknown'}`;
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    const systemPrompt = `You are an expert in entertainment industry valuation. Your task is to accurately price actors and directors for a trading card game based on their real-world fame, career achievements, and cultural impact.
+    const systemPrompt = `You are an expert in entertainment industry valuation. Price actors/directors based on their real-world fame, career achievements, and cultural impact.
 
-CRITICAL: Maximum price is 500 coins. This represents the absolute top tier of entertainment industry legends.
+CRITICAL: Maximum price is 500 coins. Use TMDB data holistically - don't rely on popularity alone.
 
-Pricing Guidelines (10-500 coin range):
-- Unknown/Minor (10-30 coins): Popularity <5, <20 credits, no recognizable roles or major works
-- Emerging Talent (30-80 coins): Popularity 5-15, 20-50 credits, TV series or supporting film roles
-- Working Professional (80-150 coins): Popularity 15-25, 50-100 credits, regular film work, character actors
-- Established Star (150-250 coins): Popularity 25-40, 100+ credits, leading roles in successful films
-- A-List Celebrity (250-400 coins): Popularity 40-60, multiple hit films, award nominations, household name (e.g., Matt Damon, Leonardo DiCaprio)
-- Legendary Icon (400-500 coins): Popularity 60+, multiple major awards, career-defining roles, cultural impact (e.g., Tom Hanks, Meryl Streep, Spielberg, Scorsese)
+Pricing Tiers with Examples (10-500 coin range):
 
-Consider:
-- TMDB popularity score (most important metric)
-- Total number of credits and career span
-- Average rating of their works
-- Box office success and critical acclaim
-- Awards (Oscars, Golden Globes, etc.)
-- Cultural impact and household name recognition
-- For directors: add 20% bonus (max 500 coins total)
+- Unknown/Minor (10-30 coins): 
+  * Popularity <5, <20 credits, no recognizable roles
+  * Example: Background actors, one-time appearances
 
-Return ONLY a JSON object with: {"price": number, "reasoning": "brief explanation"}`;
+- Emerging Talent (30-80 coins):
+  * Popularity 5-15, 20-50 credits, TV/supporting roles
+  * Example: Rising stars, recurring TV actors
+
+- Working Professional (80-150 coins):
+  * Popularity 15-25, 50-100 credits, regular film work
+  * Example: Character actors, TV series regulars
+
+- Established Star (150-250 coins):
+  * Popularity 25-40, 100+ credits, leading roles
+  * Example: Chris Evans, Scarlett Johansson, Ryan Gosling
+
+- A-List Celebrity (250-400 coins):
+  * Popularity 40-60 OR major awards/cultural impact
+  * Example: Matt Damon, Leonardo DiCaprio, Sandra Bullock
+  * Note: Popularity may be lower but achievements/awards compensate
+
+- Legendary Icon (400-500 coins):
+  * Popularity 60+ OR multiple Oscars/cultural phenomenon
+  * Example: Tom Hanks, Meryl Streep, Spielberg, Scorsese
+  * Note: Directors often have lower popularity but massive impact
+
+Consider beyond TMDB popularity:
+- Awards (Oscars, Golden Globes, BAFTAs)
+- Box office success (billion-dollar franchises)
+- Career span and consistency
+- Critical acclaim (top works ratings)
+- Cultural impact (household name recognition)
+- For directors: add 20% bonus (max 500 total)
+
+Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
 
     const userPrompt = `Determine the accurate price for: ${personName} (${personType})${tmdbContext}`;
 
@@ -168,22 +187,87 @@ Return ONLY a JSON object with: {"price": number, "reasoning": "brief explanatio
       }),
     });
 
-    // Improved fallback calculation based on TMDB data
-    const calculateFallbackPrice = (popularity: number, credits: number, personType: string): number => {
-      let price = 10; // base price
+    // Multi-factor validation function
+    const validatePrice = (
+      aiPrice: number, 
+      popularity: number, 
+      credits: number, 
+      careerSpan: string,
+      personType: string
+    ): number => {
+      let validatedPrice = aiPrice;
       
-      // Popularity contribution (0-250 coins)
-      price += Math.min(Math.round(popularity * 5), 250);
+      // Extract career length
+      const spanMatch = careerSpan.match(/(\d{4})-(\d{4})/);
+      const careerYears = spanMatch ? parseInt(spanMatch[1]) - parseInt(spanMatch[0]) : 0;
       
-      // Credits contribution (0-150 coins)
+      // Only apply caps if multiple red flags exist
+      const lowPopularity = popularity < 5;
+      const fewCredits = credits < 20;
+      const shortCareer = careerYears < 5;
+      
+      // Count red flags
+      const redFlags = [lowPopularity, fewCredits, shortCareer].filter(Boolean).length;
+      
+      // Only cap if 2+ red flags (truly unknown/minor)
+      if (redFlags >= 2) {
+        validatedPrice = Math.min(validatedPrice, 50);
+      }
+      // Light validation for 1 red flag
+      else if (redFlags === 1) {
+        if (lowPopularity && credits > 50) {
+          // Long career despite low popularity = character actor/cult figure
+          validatedPrice = Math.min(validatedPrice, 300);
+        } else if (fewCredits && popularity > 10) {
+          // New but popular = emerging star
+          validatedPrice = Math.min(validatedPrice, 200);
+        }
+      }
+      
+      // Director bonus consideration (they often have lower popularity)
+      if (personType === 'director' && popularity < 15 && credits > 30) {
+        // Trust AI more for directors with substantial work
+        validatedPrice = Math.min(aiPrice, 500);
+      }
+      
+      // Hard cap at 500
+      return Math.min(validatedPrice, 500);
+    };
+
+    // Improved fallback calculation with more factors
+    const calculateFallbackPrice = (
+      popularity: number, 
+      credits: number, 
+      careerSpan: string,
+      avgRating: string,
+      personType: string
+    ): number => {
+      let price = 10;
+      
+      // Popularity (0-200 coins) - less weight than before
+      price += Math.min(Math.round(popularity * 4), 200);
+      
+      // Credits (0-150 coins)
       price += Math.min(Math.round(credits * 1.5), 150);
+      
+      // Career longevity bonus (0-50 coins)
+      const spanMatch = careerSpan.match(/(\d{4})-(\d{4})/);
+      if (spanMatch) {
+        const years = parseInt(spanMatch[1]) - parseInt(spanMatch[0]);
+        price += Math.min(years * 2, 50);
+      }
+      
+      // Quality bonus (0-50 coins)
+      const rating = parseFloat(avgRating);
+      if (!isNaN(rating) && rating >= 7) {
+        price += Math.round((rating - 6) * 25);
+      }
       
       // Director bonus (+20%)
       if (personType === 'director') {
         price = Math.round(price * 1.2);
       }
       
-      // Cap at 500
       return Math.min(price, 500);
     };
 
@@ -191,8 +275,10 @@ Return ONLY a JSON object with: {"price": number, "reasoning": "brief explanatio
       const errorText = await aiResponse.text();
       console.error('AI gateway error:', aiResponse.status, errorText);
       
-      // Use data-driven fallback
-      const fallbackPrice = calculateFallbackPrice(tmdbPopularity, tmdbCredits, personType);
+      // Use data-driven fallback with career span and rating
+      const careerSpan = tmdbContext.match(/Career Span: (.*)/)?.[1] || 'Unknown';
+      const avgRating = tmdbContext.match(/Average Rating: ([0-9.]+)/)?.[1] || '0';
+      const fallbackPrice = calculateFallbackPrice(tmdbPopularity, tmdbCredits, careerSpan, avgRating, personType);
       console.log(`Fallback pricing for ${personName}: ${fallbackPrice} coins (Popularity: ${tmdbPopularity}, Credits: ${tmdbCredits})`);
       
       return new Response(
@@ -212,31 +298,28 @@ Return ONLY a JSON object with: {"price": number, "reasoning": "brief explanatio
     }
 
     const result = JSON.parse(toolCall.function.arguments);
-    let finalPrice = result.price;
-    
-    // Price validation and capping based on TMDB data
-    const originalPrice = finalPrice;
-    if (tmdbPopularity < 5) {
-      finalPrice = Math.min(finalPrice, 50);
-    } else if (tmdbPopularity < 15) {
-      finalPrice = Math.min(finalPrice, 100);
-    } else if (tmdbPopularity < 30) {
-      finalPrice = Math.min(finalPrice, 200);
-    } else if (tmdbPopularity < 50) {
-      finalPrice = Math.min(finalPrice, 350);
-    }
-    
-    // Hard cap at 500 coins
-    finalPrice = Math.min(finalPrice, 500);
-    
-    // Ensure minimum price
-    finalPrice = Math.max(finalPrice, 10);
-    
-    const validationNote = originalPrice !== finalPrice 
-      ? ` (adjusted from ${originalPrice} based on popularity ${tmdbPopularity.toFixed(1)})` 
+    const aiPrice = result.price;
+
+    // Smart multi-factor validation
+    const careerSpan = tmdbContext.match(/Career Span: (.*)/)?.[1] || 'Unknown';
+    const validatedPrice = validatePrice(
+      aiPrice,
+      tmdbPopularity,
+      tmdbCredits,
+      careerSpan,
+      personType
+    );
+
+    const wasAdjusted = aiPrice !== validatedPrice;
+    const adjustmentNote = wasAdjusted 
+      ? ` (adjusted from ${aiPrice} using multi-factor validation)` 
       : '';
+
+    console.log(`AI Pricing for ${personName}: ${validatedPrice} coins${adjustmentNote}`);
+    console.log(`Reasoning: ${result.reasoning}`);
+    console.log(`Factors: Popularity ${tmdbPopularity.toFixed(1)}, Credits ${tmdbCredits}, Career ${careerSpan}, Type ${personType}`);
     
-    console.log(`AI Pricing for ${personName}: ${finalPrice} coins${validationNote} - ${result.reasoning}`);
+    const finalPrice = validatedPrice;
 
     return new Response(
       JSON.stringify({ 
