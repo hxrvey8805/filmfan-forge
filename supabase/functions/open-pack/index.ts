@@ -87,51 +87,78 @@ serve(async (req) => {
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     
     let selectedPerson = null;
-    let attempts = 0;
-    const maxAttempts = 10;
     
-    // Try multiple times to find a matching person
-    while (!selectedPerson && attempts < maxAttempts) {
-      attempts++;
-      const randomPage = Math.floor(Math.random() * 50) + 1; // Increased range to 50 pages
+    if (pack.pack_type === 'director') {
+      // For directors, use a different strategy: get directors from popular movies
+      const randomPage = Math.floor(Math.random() * 10) + 1;
+      console.log(`Fetching popular movies page ${randomPage} to find directors`);
       
-      console.log(`Attempt ${attempts}: Fetching page ${randomPage} for ${pack.pack_type} pack`);
+      const moviesUrl = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
+      const moviesResponse = await fetch(moviesUrl);
+      const moviesData = await moviesResponse.json();
       
-      const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
-      const tmdbResponse = await fetch(tmdbUrl);
-      const tmdbData = await tmdbResponse.json();
-      
-      if (!tmdbData.results || tmdbData.results.length === 0) {
-        console.log(`No results from TMDB on page ${randomPage}`);
-        continue;
+      if (moviesData.results && moviesData.results.length > 0) {
+        // Pick a random movie
+        const randomMovie = moviesData.results[Math.floor(Math.random() * moviesData.results.length)];
+        console.log(`Selected movie: ${randomMovie.title} (ID: ${randomMovie.id})`);
+        
+        // Get the movie credits to find the director
+        const creditsUrl = `https://api.themoviedb.org/3/movie/${randomMovie.id}/credits?api_key=${TMDB_API_KEY}`;
+        const creditsResponse = await fetch(creditsUrl);
+        const creditsData = await creditsResponse.json();
+        
+        if (creditsData.crew) {
+          const directors = creditsData.crew.filter((person: any) => person.job === 'Director');
+          if (directors.length > 0) {
+            const director = directors[Math.floor(Math.random() * directors.length)];
+            console.log(`Found director: ${director.name} (ID: ${director.id})`);
+            
+            // Get full director details
+            const directorUrl = `https://api.themoviedb.org/3/person/${director.id}?api_key=${TMDB_API_KEY}`;
+            const directorResponse = await fetch(directorUrl);
+            selectedPerson = await directorResponse.json();
+            selectedPerson.known_for_department = 'Directing'; // Ensure correct department
+          }
+        }
       }
+    } else {
+      // For actors, use the original method with popular people
+      let attempts = 0;
+      const maxAttempts = 10;
+      
+      while (!selectedPerson && attempts < maxAttempts) {
+        attempts++;
+        const randomPage = Math.floor(Math.random() * 50) + 1;
+        
+        console.log(`Attempt ${attempts}: Fetching page ${randomPage} for actor pack`);
+        
+        const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
+        const tmdbResponse = await fetch(tmdbUrl);
+        const tmdbData = await tmdbResponse.json();
+        
+        if (!tmdbData.results || tmdbData.results.length === 0) {
+          console.log(`No results from TMDB on page ${randomPage}`);
+          continue;
+        }
 
-      console.log(`Found ${tmdbData.results.length} people on page ${randomPage}`);
+        console.log(`Found ${tmdbData.results.length} people on page ${randomPage}`);
 
-      // Filter strictly by pack type
-      let filteredPeople;
-      if (pack.pack_type === 'director') {
-        filteredPeople = tmdbData.results.filter(
-          (p: any) => p.known_for_department === 'Directing'
-        );
-        console.log(`Found ${filteredPeople.length} directors on this page`);
-      } else {
-        filteredPeople = tmdbData.results.filter(
+        const filteredPeople = tmdbData.results.filter(
           (p: any) => p.known_for_department === 'Acting'
         );
         console.log(`Found ${filteredPeople.length} actors on this page`);
-      }
 
-      if (filteredPeople.length > 0) {
-        selectedPerson = filteredPeople[Math.floor(Math.random() * filteredPeople.length)];
-        console.log(`Selected: ${selectedPerson.name} (${selectedPerson.known_for_department})`);
-        break;
+        if (filteredPeople.length > 0) {
+          selectedPerson = filteredPeople[Math.floor(Math.random() * filteredPeople.length)];
+          console.log(`Selected: ${selectedPerson.name} (${selectedPerson.known_for_department})`);
+          break;
+        }
       }
     }
 
     // If still no person found after all attempts, return error with helpful message
     if (!selectedPerson) {
-      console.error(`Failed to find ${pack.pack_type} after ${maxAttempts} attempts`);
+      console.error(`Failed to find ${pack.pack_type} after search attempts`);
       return new Response(JSON.stringify({ 
         error: `Unable to find a ${pack.pack_type} at this time. Please try again.` 
       }), {
