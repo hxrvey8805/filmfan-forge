@@ -103,13 +103,27 @@ const Packs = () => {
     
     for (const card of cards) {
       try {
-        const response = await fetch(
+        // Fetch person details
+        const personResponse = await fetch(
           `https://api.themoviedb.org/3/person/${card.person_id}?api_key=${TMDB_API_KEY}`
         );
-        const data = await response.json();
+        const personData = await personResponse.json();
+        
+        // Fetch credits
+        const creditsResponse = await fetch(
+          `https://api.themoviedb.org/3/person/${card.person_id}/combined_credits?api_key=${TMDB_API_KEY}`
+        );
+        const creditsData = await creditsResponse.json();
+        
+        // Calculate price using same formula as backend
         const basePrice = 10;
-        const popularityBonus = Math.floor(data.popularity || 0);
-        prices[card.id] = basePrice + popularityBonus;
+        const popularityScore = Math.floor((personData.popularity || 0) * 2);
+        const totalCredits = (creditsData.cast?.length || 0) + (creditsData.crew?.length || 0);
+        const filmographyScore = Math.min(Math.floor(totalCredits / 2), 100);
+        const imageBonus = personData.profile_path ? 20 : 0;
+        const roleBonus = card.person_type === 'director' ? 30 : 0;
+        
+        prices[card.id] = basePrice + popularityScore + filmographyScore + imageBonus + roleBonus;
       } catch (error) {
         console.error('Error fetching price for card:', card.id);
         prices[card.id] = 10; // Default price
