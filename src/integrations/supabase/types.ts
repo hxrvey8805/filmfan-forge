@@ -71,6 +71,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_stats: {
+        Row: {
+          cards_sold: number
+          coins: number
+          created_at: string
+          id: string
+          packs_opened: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cards_sold?: number
+          coins?: number
+          created_at?: string
+          id?: string
+          packs_opened?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cards_sold?: number
+          coins?: number
+          created_at?: string
+          id?: string
+          packs_opened?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_titles: {
         Row: {
           created_at: string
