@@ -83,55 +83,62 @@ serve(async (req) => {
       });
     }
 
-    // Fetch random actor or director from TMDB with proper filtering
+    // Fetch random actor or director from TMDB with proper filtering and retries
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
-    const randomPage = Math.floor(Math.random() * 10) + 1;
     
-    const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
-    const tmdbResponse = await fetch(tmdbUrl);
-    const tmdbData = await tmdbResponse.json();
+    let selectedPerson = null;
+    let attempts = 0;
+    const maxAttempts = 5;
     
-    if (!tmdbData.results || tmdbData.results.length === 0) {
-      return new Response(JSON.stringify({ error: 'Failed to fetch person data' }), {
+    // Try multiple times to find a matching person
+    while (!selectedPerson && attempts < maxAttempts) {
+      attempts++;
+      const randomPage = Math.floor(Math.random() * 20) + 1; // Increased range to 20 pages
+      
+      console.log(`Attempt ${attempts}: Fetching page ${randomPage} for ${pack.pack_type} pack`);
+      
+      const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
+      const tmdbResponse = await fetch(tmdbUrl);
+      const tmdbData = await tmdbResponse.json();
+      
+      if (!tmdbData.results || tmdbData.results.length === 0) {
+        console.log(`No results from TMDB on page ${randomPage}`);
+        continue;
+      }
+
+      console.log(`Found ${tmdbData.results.length} people on page ${randomPage}`);
+
+      // Filter strictly by pack type
+      let filteredPeople;
+      if (pack.pack_type === 'director') {
+        filteredPeople = tmdbData.results.filter(
+          (p: any) => p.known_for_department === 'Directing'
+        );
+        console.log(`Found ${filteredPeople.length} directors on this page`);
+      } else {
+        filteredPeople = tmdbData.results.filter(
+          (p: any) => p.known_for_department === 'Acting'
+        );
+        console.log(`Found ${filteredPeople.length} actors on this page`);
+      }
+
+      if (filteredPeople.length > 0) {
+        selectedPerson = filteredPeople[Math.floor(Math.random() * filteredPeople.length)];
+        console.log(`Selected: ${selectedPerson.name} (${selectedPerson.known_for_department})`);
+        break;
+      }
+    }
+
+    // If still no person found after all attempts, return error with helpful message
+    if (!selectedPerson) {
+      console.error(`Failed to find ${pack.pack_type} after ${maxAttempts} attempts`);
+      return new Response(JSON.stringify({ 
+        error: `Unable to find a ${pack.pack_type} at this time. Please try again.` 
+      }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    // Filter strictly by pack type
-    let filteredPeople;
-    if (pack.pack_type === 'director') {
-      filteredPeople = tmdbData.results.filter(
-        (p: any) => p.known_for_department === 'Directing'
-      );
-    } else {
-      filteredPeople = tmdbData.results.filter(
-        (p: any) => p.known_for_department === 'Acting'
-      );
-    }
-
-    // If no matches, try another page
-    if (filteredPeople.length === 0) {
-      const newPage = Math.floor(Math.random() * 10) + 1;
-      const retryUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${newPage}`;
-      const retryResponse = await fetch(retryUrl);
-      const retryData = await retryResponse.json();
-      
-      if (pack.pack_type === 'director') {
-        filteredPeople = retryData.results.filter((p: any) => p.known_for_department === 'Directing');
-      } else {
-        filteredPeople = retryData.results.filter((p: any) => p.known_for_department === 'Acting');
-      }
-      
-      if (filteredPeople.length === 0) {
-        return new Response(JSON.stringify({ error: 'No matching people found' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
-    const selectedPerson = filteredPeople[Math.floor(Math.random() * filteredPeople.length)];
 
     // Deduct coins if needed and update stats
     if (userStats) {
