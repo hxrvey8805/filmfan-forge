@@ -51,39 +51,34 @@ serve(async (req) => {
       });
     }
 
-    // Fetch person details from TMDB to calculate price based on fame and filmography
-    const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
-    
-    // Get person details
-    const personUrl = `https://api.themoviedb.org/3/person/${card.person_id}?api_key=${TMDB_API_KEY}`;
-    const personResponse = await fetch(personUrl);
-    const personData = await personResponse.json();
-    
-    // Get combined credits to count filmography
-    const creditsUrl = `https://api.themoviedb.org/3/person/${card.person_id}/combined_credits?api_key=${TMDB_API_KEY}`;
-    const creditsResponse = await fetch(creditsUrl);
-    const creditsData = await creditsResponse.json();
+    // Use AI to determine accurate price based on person's fame and career
+    const { data: priceData, error: priceError } = await supabase.functions.invoke(
+      'calculate-person-value',
+      {
+        body: {
+          personName: card.person_name,
+          personType: card.person_type,
+          personId: card.person_id
+        }
+      }
+    );
 
-    // Calculate price based on multiple factors
-    const basePrice = 10;
-    
-    // Factor 1: Popularity (0-100+, weighted heavily)
-    const popularityScore = Math.floor((personData.popularity || 0) * 2);
-    
-    // Factor 2: Number of credits (filmography depth)
-    const totalCredits = (creditsData.cast?.length || 0) + (creditsData.crew?.length || 0);
-    const filmographyScore = Math.min(Math.floor(totalCredits / 2), 100); // Cap at 100
-    
-    // Factor 3: Has profile image (famous people have images)
-    const imageBonus = personData.profile_path ? 20 : 0;
-    
-    // Factor 4: Bonus for directors (typically more valuable)
-    const roleBonus = card.person_type === 'director' ? 30 : 0;
-    
-    // Calculate final price
-    const price = basePrice + popularityScore + filmographyScore + imageBonus + roleBonus;
-    
-    console.log(`Pricing ${card.person_name}: base=${basePrice}, popularity=${popularityScore}, filmography=${filmographyScore}, image=${imageBonus}, role=${roleBonus}, total=${price}`);
+    if (priceError) {
+      console.error('Error calculating price:', priceError);
+      // Fallback to basic calculation
+      const fallbackPrice = card.person_type === 'director' ? 50 : 30;
+      return new Response(JSON.stringify({ 
+        error: 'Failed to calculate accurate price',
+        price: fallbackPrice,
+        message: `Sold ${card.person_name} for ${fallbackPrice} coins (fallback pricing)`
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const price = priceData.price || 30;
+    console.log(`Final price for ${card.person_name}: ${price} coins - ${priceData.reasoning}`);
 
     // Get or create user stats
     let { data: stats, error: statsError } = await supabase
