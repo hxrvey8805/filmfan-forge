@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Film, Camera, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,6 +76,8 @@ const PackOpeningModal = ({ isOpen, onClose, packId }: PackOpeningModalProps) =>
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md bg-background border-border overflow-hidden">
+        <DialogTitle className="sr-only">Pack Opening</DialogTitle>
+        <DialogDescription className="sr-only">Cinematic reveal of your new card</DialogDescription>
         {stage === "opening" && (
           <div className="py-12 text-center space-y-6 relative">
             <div className="absolute inset-0 bg-gradient-radial from-primary/20 to-transparent animate-pulse" />

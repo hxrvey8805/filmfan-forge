@@ -132,40 +132,89 @@ serve(async (req) => {
 
       console.log(`Attempt ${attempts}/${maxAttempts}: ${tier.name} on page ${targetPage} for ${pack.pack_type} (strict: ${useStrictRarity})`);
 
-      const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${targetPage}`;
-      const tmdbResponse = await fetch(tmdbUrl);
-      const tmdbData = await tmdbResponse.json();
+      if (pack.pack_type === 'director') {
+        // Use popular movies to pick a director from credits (robust vs person/popular)
+        const moviesUrl = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&page=${targetPage}`;
+        const moviesRes = await fetch(moviesUrl);
+        const moviesData = await moviesRes.json();
 
-      if (!tmdbData.results || tmdbData.results.length === 0) {
-        console.log(`No results from TMDB on page ${targetPage}`);
-        continue;
-      }
-
-      const dept = pack.pack_type === 'director' ? 'Directing' : 'Acting';
-      
-      // Filter with progressive relaxation
-      const candidates = tmdbData.results.filter((p: any) => {
-        const inDept = p.known_for_department === dept;
-        const notOwned = !ownedPersonIds.has(p.id);
-        
-        if (!inDept || !notOwned) return false;
-        
-        // Strict rarity check for first 8 attempts
-        if (useStrictRarity) {
-          const inTier = p.popularity >= tier.min && p.popularity < tier.max;
-          return inTier;
+        if (!moviesData.results || moviesData.results.length === 0) {
+          console.log(`No movies from TMDB on page ${targetPage}`);
+          continue;
         }
-        
-        // After 8 attempts: accept ANY non-duplicate from correct department
-        return true;
-      });
 
-      console.log(`After filtering: ${candidates.length} candidates (${dept}, ${useStrictRarity ? tier.name : 'ANY'}, not owned)`);
+        const moviesToTry = moviesData.results.slice(0, 10);
 
-      if (candidates.length > 0) {
-        selectedPerson = candidates[Math.floor(Math.random() * candidates.length)];
-        console.log(`✓ Selected: ${selectedPerson.name} (${selectedPerson.known_for_department}, pop ${selectedPerson.popularity?.toFixed?.(1) || 'N/A'})`);
-        break;
+        for (const m of moviesToTry) {
+          const creditsRes = await fetch(`https://api.themoviedb.org/3/movie/${m.id}/credits?api_key=${TMDB_API_KEY}`);
+          const credits = await creditsRes.json();
+          const crew = credits?.crew ?? [];
+          const directors = crew.filter((c: any) => (c.job === 'Director' || c.job === 'Co-Director' || c.department === 'Directing'));
+
+          for (const d of directors) {
+            const notOwned = !ownedPersonIds.has(d.id);
+            if (!notOwned) continue;
+
+            let popularity = d.popularity as number | undefined;
+            let details: any | null = null;
+
+            if (useStrictRarity && (typeof popularity !== 'number')) {
+              const personRes = await fetch(`https://api.themoviedb.org/3/person/${d.id}?api_key=${TMDB_API_KEY}`);
+              details = await personRes.json();
+              popularity = details?.popularity;
+            }
+
+            if (useStrictRarity) {
+              if (typeof popularity !== 'number' || popularity < tier.min || popularity >= tier.max) continue;
+            }
+
+            selectedPerson = {
+              id: d.id,
+              name: d.name,
+              profile_path: d.profile_path ?? details?.profile_path ?? null,
+              known_for_department: 'Directing',
+              popularity: typeof popularity === 'number' ? popularity : (details?.popularity ?? 0),
+            };
+            console.log(`✓ Selected director from movie ${m.id}: ${selectedPerson.name} (pop ${selectedPerson.popularity ?? 'N/A'})`);
+            break;
+          }
+
+          if (selectedPerson) break;
+        }
+
+        if (!selectedPerson) {
+          console.log(`After filtering: 0 candidates (Directing, ${useStrictRarity ? tier.name : 'ANY'}, not owned)`);
+          continue;
+        }
+      } else {
+        // Actors — use person/popular
+        const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${targetPage}`;
+        const tmdbResponse = await fetch(tmdbUrl);
+        const tmdbData = await tmdbResponse.json();
+
+        if (!tmdbData.results || tmdbData.results.length === 0) {
+          console.log(`No results from TMDB on page ${targetPage}`);
+          continue;
+        }
+
+        const dept = 'Acting';
+        const candidates = tmdbData.results.filter((p: any) => {
+          const inDept = p.known_for_department === dept;
+          const notOwned = !ownedPersonIds.has(p.id);
+          if (!inDept || !notOwned) return false;
+          if (useStrictRarity) {
+            const inTier = p.popularity >= tier.min && p.popularity < tier.max;
+            return inTier;
+          }
+          return true;
+        });
+
+        console.log(`After filtering: ${candidates.length} candidates (${dept}, ${useStrictRarity ? tier.name : 'ANY'}, not owned)`);
+
+        if (candidates.length > 0) {
+          selectedPerson = candidates[Math.floor(Math.random() * candidates.length)];
+          console.log(`✓ Selected: ${selectedPerson.name} (${selectedPerson.known_for_department}, pop ${selectedPerson.popularity?.toFixed?.(1) || 'N/A'})`);
+        }
       }
     }
 
