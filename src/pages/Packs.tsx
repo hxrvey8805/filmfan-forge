@@ -6,6 +6,16 @@ import PackOpeningModal from "@/components/PackOpeningModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+const getPriceTier = (price: number) => {
+  if (price >= 400) return { label: 'Legendary', color: 'text-yellow-400', bgColor: 'bg-yellow-400/20', icon: '👑' };
+  if (price >= 250) return { label: 'A-List', color: 'text-purple-400', bgColor: 'bg-purple-400/20', icon: '⭐' };
+  if (price >= 150) return { label: 'Established', color: 'text-blue-400', bgColor: 'bg-blue-400/20', icon: '🌟' };
+  if (price >= 80) return { label: 'Professional', color: 'text-green-400', bgColor: 'bg-green-400/20', icon: '✨' };
+  if (price >= 30) return { label: 'Emerging', color: 'text-gray-400', bgColor: 'bg-gray-400/20', icon: '💫' };
+  return { label: 'Minor', color: 'text-gray-500', bgColor: 'bg-gray-500/20', icon: '⚪' };
+};
+
+
 const Packs = () => {
   const [isOpening, setIsOpening] = useState(false);
   const [selectedPackId, setSelectedPackId] = useState<string>("");
@@ -293,18 +303,36 @@ const Packs = () => {
                 
                 {/* Sell overlay */}
                 {hoveredCard === item.id && (
-                  <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-3 animate-fade-in">
-                    <div className="flex items-center gap-2 bg-primary/20 px-4 py-2 rounded-lg">
-                      <Coins className="h-5 w-5 text-primary" />
-                      <span className="font-bold text-lg text-white">
-                        {cardPrices[item.id] || '...'} coins
-                      </span>
-                    </div>
+                  <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center gap-3 animate-fade-in">
+                    {cardPrices[item.id] ? (() => {
+                      const tier = getPriceTier(cardPrices[item.id]);
+                      return (
+                        <>
+                          <div className={`flex items-center gap-2 ${tier.bgColor} px-3 py-1.5 rounded-full border border-current`}>
+                            <span className="text-lg">{tier.icon}</span>
+                            <span className={`font-semibold text-sm ${tier.color}`}>
+                              {tier.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-primary/20 px-4 py-2 rounded-lg border border-primary/30">
+                            <Coins className="h-6 w-6 text-primary" />
+                            <span className="font-bold text-2xl text-white">
+                              {cardPrices[item.id]}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })() : (
+                      <div className="flex items-center gap-2 bg-muted/20 px-4 py-2 rounded-lg">
+                        <Coins className="h-5 w-5 text-muted-foreground" />
+                        <span className="font-bold text-lg text-muted-foreground">...</span>
+                      </div>
+                    )}
                     <Button
                       onClick={() => handleSellCard(item.id, item.person_name)}
-                      disabled={sellingCard === item.id}
+                      disabled={sellingCard === item.id || !cardPrices[item.id]}
                       size="sm"
-                      className="bg-primary hover:bg-primary/90 gap-2"
+                      className="bg-primary hover:bg-primary/90 gap-2 min-w-[120px]"
                     >
                       <DollarSign className="h-4 w-4" />
                       {sellingCard === item.id ? 'Selling...' : 'Sell Card'}
