@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Film, Package, Menu, LogOut } from "lucide-react";
+import { Film, Package, Menu, LogOut, Store as StoreIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,9 @@ import { toast } from "sonner";
 import Index from "./Index";
 import Packs from "./Packs";
 import DailyPuzzle from "./DailyPuzzle";
+import Store from "./Store";
 
-type Tab = "home" | "packs" | "puzzle";
+type Tab = "home" | "packs" | "puzzle" | "store";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ const Dashboard = () => {
     { id: "home" as Tab, label: "Home", icon: Film },
     { id: "puzzle" as Tab, label: "Game", icon: Menu },
     { id: "packs" as Tab, label: "Packs", icon: Package },
+    { id: "store" as Tab, label: "Store", icon: StoreIcon },
   ];
 
   const renderContent = () => {
@@ -42,6 +44,8 @@ const Dashboard = () => {
         return <DailyPuzzle />;
       case "packs":
         return <Packs />;
+      case "store":
+        return <Store />;
     }
   };
 

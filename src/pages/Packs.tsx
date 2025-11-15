@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Package, Sparkles, Crown, User } from "lucide-react";
+import { Package, Sparkles, Crown, User, Coins, DollarSign } from "lucide-react";
 import PackOpeningModal from "@/components/PackOpeningModal";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const Packs = () => {
   const [isOpening, setIsOpening] = useState(false);
@@ -11,13 +12,45 @@ const Packs = () => {
   const [availablePacks, setAvailablePacks] = useState<any[]>([]);
   const [collection, setCollection] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [coins, setCoins] = useState(0);
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [sellingCard, setSellingCard] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    await Promise.all([loadAvailablePacks(), loadCollection()]);
+    await Promise.all([loadAvailablePacks(), loadCollection(), loadUserStats()]);
+  };
+
+  const loadUserStats = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      let { data: stats } = await supabase
+        .from('user_stats')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!stats) {
+        const { data: newStats } = await supabase
+          .from('user_stats')
+          .insert({ user_id: user.id, coins: 100 })
+          .select()
+          .single();
+        stats = newStats;
+      }
+
+      if (stats) {
+        setCoins(stats.coins);
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
   };
 
   const loadAvailablePacks = async () => {
@@ -68,13 +101,49 @@ const Packs = () => {
     loadData();
   };
 
+  const handleSellCard = async (cardId: string, personName: string) => {
+    setSellingCard(cardId);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('sell-card', {
+        body: { cardId }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Card sold!",
+        description: data.message,
+      });
+
+      setCoins(data.newBalance);
+      loadCollection();
+    } catch (error: any) {
+      console.error('Error selling card:', error);
+      toast({
+        title: "Sale failed",
+        description: error.message || "Failed to sell card",
+        variant: "destructive"
+      });
+    } finally {
+      setSellingCard(null);
+      setHoveredCard(null);
+    }
+  };
+
   const actorPacks = availablePacks.filter(p => p.pack_type === 'actor');
   const directorPacks = availablePacks.filter(p => p.pack_type === 'director');
 
   return (
     <div className="space-y-6 animate-fade-in pb-4 max-w-4xl mx-auto">
       <div className="space-y-2">
-        <h2 className="text-2xl font-bold tracking-tight">Your Packs</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold tracking-tight">Your Packs</h2>
+          <div className="flex items-center gap-2 bg-card px-4 py-2 rounded-lg border border-border">
+            <Coins className="h-5 w-5 text-primary" />
+            <span className="font-bold text-lg">{coins}</span>
+          </div>
+        </div>
         <p className="text-sm text-muted-foreground">
           Win the Actor Connect game in under 2 minutes to earn packs!
         </p>
@@ -152,9 +221,17 @@ const Packs = () => {
       {collection.length > 0 && (
         <div className="space-y-4 pt-6 border-t border-border">
           <h2 className="text-2xl font-bold tracking-tight">Your Collection</h2>
+          <p className="text-sm text-muted-foreground">
+            Hover over cards to sell them for coins based on their popularity
+          </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {collection.map((item) => (
-              <Card key={item.id} className="overflow-hidden bg-card border-border hover:shadow-lg transition-shadow">
+              <Card 
+                key={item.id} 
+                className="relative overflow-hidden bg-card border-border hover:shadow-lg transition-all group"
+                onMouseEnter={() => setHoveredCard(item.id)}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 {item.profile_path ? (
                   <img
                     src={`https://image.tmdb.org/t/p/w500${item.profile_path}`}
@@ -166,6 +243,22 @@ const Packs = () => {
                     <User className="h-12 w-12 text-muted-foreground" />
                   </div>
                 )}
+                
+                {/* Sell overlay */}
+                {hoveredCard === item.id && (
+                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center animate-fade-in">
+                    <Button
+                      onClick={() => handleSellCard(item.id, item.person_name)}
+                      disabled={sellingCard === item.id}
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 gap-2"
+                    >
+                      <DollarSign className="h-4 w-4" />
+                      {sellingCard === item.id ? 'Selling...' : 'Sell'}
+                    </Button>
+                  </div>
+                )}
+                
                 <div className="p-3 space-y-1">
                   <p className="font-semibold text-sm line-clamp-1">{item.person_name}</p>
                   <p className="text-xs text-muted-foreground capitalize">{item.person_type}</p>
