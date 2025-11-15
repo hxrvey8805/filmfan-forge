@@ -15,6 +15,7 @@ const Packs = () => {
   const [coins, setCoins] = useState(0);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [sellingCard, setSellingCard] = useState<string | null>(null);
+  const [cardPrices, setCardPrices] = useState<Record<string, number>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -86,9 +87,36 @@ const Packs = () => {
 
       if (error) throw error;
       setCollection(data || []);
+      
+      // Fetch prices for all cards
+      if (data && data.length > 0) {
+        fetchCardPrices(data);
+      }
     } catch (error) {
       console.error('Error loading collection:', error);
     }
+  };
+
+  const fetchCardPrices = async (cards: any[]) => {
+    const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
+    const prices: Record<string, number> = {};
+    
+    for (const card of cards) {
+      try {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/person/${card.person_id}?api_key=${TMDB_API_KEY}`
+        );
+        const data = await response.json();
+        const basePrice = 10;
+        const popularityBonus = Math.floor(data.popularity || 0);
+        prices[card.id] = basePrice + popularityBonus;
+      } catch (error) {
+        console.error('Error fetching price for card:', card.id);
+        prices[card.id] = 10; // Default price
+      }
+    }
+    
+    setCardPrices(prices);
   };
 
   const handleOpenPack = (packId: string) => {
@@ -104,6 +132,9 @@ const Packs = () => {
   const handleSellCard = async (cardId: string, personName: string) => {
     setSellingCard(cardId);
     
+    // Optimistically remove the card from UI
+    setCollection(prev => prev.filter(item => item.id !== cardId));
+    
     try {
       const { data, error } = await supabase.functions.invoke('sell-card', {
         body: { cardId }
@@ -117,7 +148,13 @@ const Packs = () => {
       });
 
       setCoins(data.newBalance);
-      loadCollection();
+      
+      // Remove the price from the prices map
+      setCardPrices(prev => {
+        const newPrices = { ...prev };
+        delete newPrices[cardId];
+        return newPrices;
+      });
     } catch (error: any) {
       console.error('Error selling card:', error);
       toast({
@@ -125,6 +162,8 @@ const Packs = () => {
         description: error.message || "Failed to sell card",
         variant: "destructive"
       });
+      // Reload collection on error to restore the card
+      loadCollection();
     } finally {
       setSellingCard(null);
       setHoveredCard(null);
@@ -246,7 +285,13 @@ const Packs = () => {
                 
                 {/* Sell overlay */}
                 {hoveredCard === item.id && (
-                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center animate-fade-in">
+                  <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-3 animate-fade-in">
+                    <div className="flex items-center gap-2 bg-primary/20 px-4 py-2 rounded-lg">
+                      <Coins className="h-5 w-5 text-primary" />
+                      <span className="font-bold text-lg text-white">
+                        {cardPrices[item.id] || '...'} coins
+                      </span>
+                    </div>
                     <Button
                       onClick={() => handleSellCard(item.id, item.person_name)}
                       disabled={sellingCard === item.id}
@@ -254,7 +299,7 @@ const Packs = () => {
                       className="bg-primary hover:bg-primary/90 gap-2"
                     >
                       <DollarSign className="h-4 w-4" />
-                      {sellingCard === item.id ? 'Selling...' : 'Sell'}
+                      {sellingCard === item.id ? 'Selling...' : 'Sell Card'}
                     </Button>
                   </div>
                 )}
