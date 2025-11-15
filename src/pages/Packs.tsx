@@ -98,38 +98,32 @@ const Packs = () => {
   };
 
   const fetchCardPrices = async (cards: any[]) => {
-    const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY;
     const prices: Record<string, number> = {};
     
-    for (const card of cards) {
+    // Fetch prices in parallel for better performance
+    const pricePromises = cards.map(async (card) => {
       try {
-        // Fetch person details
-        const personResponse = await fetch(
-          `https://api.themoviedb.org/3/person/${card.person_id}?api_key=${TMDB_API_KEY}`
-        );
-        const personData = await personResponse.json();
-        
-        // Fetch credits
-        const creditsResponse = await fetch(
-          `https://api.themoviedb.org/3/person/${card.person_id}/combined_credits?api_key=${TMDB_API_KEY}`
-        );
-        const creditsData = await creditsResponse.json();
-        
-        // Calculate price using same formula as backend
-        const basePrice = 10;
-        const popularityScore = Math.floor((personData.popularity || 0) * 2);
-        const totalCredits = (creditsData.cast?.length || 0) + (creditsData.crew?.length || 0);
-        const filmographyScore = Math.min(Math.floor(totalCredits / 2), 100);
-        const imageBonus = personData.profile_path ? 20 : 0;
-        const roleBonus = card.person_type === 'director' ? 30 : 0;
-        
-        prices[card.id] = basePrice + popularityScore + filmographyScore + imageBonus + roleBonus;
+        const { data, error } = await supabase.functions.invoke('calculate-person-value', {
+          body: {
+            personName: card.person_name,
+            personType: card.person_type,
+            personId: card.person_id
+          }
+        });
+
+        if (error) {
+          console.error('Error fetching price for card:', card.id, error);
+          prices[card.id] = card.person_type === 'director' ? 50 : 30; // Fallback
+        } else {
+          prices[card.id] = data.price || 30;
+        }
       } catch (error) {
-        console.error('Error fetching price for card:', card.id);
-        prices[card.id] = 10; // Default price
+        console.error('Error fetching price for card:', card.id, error);
+        prices[card.id] = 30; // Default fallback
       }
-    }
-    
+    });
+
+    await Promise.all(pricePromises);
     setCardPrices(prices);
   };
 
