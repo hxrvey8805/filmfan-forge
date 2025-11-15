@@ -112,11 +112,14 @@ serve(async (req) => {
     
     let selectedPerson: any = null;
     let attempts = 0;
-    const maxAttempts = 12; // more attempts to avoid duplicates
+    const maxAttempts = 20; // increased attempts with fallback logic
 
     while (!selectedPerson && attempts < maxAttempts) {
       attempts++;
       const tier = selectTier();
+      
+      // After 8 attempts, relax rarity constraints (accept any non-duplicate)
+      const useStrictRarity = attempts <= 8;
 
       let targetPage: number;
       if (tier.min >= 40) {
@@ -127,27 +130,41 @@ serve(async (req) => {
         targetPage = Math.floor(Math.random() * 30) + 20; // pages 20-50
       }
 
-      console.log(`Attempt ${attempts}: ${tier.name} on page ${targetPage} for ${pack.pack_type}`);
+      console.log(`Attempt ${attempts}/${maxAttempts}: ${tier.name} on page ${targetPage} for ${pack.pack_type} (strict: ${useStrictRarity})`);
 
       const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${targetPage}`;
       const tmdbResponse = await fetch(tmdbUrl);
       const tmdbData = await tmdbResponse.json();
 
-      if (!tmdbData.results || tmdbData.results.length === 0) continue;
+      if (!tmdbData.results || tmdbData.results.length === 0) {
+        console.log(`No results from TMDB on page ${targetPage}`);
+        continue;
+      }
 
       const dept = pack.pack_type === 'director' ? 'Directing' : 'Acting';
+      
+      // Filter with progressive relaxation
       const candidates = tmdbData.results.filter((p: any) => {
         const inDept = p.known_for_department === dept;
-        const inTier = p.popularity >= tier.min && p.popularity < tier.max;
         const notOwned = !ownedPersonIds.has(p.id);
-        return inDept && inTier && notOwned;
+        
+        if (!inDept || !notOwned) return false;
+        
+        // Strict rarity check for first 8 attempts
+        if (useStrictRarity) {
+          const inTier = p.popularity >= tier.min && p.popularity < tier.max;
+          return inTier;
+        }
+        
+        // After 8 attempts: accept ANY non-duplicate from correct department
+        return true;
       });
 
-      console.log(`After filtering: ${candidates.length} candidates (${dept}, ${tier.name}, not owned)`);
+      console.log(`After filtering: ${candidates.length} candidates (${dept}, ${useStrictRarity ? tier.name : 'ANY'}, not owned)`);
 
       if (candidates.length > 0) {
         selectedPerson = candidates[Math.floor(Math.random() * candidates.length)];
-        console.log(`Selected: ${selectedPerson.name} (${selectedPerson.known_for_department}, pop ${selectedPerson.popularity?.toFixed?.(1)})`);
+        console.log(`✓ Selected: ${selectedPerson.name} (${selectedPerson.known_for_department}, pop ${selectedPerson.popularity?.toFixed?.(1) || 'N/A'})`);
         break;
       }
     }
