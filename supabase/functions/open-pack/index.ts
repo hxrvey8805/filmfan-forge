@@ -53,14 +53,41 @@ serve(async (req) => {
       });
     }
 
-    // Fetch random actor or director from TMDB
+    // Get or create user stats
+    let { data: userStats } = await supabase
+      .from('user_stats')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!userStats) {
+      const { data: newStats, error: createError } = await supabase
+        .from('user_stats')
+        .insert({ user_id: user.id, coins: 100 })
+        .select()
+        .single();
+      
+      if (createError) {
+        console.error('Error creating stats:', createError);
+      } else {
+        userStats = newStats;
+      }
+    }
+
+    // Check if user has enough coins (free for first 3 packs, 50 coins after)
+    const packCost = (userStats?.packs_opened || 0) >= 3 ? 50 : 0;
+    if (packCost > 0 && (!userStats || userStats.coins < packCost)) {
+      return new Response(JSON.stringify({ error: 'Not enough coins' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Fetch random actor or director from TMDB with proper filtering
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     const randomPage = Math.floor(Math.random() * 10) + 1;
     
-    const tmdbUrl = pack.pack_type === 'actor' 
-      ? `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`
-      : `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
-
+    const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
     const tmdbResponse = await fetch(tmdbUrl);
     const tmdbData = await tmdbResponse.json();
     
@@ -71,18 +98,54 @@ serve(async (req) => {
       });
     }
 
-    // Get a random person from the results
-    const randomIndex = Math.floor(Math.random() * tmdbData.results.length);
-    const person = tmdbData.results[randomIndex];
-
-    // Filter by known_for_department if director pack
-    let selectedPerson = person;
+    // Filter strictly by pack type
+    let filteredPeople;
     if (pack.pack_type === 'director') {
-      const directors = tmdbData.results.filter(
+      filteredPeople = tmdbData.results.filter(
         (p: any) => p.known_for_department === 'Directing'
       );
-      if (directors.length > 0) {
-        selectedPerson = directors[Math.floor(Math.random() * directors.length)];
+    } else {
+      filteredPeople = tmdbData.results.filter(
+        (p: any) => p.known_for_department === 'Acting'
+      );
+    }
+
+    // If no matches, try another page
+    if (filteredPeople.length === 0) {
+      const newPage = Math.floor(Math.random() * 10) + 1;
+      const retryUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${newPage}`;
+      const retryResponse = await fetch(retryUrl);
+      const retryData = await retryResponse.json();
+      
+      if (pack.pack_type === 'director') {
+        filteredPeople = retryData.results.filter((p: any) => p.known_for_department === 'Directing');
+      } else {
+        filteredPeople = retryData.results.filter((p: any) => p.known_for_department === 'Acting');
+      }
+      
+      if (filteredPeople.length === 0) {
+        return new Response(JSON.stringify({ error: 'No matching people found' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    const selectedPerson = filteredPeople[Math.floor(Math.random() * filteredPeople.length)];
+
+    // Deduct coins if needed and update stats
+    if (userStats) {
+      const newCoins = packCost > 0 ? userStats.coins - packCost : userStats.coins;
+      const { error: statsUpdateError } = await supabase
+        .from('user_stats')
+        .update({ 
+          coins: newCoins,
+          packs_opened: userStats.packs_opened + 1
+        })
+        .eq('user_id', user.id);
+
+      if (statsUpdateError) {
+        console.error('Error updating stats:', statsUpdateError);
       }
     }
 
