@@ -74,57 +74,88 @@ serve(async (req) => {
       }
     }
 
-    // Fetch random actor or director from TMDB with proper filtering and retries
+    // Fetch user's existing collection to prevent duplicates
+    const { data: existingCollection, error: collectionFetchError } = await supabase
+      .from('user_collection')
+      .select('person_id')
+      .eq('user_id', user.id);
+
+    if (collectionFetchError) {
+      console.error('Error fetching existing collection:', collectionFetchError);
+    }
+
+    const ownedPersonIds = new Set((existingCollection || []).map((c: any) => c.person_id));
+    console.log(`Owned cards: ${ownedPersonIds.size}`);
+
+    // Rarity tiers with weighted odds
+    const RARITY_TIERS = [
+      { name: 'Legendary', min: 60, max: 1000, weight: 5 },
+      { name: 'A-List', min: 40, max: 60, weight: 10 },
+      { name: 'Established', min: 25, max: 40, weight: 20 },
+      { name: 'Professional', min: 15, max: 25, weight: 30 },
+      { name: 'Emerging', min: 5, max: 15, weight: 25 },
+      { name: 'Minor', min: 0, max: 5, weight: 10 },
+    ];
+
+    const selectTier = () => {
+      const roll = Math.random() * 100;
+      let acc = 0;
+      for (const t of RARITY_TIERS) {
+        acc += t.weight;
+        if (roll <= acc) return t;
+      }
+      return RARITY_TIERS[RARITY_TIERS.length - 1];
+    };
+
+    // Fetch from TMDB with rarity-based page selection and duplicate filtering
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     
-    let selectedPerson = null;
+    let selectedPerson: any = null;
     let attempts = 0;
-    const maxAttempts = 5;
-    
-    // Try multiple times to find a matching person
+    const maxAttempts = 12; // more attempts to avoid duplicates
+
     while (!selectedPerson && attempts < maxAttempts) {
       attempts++;
-      const randomPage = Math.floor(Math.random() * 20) + 1; // Increased range to 20 pages
-      
-      console.log(`Attempt ${attempts}: Fetching page ${randomPage} for ${pack.pack_type} pack`);
-      
-      const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
+      const tier = selectTier();
+
+      let targetPage: number;
+      if (tier.min >= 40) {
+        targetPage = Math.floor(Math.random() * 5) + 1; // pages 1-5
+      } else if (tier.min >= 15) {
+        targetPage = Math.floor(Math.random() * 15) + 5; // pages 5-20
+      } else {
+        targetPage = Math.floor(Math.random() * 30) + 20; // pages 20-50
+      }
+
+      console.log(`Attempt ${attempts}: ${tier.name} on page ${targetPage} for ${pack.pack_type}`);
+
+      const tmdbUrl = `https://api.themoviedb.org/3/person/popular?api_key=${TMDB_API_KEY}&page=${targetPage}`;
       const tmdbResponse = await fetch(tmdbUrl);
       const tmdbData = await tmdbResponse.json();
-      
-      if (!tmdbData.results || tmdbData.results.length === 0) {
-        console.log(`No results from TMDB on page ${randomPage}`);
-        continue;
-      }
 
-      console.log(`Found ${tmdbData.results.length} people on page ${randomPage}`);
+      if (!tmdbData.results || tmdbData.results.length === 0) continue;
 
-      // Filter strictly by pack type
-      let filteredPeople;
-      if (pack.pack_type === 'director') {
-        filteredPeople = tmdbData.results.filter(
-          (p: any) => p.known_for_department === 'Directing'
-        );
-        console.log(`Found ${filteredPeople.length} directors on this page`);
-      } else {
-        filteredPeople = tmdbData.results.filter(
-          (p: any) => p.known_for_department === 'Acting'
-        );
-        console.log(`Found ${filteredPeople.length} actors on this page`);
-      }
+      const dept = pack.pack_type === 'director' ? 'Directing' : 'Acting';
+      const candidates = tmdbData.results.filter((p: any) => {
+        const inDept = p.known_for_department === dept;
+        const inTier = p.popularity >= tier.min && p.popularity < tier.max;
+        const notOwned = !ownedPersonIds.has(p.id);
+        return inDept && inTier && notOwned;
+      });
 
-      if (filteredPeople.length > 0) {
-        selectedPerson = filteredPeople[Math.floor(Math.random() * filteredPeople.length)];
-        console.log(`Selected: ${selectedPerson.name} (${selectedPerson.known_for_department})`);
+      console.log(`After filtering: ${candidates.length} candidates (${dept}, ${tier.name}, not owned)`);
+
+      if (candidates.length > 0) {
+        selectedPerson = candidates[Math.floor(Math.random() * candidates.length)];
+        console.log(`Selected: ${selectedPerson.name} (${selectedPerson.known_for_department}, pop ${selectedPerson.popularity?.toFixed?.(1)})`);
         break;
       }
     }
 
-    // If still no person found after all attempts, return error with helpful message
     if (!selectedPerson) {
-      console.error(`Failed to find ${pack.pack_type} after ${maxAttempts} attempts`);
+      console.error(`Failed to find non-duplicate ${pack.pack_type} after ${maxAttempts} attempts`);
       return new Response(JSON.stringify({ 
-        error: `Unable to find a ${pack.pack_type} at this time. Please try again.` 
+        error: `No new ${pack.pack_type} available right now. Try again soon!` 
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -145,7 +176,33 @@ serve(async (req) => {
       }
     }
 
-    // Mark pack as opened
+    // Add to user's collection first, then mark pack as opened
+    const { error: collectionError } = await supabase
+      .from('user_collection')
+      .insert({
+        user_id: user.id,
+        person_id: selectedPerson.id,
+        person_name: selectedPerson.name,
+        person_type: pack.pack_type,
+        profile_path: selectedPerson.profile_path || '',
+      });
+
+    if (collectionError) {
+      console.error('Error adding to collection:', collectionError);
+      // If duplicate slipped through for any reason, return a soft error prompting retry without consuming pack
+      if (collectionError.code === '23505') {
+        return new Response(JSON.stringify({ error: 'Duplicate card prevented. Please try opening again.' }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ error: 'Failed to add to collection' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Mark pack as opened only after successful insert
     const { error: updateError } = await supabase
       .from('user_packs')
       .update({ is_opened: true, opened_at: new Date().toISOString() })
@@ -159,28 +216,6 @@ serve(async (req) => {
       });
     }
 
-    // Add to user's collection
-    const { error: collectionError } = await supabase
-      .from('user_collection')
-      .insert({
-        user_id: user.id,
-        person_id: selectedPerson.id,
-        person_name: selectedPerson.name,
-        person_type: pack.pack_type,
-        profile_path: selectedPerson.profile_path || '',
-      });
-
-    if (collectionError) {
-      console.error('Error adding to collection:', collectionError);
-      // Don't fail if it's a duplicate (unique constraint violation)
-      if (collectionError.code !== '23505') {
-        return new Response(JSON.stringify({ error: 'Failed to add to collection' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
     return new Response(
       JSON.stringify({
         person: {
@@ -188,6 +223,7 @@ serve(async (req) => {
           name: selectedPerson.name,
           profile_path: selectedPerson.profile_path,
           known_for_department: selectedPerson.known_for_department,
+          popularity: selectedPerson.popularity,
         }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
