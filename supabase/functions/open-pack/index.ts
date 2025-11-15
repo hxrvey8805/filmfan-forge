@@ -74,15 +74,6 @@ serve(async (req) => {
       }
     }
 
-    // Check if user has enough coins (free for first 3 packs, 50 coins after)
-    const packCost = (userStats?.packs_opened || 0) >= 3 ? 50 : 0;
-    if (packCost > 0 && (!userStats || userStats.coins < packCost)) {
-      return new Response(JSON.stringify({ error: 'Not enough coins' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     // Fetch random actor or director from TMDB with proper filtering and retries
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     
@@ -140,13 +131,11 @@ serve(async (req) => {
       });
     }
 
-    // Deduct coins if needed and update stats
+    // Update stats (no coin deduction - packs are already owned)
     if (userStats) {
-      const newCoins = packCost > 0 ? userStats.coins - packCost : userStats.coins;
       const { error: statsUpdateError } = await supabase
         .from('user_stats')
         .update({ 
-          coins: newCoins,
           packs_opened: userStats.packs_opened + 1
         })
         .eq('user_id', user.id);
