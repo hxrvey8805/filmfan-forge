@@ -88,12 +88,12 @@ serve(async (req) => {
     
     let selectedPerson = null;
     let attempts = 0;
-    const maxAttempts = 5;
+    const maxAttempts = 10;
     
     // Try multiple times to find a matching person
     while (!selectedPerson && attempts < maxAttempts) {
       attempts++;
-      const randomPage = Math.floor(Math.random() * 20) + 1; // Increased range to 20 pages
+      const randomPage = Math.floor(Math.random() * 50) + 1; // Increased range to 50 pages
       
       console.log(`Attempt ${attempts}: Fetching page ${randomPage} for ${pack.pack_type} pack`);
       
