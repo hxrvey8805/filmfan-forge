@@ -35,7 +35,7 @@ const Auth = () => {
         });
         if (error) throw error;
         toast.success("Logged in successfully!");
-        navigate("/");
+        navigate("/dashboard");
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -46,7 +46,7 @@ const Auth = () => {
         });
         if (error) throw error;
         toast.success("Account created successfully!");
-        navigate("/");
+        navigate("/dashboard");
       }
     } catch (error: any) {
       toast.error(error.message);
