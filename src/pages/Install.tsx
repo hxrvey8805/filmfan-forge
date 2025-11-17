@@ -49,7 +49,7 @@ const Install = () => {
       <Card className="max-w-md w-full p-6 space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Install CineMate
+            Install CineGeek
           </h1>
           <p className="text-muted-foreground">
             Install our app for the best experience
@@ -63,13 +63,13 @@ const Install = () => {
             </div>
             <p className="text-lg font-medium">App Already Installed!</p>
             <p className="text-sm text-muted-foreground">
-              You can find CineMate on your home screen
+              You can find CineGeek on your home screen
             </p>
           </div>
         ) : isIOS ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              To install CineMate on your iPhone or iPad:
+              To install CineGeek on your iPhone or iPad:
             </p>
             <ol className="text-sm space-y-3 list-decimal list-inside">
               <li>Tap the Share button in Safari</li>
@@ -94,7 +94,7 @@ const Install = () => {
         ) : (
           <div className="text-center space-y-4">
             <p className="text-sm text-muted-foreground">
-              To install CineMate:
+              To install CineGeek:
             </p>
             <ol className="text-sm space-y-3 list-decimal list-inside text-left">
               <li>Open the browser menu (⋮)</li>

@@ -17,8 +17,8 @@ export default defineConfig(({ mode }) => ({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "robots.txt", "icon-192.png", "icon-512.png"],
       manifest: {
-        name: "CineMate - Your Cinematic Companion",
-        short_name: "CineMate",
+        name: "CineGeek - Your Cinematic Companion",
+        short_name: "CineGeek",
         description: "Spoiler-free AI companion and actor card collecting game",
         theme_color: "#ffc107",
         background_color: "#141619",
