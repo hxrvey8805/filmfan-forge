@@ -18,7 +18,7 @@ const Dashboard = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
-        navigate("/auth");
+        navigate("/");
       }
     });
   }, [navigate]);
@@ -26,7 +26,7 @@ const Dashboard = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     toast.success("Logged out successfully");
-    navigate("/auth");
+    navigate("/");
   };
 
   const tabs = [
