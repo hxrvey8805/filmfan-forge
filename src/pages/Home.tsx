@@ -55,10 +55,10 @@ const Home = () => {
         }}
       />
       
-      {/* Soft Atmospheric Glows - Spread Wide */}
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,_var(--tw-gradient-stops))] from-primary/15 via-primary/5 to-transparent pointer-events-none" />
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_60%_40%_at_80%_80%,_var(--tw-gradient-stops))] from-accent/12 via-accent/3 to-transparent pointer-events-none" />
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_70%_50%_at_20%_60%,_var(--tw-gradient-stops))] from-primary/8 via-transparent to-transparent pointer-events-none" />
+      {/* Soft Atmospheric Glows */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-primary/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="fixed bottom-0 right-0 w-[600px] h-[600px] bg-accent/15 rounded-full blur-[100px] pointer-events-none" />
+      <div className="fixed top-1/2 left-0 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[90px] pointer-events-none" />
       
       {/* Hero Section - Full Screen */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-4">
