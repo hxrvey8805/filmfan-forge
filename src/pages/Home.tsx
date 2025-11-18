@@ -4,20 +4,19 @@ import { Film, Users, Package, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+
 const Home = () => {
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({
-      data: {
-        session
-      }
-    }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setIsAuthenticated(true);
       }
     });
   }, []);
+
   const handleGetStarted = () => {
     if (isAuthenticated) {
       navigate("/dashboard");
@@ -25,7 +24,9 @@ const Home = () => {
       navigate("/auth");
     }
   };
-  return <div className="min-h-screen bg-background text-foreground overflow-hidden">
+
+  return (
+    <div className="min-h-screen bg-background text-foreground overflow-hidden">
       {/* Ambient Background */}
       <div className="fixed inset-0 bg-gradient-to-br from-background via-background to-primary/5 pointer-events-none" />
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
@@ -43,7 +44,7 @@ const Home = () => {
             Welcome to CineGeek
           </h1>
           <p className="text-2xl md:text-3xl font-semibold text-foreground/90 animate-fade-in [animation-delay:200ms]">
-            Your Geeky Cinematic Companion                                                                                                           
+            Your Ultimate Cinematic Companion
           </p>
           <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed animate-fade-in [animation-delay:400ms]">
             Discover movies and TV shows with a spoiler-free AI companion, collect actor and director cards, and build your ultimate entertainment collection.
@@ -111,6 +112,8 @@ const Home = () => {
           </div>
         </div>
       </div>
-    </div>;
+    </div>
+  );
 };
+
 export default Home;
