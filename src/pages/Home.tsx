@@ -127,8 +127,7 @@ const Home = () => {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/30 to-accent/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                 <Package className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl font-bold">                     Collect Actor & Director Cards
-            </h3>
+              <h3 className="text-2xl font-bold">Collect Actor & Director Cards</h3>
               <p className="text-muted-foreground leading-relaxed">
                 Sell cards for coins, buy new packs, and manage your collection. Build value and discover rare cards as you explore cinema history.
               </p>
