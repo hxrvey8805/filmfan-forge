@@ -56,13 +56,13 @@ const Home = () => {
       />
       
       {/* Soft Atmospheric Glows */}
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/15 via-primary/5 to-transparent pointer-events-none" />
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-accent/10 via-transparent to-transparent pointer-events-none" />
-      <div className="fixed inset-0 bg-gradient-to-b from-transparent via-transparent to-background/60 pointer-events-none" />
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-primary/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="fixed bottom-0 right-0 w-[600px] h-[600px] bg-accent/15 rounded-full blur-[100px] pointer-events-none" />
+      <div className="fixed top-1/2 left-0 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[90px] pointer-events-none" />
       
       {/* Hero Section - Full Screen */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-4">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/80 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/0 to-background pointer-events-none" style={{ backgroundImage: 'linear-gradient(to bottom, transparent 0%, transparent 60%, hsl(var(--background)) 100%)' }} />
         
         <div className="relative z-10 text-center space-y-8 max-w-4xl mx-auto">
           <div className="flex justify-center mb-8 animate-fade-in">
