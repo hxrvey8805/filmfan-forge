@@ -56,9 +56,9 @@ const Home = () => {
       />
       
       {/* Soft Atmospheric Glows */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-primary/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="fixed bottom-0 right-0 w-[600px] h-[600px] bg-accent/15 rounded-full blur-[100px] pointer-events-none" />
-      <div className="fixed top-1/2 left-0 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[90px] pointer-events-none" />
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1400px] h-[1400px] bg-primary/15 rounded-full blur-[200px] pointer-events-none" />
+      <div className="fixed bottom-0 right-0 w-[1200px] h-[1200px] bg-accent/12 rounded-full blur-[180px] pointer-events-none" />
+      <div className="fixed top-1/2 left-0 w-[1000px] h-[1000px] bg-primary/8 rounded-full blur-[160px] pointer-events-none" />
       
       {/* Hero Section - Full Screen */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-4">
