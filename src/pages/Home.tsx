@@ -45,9 +45,8 @@ const Home = () => {
           <p className="text-2xl md:text-3xl font-semibold text-foreground/90 animate-fade-in [animation-delay:200ms]">
             Your Geeky Cinematic Companion
           </p>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed animate-fade-in [animation-delay:400ms]">
-            Discover movies and TV shows with a spoiler-free AI companion, collect actor and director cards, and build your ultimate entertainment collection.
-          </p>
+          <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed animate-fade-in [animation-delay:400ms]">Track the movies and TV shows you love, ask spoiler-safe questions while you watch, and explore your cinematic world in a whole new way
+        </p>
           <div className="pt-4 animate-fade-in [animation-delay:600ms]">
             <Button size="lg" onClick={handleGetStarted} className="text-lg px-10 py-7 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300">
               {isAuthenticated ? "Go to Dashboard" : "Get Started"}
@@ -67,9 +66,8 @@ const Home = () => {
               <Sparkles className="h-8 w-8 text-primary" />
             </div>
             <h3 className="text-2xl font-bold">Spoiler-Free AI Companion</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Get personalized recommendations and insights without worrying about spoilers. Our AI keeps your viewing experience safe and exciting.
-            </p>
+            <p className="text-muted-foreground leading-relaxed">Ask anything about your movie or TV show up to your exact timestamp — no spoilers, ever. Get insights, character explanations, and story clarifications without ruining the experience.
+          </p>
           </Card>
 
           <Card className="p-8 space-y-5 hover:shadow-2xl hover:scale-105 transition-all duration-300 backdrop-blur-sm bg-card/80 border-border/50 group">
@@ -77,9 +75,8 @@ const Home = () => {
               <Users className="h-8 w-8 text-accent" />
             </div>
             <h3 className="text-2xl font-bold">Collect Actor & Director Cards</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Open packs to collect cards of your favorite actors and directors. Build your collection with cards of varying rarities and values.
-            </p>
+            <p className="text-muted-foreground leading-relaxed">Test your movie knowledge by connecting two actors in under 2 minutes. Win rounds to earn free packs and discover surprising film connections as you play.
+          </p>
           </Card>
 
           <Card className="p-8 space-y-5 hover:shadow-2xl hover:scale-105 transition-all duration-300 backdrop-blur-sm bg-card/80 border-border/50 group">
@@ -87,9 +84,8 @@ const Home = () => {
               <Package className="h-8 w-8 text-primary" />
             </div>
             <h3 className="text-2xl font-bold">Trading System</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              Sell cards for coins, buy new packs, and manage your collection. Build value and discover rare cards as you explore cinema history.
-            </p>
+            <p className="text-muted-foreground leading-relaxed">Sell cards for coins, buy new packs, and manage your collection. Build value and discover rare cards as you explore cinema history.
+          </p>
           </Card>
         </div>
       </div>
