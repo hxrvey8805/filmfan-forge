@@ -108,6 +108,9 @@ const Home = () => {
           showFeatures ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20'
         }`}
       >
+        {/* Smooth Blend Overlay */}
+        <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-background via-background/50 to-transparent pointer-events-none" />
+        
         <div className="container mx-auto px-4">
           <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
             What Makes CineGeek Special?
