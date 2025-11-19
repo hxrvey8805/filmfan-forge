@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Search, Glasses, Tv } from "lucide-react";
+import { Search, Tv } from "lucide-react";
+import { GlassesLogo } from "@/components/GlassesLogo";
 import {
   Dialog,
   DialogContent,
@@ -110,7 +111,7 @@ const SearchModal = ({ open, onOpenChange, onSelect, listType }: SearchModalProp
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         {result.type === "movie" ? (
-                          <Glasses className="h-4 w-4 text-primary" />
+                          <GlassesLogo className="h-4 w-4 text-primary" />
                         ) : (
                           <Tv className="h-4 w-4 text-accent" />
                         )}
