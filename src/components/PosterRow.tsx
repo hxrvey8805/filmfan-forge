@@ -1,4 +1,5 @@
-import { Glasses, Tv, Plus, Trash2, MessageSquare } from "lucide-react";
+import { Tv, Plus, Trash2, MessageSquare } from "lucide-react";
+import { GlassesLogo } from "@/components/GlassesLogo";
 import { Progress } from "@/components/ui/progress";
 import {
   Carousel,
@@ -127,7 +128,7 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                     {/* Type Badge */}
                     <div className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm rounded-full p-1.5">
                       {item.type === "movie" ? (
-                        <Glasses className="h-3.5 w-3.5 text-primary" />
+                        <GlassesLogo className="h-3.5 w-3.5 text-primary" />
                       ) : (
                         <Tv className="h-3.5 w-3.5 text-accent" />
                       )}

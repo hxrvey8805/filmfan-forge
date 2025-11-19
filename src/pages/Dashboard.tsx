@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Glasses, Package, Menu, LogOut, Store as StoreIcon } from "lucide-react";
+import { Package, Menu, LogOut, Store as StoreIcon } from "lucide-react";
+import { GlassesLogo } from "@/components/GlassesLogo";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ const Dashboard = () => {
   };
 
   const tabs = [
-    { id: "home" as Tab, label: "Home", icon: Glasses },
+    { id: "home" as Tab, label: "Home", icon: () => <GlassesLogo className="h-5 w-5" /> },
     { id: "puzzle" as Tab, label: "Game", icon: Menu },
     { id: "packs" as Tab, label: "Packs", icon: Package },
     { id: "store" as Tab, label: "Store", icon: StoreIcon },
