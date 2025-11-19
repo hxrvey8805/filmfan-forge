@@ -76,12 +76,13 @@ const DailyPuzzle = () => {
       const timer = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
-            setGameState('ready');
             toast({
               title: "Time's up!",
-              description: "You ran out of time. Try again!",
+              description: "Loading new actors...",
               variant: "destructive",
             });
+            // Randomize actors when time runs out
+            loadRandomActors();
             return 0;
           }
           return prev - 1;
