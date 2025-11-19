@@ -91,27 +91,6 @@ const Home = () => {
         </div>
       </section>
 
-      {/* App Announcement Section */}
-      <section className="relative py-16 px-4">
-        <div className="container mx-auto max-w-4xl">
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500" />
-            <Card className="relative p-8 md:p-12 text-center space-y-6 backdrop-blur-sm bg-card/90 border-2 border-primary/20 hover:border-primary/40 transition-all duration-300">
-              <div className="space-y-3">
-                <h2 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-                  CineGeek App — Coming Soon
-                </h2>
-                <p className="text-lg md:text-xl text-muted-foreground">
-                  Get Early Access on iOS & Android
-                </p>
-              </div>
-              <Button size="lg" className="text-lg px-8 py-6 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300">
-                Join the Waitlist →
-              </Button>
-            </Card>
-          </div>
-        </div>
-      </section>
 
       {/* Features Section - Reveals on Scroll */}
       <section ref={featuresRef} className={`relative py-24 md:py-32 transition-all duration-1000 ${showFeatures ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20'}`}>
@@ -158,21 +137,57 @@ const Home = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="relative py-24 md:py-32 text-center">
+      {/* Split CTA Section - Web App & Mobile App */}
+      <section className="relative py-24 md:py-32">
         <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto space-y-8 relative">
-            <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent rounded-3xl blur-3xl -z-10" />
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              Ready to Start Your Journey?
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-4xl md:text-5xl font-bold text-center mb-12 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+              Experience CineGeek Everywhere
             </h2>
-            <p className="text-xl text-muted-foreground max-w-xl mx-auto leading-relaxed">
-              Join CineGeek today and experience movies and TV shows in a whole new way.
-            </p>
-            <div className="pt-4">
-              <Button size="lg" onClick={handleGetStarted} className="text-lg px-10 py-7 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300">
-                {isAuthenticated ? "Go to Dashboard" : "Sign Up Now"}
-              </Button>
+            
+            <div className="grid md:grid-cols-2 gap-6 relative">
+              {/* Glow Effect Between Cards */}
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 rounded-3xl blur-3xl -z-10" />
+              
+              {/* Web App - Available Now */}
+              <Card className="p-8 md:p-10 space-y-6 backdrop-blur-sm bg-card/90 border-2 border-primary/40 hover:border-primary/60 transition-all duration-300 group hover:scale-105">
+                <div className="space-y-4">
+                  <div className="inline-block px-4 py-1.5 rounded-full bg-primary/20 border border-primary/40">
+                    <span className="text-sm font-semibold text-primary">Available Now</span>
+                  </div>
+                  <h3 className="text-3xl md:text-4xl font-bold">Web App</h3>
+                  <p className="text-lg text-muted-foreground leading-relaxed">
+                    Start tracking your movies and TV shows, ask spoiler-free questions, and play Actor Connect today.
+                  </p>
+                </div>
+                <Button 
+                  size="lg" 
+                  onClick={handleGetStarted}
+                  className="w-full text-lg px-8 py-6 shadow-lg group-hover:shadow-xl transition-all duration-300"
+                >
+                  {isAuthenticated ? "Go to Dashboard" : "Get Started →"}
+                </Button>
+              </Card>
+
+              {/* Mobile App - Coming Soon */}
+              <Card className="p-8 md:p-10 space-y-6 backdrop-blur-sm bg-card/90 border-2 border-accent/40 hover:border-accent/60 transition-all duration-300 group hover:scale-105">
+                <div className="space-y-4">
+                  <div className="inline-block px-4 py-1.5 rounded-full bg-accent/20 border border-accent/40">
+                    <span className="text-sm font-semibold text-accent">Coming Soon</span>
+                  </div>
+                  <h3 className="text-3xl md:text-4xl font-bold">Mobile App</h3>
+                  <p className="text-lg text-muted-foreground leading-relaxed">
+                    Get early access to CineGeek on iOS & Android. Be the first to know when we launch.
+                  </p>
+                </div>
+                <Button 
+                  size="lg" 
+                  variant="outline"
+                  className="w-full text-lg px-8 py-6 shadow-lg group-hover:shadow-xl transition-all duration-300"
+                >
+                  Join the Waitlist →
+                </Button>
+              </Card>
             </div>
           </div>
         </div>
