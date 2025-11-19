@@ -116,7 +116,7 @@ const Home = () => {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent/30 to-accent/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                 <Users className="h-8 w-8 text-accent" />
               </div>
-              <h3 className="text-2xl font-bold">Collect Actor & Director Cards
+              <h3 className="text-2xl font-bold">Actor Connect Game
             </h3>
               <p className="text-muted-foreground leading-relaxed">
                 Test your movie knowledge by connecting two actors in under 2 minutes. Win rounds to earn free packs and discover surprising film connections as you play.
