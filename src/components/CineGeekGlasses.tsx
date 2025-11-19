@@ -34,7 +34,9 @@ export const CineGeekGlasses = React.forwardRef<SVGSVGElement, CineGeekGlassesPr
           cy="15" 
           r="4" 
           fill="hsl(45 100% 51%)"
-          fillOpacity="0.9"
+          fillOpacity="1"
+          stroke={color}
+          strokeWidth={strokeWidth}
         />
         
         {/* Right Lens - Blue (Accent) */}
@@ -43,7 +45,9 @@ export const CineGeekGlasses = React.forwardRef<SVGSVGElement, CineGeekGlassesPr
           cy="15" 
           r="4" 
           fill="hsl(189 100% 56%)"
-          fillOpacity="0.9"
+          fillOpacity="1"
+          stroke={color}
+          strokeWidth={strokeWidth}
         />
         
         {/* Bridge */}
