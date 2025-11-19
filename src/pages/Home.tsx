@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Users, Package, Sparkles, ChevronDown } from "lucide-react";
-import { GlassesLogo } from "@/components/GlassesLogo";
+import { Glasses, Users, Package, Sparkles, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -63,7 +62,7 @@ const Home = () => {
           <div className="flex justify-center mb-8 animate-fade-in">
             <div className="relative">
               <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full animate-pulse" />
-              <GlassesLogo className="h-20 w-20 md:h-24 md:w-24 text-primary relative z-10 drop-shadow-lg" />
+              <Glasses className="h-20 w-20 md:h-24 md:w-24 text-primary relative z-10 drop-shadow-lg" />
             </div>
           </div>
           

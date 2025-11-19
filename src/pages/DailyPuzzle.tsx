@@ -3,8 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { User, Trophy, RotateCcw, Timer, ArrowRight, Loader2, Tv } from 'lucide-react';
-import { GlassesLogo } from '@/components/GlassesLogo';
+import { User, Trophy, RotateCcw, Timer, ArrowRight, Loader2, Glasses, Tv } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -434,7 +433,7 @@ const DailyPuzzle = () => {
                   onClick={() => setFilmographyFilter('movies')}
                   className="flex-1"
                 >
-                  <GlassesLogo className="h-4 w-4 mr-2" />
+                  <Glasses className="h-4 w-4 mr-2" />
                   Movies ({movies.length})
                 </Button>
                 <Button

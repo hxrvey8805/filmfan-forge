@@ -5,8 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tv, Clock, Send, Loader2, Plus, Eye, Heart, X } from "lucide-react";
-import { GlassesLogo } from "@/components/GlassesLogo";
+import { Glasses, Tv, Clock, Send, Loader2, Plus, Eye, Heart, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -221,7 +220,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   {title.type === "movie" ? (
-                    <GlassesLogo className="h-16 w-16 text-muted-foreground/50" />
+                    <Glasses className="h-16 w-16 text-muted-foreground/50" />
                   ) : (
                     <Tv className="h-16 w-16 text-muted-foreground/50" />
                   )}

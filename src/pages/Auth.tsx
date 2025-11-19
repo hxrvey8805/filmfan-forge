@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { GlassesLogo } from "@/components/GlassesLogo";
+import { Glasses } from "lucide-react";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -60,7 +60,7 @@ const Auth = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <GlassesLogo className="h-12 w-12 text-primary" />
+            <Glasses className="h-12 w-12 text-primary" />
           </div>
           <CardTitle className="text-2xl">CineGeek</CardTitle>
           <CardDescription>
