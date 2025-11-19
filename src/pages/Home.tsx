@@ -91,6 +91,28 @@ const Home = () => {
         </div>
       </section>
 
+      {/* App Announcement Section */}
+      <section className="relative py-16 px-4">
+        <div className="container mx-auto max-w-4xl">
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500" />
+            <Card className="relative p-8 md:p-12 text-center space-y-6 backdrop-blur-sm bg-card/90 border-2 border-primary/20 hover:border-primary/40 transition-all duration-300">
+              <div className="space-y-3">
+                <h2 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+                  CineGeek App — Coming Soon
+                </h2>
+                <p className="text-lg md:text-xl text-muted-foreground">
+                  Get Early Access on iOS & Android
+                </p>
+              </div>
+              <Button size="lg" className="text-lg px-8 py-6 shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300">
+                Join the Waitlist →
+              </Button>
+            </Card>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section - Reveals on Scroll */}
       <section ref={featuresRef} className={`relative py-24 md:py-32 transition-all duration-1000 ${showFeatures ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20'}`}>
         {/* Smooth Blend Overlay */}
