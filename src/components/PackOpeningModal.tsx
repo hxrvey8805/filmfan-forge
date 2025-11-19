@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Camera, Star } from "lucide-react";
-import { CineGeekGlasses } from "@/components/CineGeekGlasses";
+import { Sparkles, Glasses, Camera, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -125,7 +124,7 @@ const PackOpeningModal = ({ isOpen, onClose, packId }: PackOpeningModalProps) =>
                 </div>
                 
                 <div className="relative z-10 space-y-4">
-                  <CineGeekGlasses className="h-20 w-20 text-purple-400 mx-auto animate-spin" style={{ animationDuration: '3s' }} />
+                  <Glasses className="h-20 w-20 text-purple-400 mx-auto animate-spin" style={{ animationDuration: '3s' }} />
                   <div className="flex justify-center gap-3">
                     {[0, 1, 2].map((i) => (
                       <div
@@ -168,7 +167,7 @@ const PackOpeningModal = ({ isOpen, onClose, packId }: PackOpeningModalProps) =>
                 <div className="p-4 space-y-2 bg-gradient-to-t from-background/95 to-background/80">
                   <p className="font-bold text-lg">{person.name}</p>
                   <p className="text-sm text-muted-foreground flex items-center gap-2">
-                    {packType === "actor" ? <Camera className="h-4 w-4" /> : <CineGeekGlasses className="h-4 w-4" />}
+                    {packType === "actor" ? <Camera className="h-4 w-4" /> : <Glasses className="h-4 w-4" />}
                     {person.known_for_department}
                   </p>
                 </div>
