@@ -146,27 +146,35 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
         }
       }
 
-      // Delete the pack so it disappears from the list
-      const { error: deleteError } = await supabase
+      // Mark pack as opened so it disappears from available packs list
+      // (Available packs are filtered by is_opened: false)
+      const { error: updateError } = await supabase
         .from('user_packs')
-        .delete()
+        .update({ is_opened: true, opened_at: new Date().toISOString() })
         .eq('id', packId);
 
-      if (deleteError) {
-        console.error('Error deleting pack:', deleteError);
-        // Fallback: mark as opened so it doesn't show
-        await supabase
-          .from('user_packs')
-          .update({ is_opened: true, opened_at: new Date().toISOString() })
-          .eq('id', packId);
+      if (updateError) {
+        console.error('Error marking pack as opened:', updateError);
+        toast({
+          title: "Error",
+          description: "Failed to remove pack. Please try again.",
+          variant: "destructive"
+        });
+        return;
       }
 
       toast({
         title: "Card rejected",
         description: "The pack has been removed.",
       });
+      
+      // Close modal first
       onClose();
-      onPackOpened?.(); // Refresh packs list
+      
+      // Refresh packs list after a short delay to ensure DB update
+      setTimeout(() => {
+        onPackOpened?.();
+      }, 100);
     } catch (error) {
       console.error('Error rejecting card:', error);
       toast({
