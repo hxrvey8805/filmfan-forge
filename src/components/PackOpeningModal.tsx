@@ -120,13 +120,43 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
     }
   };
 
-  const handleRejectCard = () => {
-    // Just close the modal - pack stays unopened
+  const handleRejectCard = async () => {
+    // If card was already added to collection (shouldn't happen, but safety check)
+    // Remove it if user rejects
+    if (person) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Check if this card is in the collection
+        const { data: existingCard } = await supabase
+          .from('user_collection')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('person_id', person.id)
+          .eq('person_type', packType)
+          .single();
+
+        // If card exists, remove it
+        if (existingCard) {
+          await supabase
+            .from('user_collection')
+            .delete()
+            .eq('id', existingCard.id);
+
+          // Mark pack as unopened
+          await supabase
+            .from('user_packs')
+            .update({ is_opened: false, opened_at: null })
+            .eq('id', packId);
+        }
+      }
+    }
+
     toast({
       title: "Card rejected",
       description: "The pack remains unopened. You can try again later.",
     });
     onClose();
+    onPackOpened?.(); // Refresh collection
   };
 
   const handleReplaceCard = async (cardIdToReplace: string) => {
@@ -226,16 +256,46 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
       setPackType(type);
 
       // Check if collection is full for this type before revealing
+      // IMPORTANT: Backend may have already added the card, so we check AFTER getting response
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: collection } = await supabase
           .from('user_collection')
-          .select('id')
+          .select('id, person_id')
           .eq('user_id', user.id)
           .eq('person_type', type);
 
         const COLLECTION_LIMIT = 5;
         const currentCount = collection?.length || 0;
+
+        // Check if the newly added card is in the collection
+        const cardAlreadyAdded = collection?.some(c => c.person_id === data.person.id);
+
+        if (currentCount > COLLECTION_LIMIT && cardAlreadyAdded) {
+          // Card was added incorrectly - remove it and mark pack as unopened
+          const cardToRemove = collection?.find(c => c.person_id === data.person.id);
+          if (cardToRemove) {
+            await supabase
+              .from('user_collection')
+              .delete()
+              .eq('id', cardToRemove.id);
+            
+            // Mark pack as unopened
+            await supabase
+              .from('user_packs')
+              .update({ is_opened: false, opened_at: null })
+              .eq('id', packId);
+            
+            toast({
+              title: "Collection Full",
+              description: `Your ${type} collection is full (${COLLECTION_LIMIT}/${COLLECTION_LIMIT}). Please sell a card first.`,
+              variant: "destructive"
+            });
+            onClose();
+            onPackOpened?.();
+            return;
+          }
+        }
 
         if (currentCount >= COLLECTION_LIMIT) {
           setIsCollectionFullAtReveal(true);
@@ -454,7 +514,33 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
               </div>
             ) : (
               <Button
-                onClick={() => {
+                onClick={async () => {
+                  // Final safety check before adding
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (user && person) {
+                    const { data: collection } = await supabase
+                      .from('user_collection')
+                      .select('id')
+                      .eq('user_id', user.id)
+                      .eq('person_type', packType);
+
+                    const COLLECTION_LIMIT = 5;
+                    const currentCount = collection?.length || 0;
+
+                    // If collection is full, show replace/reject options instead
+                    if (currentCount >= COLLECTION_LIMIT) {
+                      toast({
+                        title: "Collection Full",
+                        description: `Your ${packType} collection is full. Please replace a card or reject this one.`,
+                        variant: "destructive"
+                      });
+                      setIsCollectionFullAtReveal(true);
+                      await loadCollectionForType(packType);
+                      return;
+                    }
+                  }
+
+                  // Collection has space - proceed
                   onClose();
                   onPackOpened?.();
                 }}
