@@ -21,12 +21,16 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
   const [currentCollection, setCurrentCollection] = useState<any[]>([]);
   const [cardPrices, setCardPrices] = useState<Record<string, number>>({});
   const [sellingCard, setSellingCard] = useState<string | null>(null);
+  const [isCollectionFullAtReveal, setIsCollectionFullAtReveal] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen && packId) {
       setStage("opening");
       setPerson(null);
+      setIsCollectionFullAtReveal(false);
+      setCurrentCollection([]);
+      setCardPrices({});
       checkCollectionBeforeOpening();
     }
   }, [isOpen, packId]);
@@ -185,6 +189,78 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
     onClose();
   };
 
+  const handleReplaceCard = async (cardIdToReplace: string) => {
+    setSellingCard(cardIdToReplace);
+    
+    try {
+      // First, sell the old card
+      const { data: sellData, error: sellError } = await supabase.functions.invoke('sell-card', {
+        body: { cardId: cardIdToReplace }
+      });
+
+      if (sellError) throw sellError;
+
+      toast({
+        title: "Card sold!",
+        description: sellData.message,
+      });
+
+      // Remove old card from collection
+      setCurrentCollection(prev => prev.filter(c => c.id !== cardIdToReplace));
+      setCardPrices(prev => {
+        const newPrices = { ...prev };
+        delete newPrices[cardIdToReplace];
+        return newPrices;
+      });
+
+      // Now add the new card to collection by calling open-pack again
+      // But we need to actually add it - let's do it manually
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error: insertError } = await supabase
+        .from('user_collection')
+        .insert({
+          user_id: user.id,
+          person_id: person.id,
+          person_name: person.name,
+          person_type: packType,
+          profile_path: person.profile_path || '',
+        });
+
+      if (insertError) {
+        throw new Error('Failed to add new card to collection');
+      }
+
+      // Mark pack as opened
+      const { error: updateError } = await supabase
+        .from('user_packs')
+        .update({ is_opened: true, opened_at: new Date().toISOString() })
+        .eq('id', packId);
+
+      if (updateError) {
+        console.error('Error marking pack as opened:', updateError);
+      }
+
+      toast({
+        title: "Card replaced!",
+        description: `${person.name} has been added to your collection.`,
+      });
+
+      onClose();
+      onPackOpened?.();
+    } catch (error: any) {
+      console.error('Error replacing card:', error);
+      toast({
+        title: "Replace failed",
+        description: error.message || "Failed to replace card",
+        variant: "destructive"
+      });
+    } finally {
+      setSellingCard(null);
+    }
+  };
+
   const openPack = async () => {
     try {
       setStage("opening");
@@ -208,6 +284,26 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
       // Determine pack type from person data
       const type = data.person.known_for_department === "Directing" ? "director" : "actor";
       setPackType(type);
+
+      // Check if collection is full for this type before revealing
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: collection } = await supabase
+          .from('user_collection')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('person_type', type);
+
+        const COLLECTION_LIMIT = 5;
+        const currentCount = collection?.length || 0;
+
+        if (currentCount >= COLLECTION_LIMIT) {
+          setIsCollectionFullAtReveal(true);
+          await loadCollectionForType(type);
+        } else {
+          setIsCollectionFullAtReveal(false);
+        }
+      }
 
       // 3-stage cinematic reveal
       setTimeout(() => setStage("building"), 1500);
@@ -346,15 +442,81 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
               </div>
             </div>
 
-            <Button
-              onClick={() => {
-                onClose();
-                onPackOpened?.();
-              }}
-              className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity"
-            >
-              Add to Collection
-            </Button>
+            {isCollectionFullAtReveal ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-sm text-center text-yellow-600 dark:text-yellow-400">
+                    Your {packType} collection is full (5/5). Choose an option below:
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide text-center">
+                    Replace a Card
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto">
+                    {currentCollection.map((card: any) => (
+                      <Card key={card.id} className="p-3 space-y-2 border-border hover:border-primary/50 transition-colors cursor-pointer">
+                        <div className="aspect-[2/3] rounded overflow-hidden bg-muted mb-2">
+                          {card.profile_path ? (
+                            <img
+                              src={`https://image.tmdb.org/t/p/w200${card.profile_path}`}
+                              alt={card.person_name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Sparkles className="h-8 w-8 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                        <p className="font-semibold text-xs text-center truncate">{card.person_name}</p>
+                        <p className="text-xs text-muted-foreground text-center">
+                          {cardPrices[card.id] ? `$${cardPrices[card.id]}` : '...'}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleReplaceCard(card.id)}
+                          disabled={sellingCard === card.id}
+                          className="w-full text-xs"
+                        >
+                          {sellingCard === card.id ? (
+                            <>Selling...</>
+                          ) : (
+                            <>
+                              <DollarSign className="h-3 w-3 mr-1" />
+                              Replace
+                            </>
+                          )}
+                        </Button>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2 border-t border-border">
+                  <Button
+                    variant="outline"
+                    onClick={handleRejectCard}
+                    className="flex-1"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Reject Card
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                onClick={() => {
+                  onClose();
+                  onPackOpened?.();
+                }}
+                className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity"
+              >
+                Add to Collection
+              </Button>
+            )}
           </div>
         )}
 
