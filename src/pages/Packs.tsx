@@ -215,7 +215,7 @@ const Packs = () => {
           <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
           <h3 className="text-xl font-bold mb-2">No Packs Available</h3>
           <p className="text-muted-foreground mb-6">
-            Play Actor Connect and finish within 2 minutes to earn a pack!
+            Play Actor Connect and finish within 2 minutes to earn 75 coins!
           </p>
         </Card>
       ) : (

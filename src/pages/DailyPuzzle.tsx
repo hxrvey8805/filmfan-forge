@@ -323,7 +323,7 @@ const DailyPuzzle = () => {
           Actor Connect
         </h1>
         <p className="text-sm text-muted-foreground px-4">
-          Connect in under 2 minutes to earn a free pack!
+          Connect in under 2 minutes to earn 75 coins!
         </p>
       </div>
 
