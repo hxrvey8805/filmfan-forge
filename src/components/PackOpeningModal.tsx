@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Glasses, Camera, Star } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Sparkles, Glasses, Camera, Star, X, DollarSign } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -9,12 +10,17 @@ interface PackOpeningModalProps {
   isOpen: boolean;
   onClose: () => void;
   packId: string;
+  onPackOpened?: () => void;
 }
 
-const PackOpeningModal = ({ isOpen, onClose, packId }: PackOpeningModalProps) => {
-  const [stage, setStage] = useState<"opening" | "building" | "reveal">("opening");
+const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpeningModalProps) => {
+  const [stage, setStage] = useState<"opening" | "building" | "reveal" | "collection-full">("opening");
   const [person, setPerson] = useState<any>(null);
   const [packType, setPackType] = useState<"actor" | "director">("actor");
+  const [collectionFull, setCollectionFull] = useState<any>(null);
+  const [currentCollection, setCurrentCollection] = useState<any[]>([]);
+  const [cardPrices, setCardPrices] = useState<Record<string, number>>({});
+  const [sellingCard, setSellingCard] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -25,13 +31,113 @@ const PackOpeningModal = ({ isOpen, onClose, packId }: PackOpeningModalProps) =>
     }
   }, [isOpen, packId]);
 
+  const loadCollectionForType = async (type: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('user_collection')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('person_type', type)
+        .order('collected_at', { ascending: false });
+
+      if (error) throw error;
+      setCurrentCollection(data || []);
+
+      // Fetch prices for cards
+      if (data && data.length > 0) {
+        const prices: Record<string, number> = {};
+        const pricePromises = data.map(async (card: any) => {
+          try {
+            const { data: priceData } = await supabase.functions.invoke('calculate-person-value', {
+              body: {
+                personName: card.person_name,
+                personType: card.person_type,
+                personId: card.person_id
+              }
+            });
+            prices[card.id] = priceData?.price || 30;
+          } catch (error) {
+            prices[card.id] = 30;
+          }
+        });
+        await Promise.all(pricePromises);
+        setCardPrices(prices);
+      }
+    } catch (error) {
+      console.error('Error loading collection:', error);
+    }
+  };
+
+  const handleSellCard = async (cardId: string) => {
+    setSellingCard(cardId);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('sell-card', {
+        body: { cardId }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Card sold!",
+        description: data.message,
+      });
+
+      // Remove card from collection and retry opening pack
+      setCurrentCollection(prev => prev.filter(c => c.id !== cardId));
+      setCardPrices(prev => {
+        const newPrices = { ...prev };
+        delete newPrices[cardId];
+        return newPrices;
+      });
+
+      // Retry opening the pack
+      setTimeout(() => {
+        openPack();
+      }, 500);
+    } catch (error: any) {
+      console.error('Error selling card:', error);
+      toast({
+        title: "Sale failed",
+        description: error.message || "Failed to sell card",
+        variant: "destructive"
+      });
+    } finally {
+      setSellingCard(null);
+    }
+  };
+
+  const handleRejectCard = () => {
+    // Just close the modal - pack stays unopened
+    toast({
+      title: "Card rejected",
+      description: "The pack remains unopened. You can try again later.",
+    });
+    onClose();
+  };
+
   const openPack = async () => {
     try {
+      setStage("opening");
       const { data, error } = await supabase.functions.invoke('open-pack', {
         body: { packId }
       });
 
-      if (error) throw error;
+      if (error) {
+        // Check if it's a collection full error
+        if (error.message?.includes('COLLECTION_FULL') || error.error === 'COLLECTION_FULL') {
+          const errorData = error.data || error;
+          setCollectionFull(errorData);
+          setPackType(errorData.packType || 'actor');
+          await loadCollectionForType(errorData.packType || 'actor');
+          setStage("collection-full");
+          return;
+        }
+        throw error;
+      }
 
       // Determine pack type from person data
       const type = data.person.known_for_department === "Directing" ? "director" : "actor";
@@ -175,11 +281,86 @@ const PackOpeningModal = ({ isOpen, onClose, packId }: PackOpeningModalProps) =>
             </div>
 
             <Button
-              onClick={onClose}
+              onClick={() => {
+                onClose();
+                onPackOpened?.();
+              }}
               className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity"
             >
               Add to Collection
             </Button>
+          </div>
+        )}
+
+        {stage === "collection-full" && collectionFull && (
+          <div className="py-6 space-y-6 max-h-[80vh] overflow-y-auto">
+            <div className="text-center space-y-2">
+              <h3 className="text-2xl font-bold">Collection Full!</h3>
+              <p className="text-muted-foreground">
+                Your {packType} collection is full ({collectionFull.collectionCount || 5}/{collectionFull.limit || 5}). 
+                Sell a card to make room or reject this one.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                Your {packType === 'actor' ? 'Actors' : 'Directors'} ({currentCollection.length})
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                {currentCollection.map((card: any) => (
+                  <Card key={card.id} className="p-3 space-y-2 border-border hover:border-primary/50 transition-colors">
+                    {card.profile_path ? (
+                      <img
+                        src={`https://image.tmdb.org/t/p/w154${card.profile_path}`}
+                        alt={card.person_name}
+                        className="w-full aspect-[2/3] object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-full aspect-[2/3] bg-muted rounded flex items-center justify-center">
+                        <Sparkles className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                    <p className="font-medium text-sm truncate">{card.person_name}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <DollarSign className="h-3 w-3" />
+                        {cardPrices[card.id] || '...'}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSellCard(card.id)}
+                        disabled={sellingCard === card.id}
+                        className="h-7 text-xs"
+                      >
+                        {sellingCard === card.id ? 'Selling...' : 'Sell'}
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-border">
+              <Button
+                variant="outline"
+                onClick={handleRejectCard}
+                className="flex-1"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Reject Card
+              </Button>
+              <Button
+                onClick={() => {
+                  setStage("opening");
+                  openPack();
+                }}
+                disabled={currentCollection.length >= (collectionFull.limit || 5)}
+                className="flex-1 bg-gradient-to-r from-primary to-accent hover:opacity-90"
+              >
+                Try Again
+              </Button>
+            </div>
           </div>
         )}
       </DialogContent>

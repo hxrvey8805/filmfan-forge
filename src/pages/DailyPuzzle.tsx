@@ -205,28 +205,45 @@ const DailyPuzzle = () => {
       setGameState('won');
       
       if (wonInTime) {
-        // Award a pack
+        // Award 75 coins
         try {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            const packType = Math.random() > 0.5 ? 'actor' : 'director';
-            await supabase.from('user_packs').insert({
-              user_id: user.id,
-              pack_type: packType,
-            });
+            // Get or create user stats
+            let { data: stats } = await supabase
+              .from('user_stats')
+              .select('*')
+              .eq('user_id', user.id)
+              .single();
+
+            if (!stats) {
+              const { data: newStats } = await supabase
+                .from('user_stats')
+                .insert({ user_id: user.id, coins: 100 })
+                .select()
+                .single();
+              stats = newStats;
+            }
+
+            if (stats) {
+              await supabase
+                .from('user_stats')
+                .update({ coins: stats.coins + 75 })
+                .eq('user_id', user.id);
+            }
           }
         } catch (error) {
-          console.error('Error awarding pack:', error);
+          console.error('Error awarding coins:', error);
         }
         
         toast({
           title: "🎉 Perfect! You won!",
-          description: `Connected in ${path.length + 1} steps and ${timeTaken}s. You earned a free pack!`,
+          description: `Connected in ${path.length + 1} steps and ${timeTaken}s. You earned 75 coins!`,
         });
       } else {
         toast({
           title: "🎉 You won!",
-          description: `Connected in ${path.length + 1} steps, but took ${timeTaken}s. Complete in under 2 minutes to earn a pack!`,
+          description: `Connected in ${path.length + 1} steps, but took ${timeTaken}s. Complete in under 2 minutes to earn 75 coins!`,
         });
       }
       

@@ -74,10 +74,10 @@ serve(async (req) => {
       }
     }
 
-    // Fetch user's existing collection to prevent duplicates
+    // Fetch user's existing collection to prevent duplicates and check limits
     const { data: existingCollection, error: collectionFetchError } = await supabase
       .from('user_collection')
-      .select('person_id')
+      .select('person_id, person_type')
       .eq('user_id', user.id);
 
     if (collectionFetchError) {
@@ -85,7 +85,30 @@ serve(async (req) => {
     }
 
     const ownedPersonIds = new Set((existingCollection || []).map((c: any) => c.person_id));
+    const collectionByType = (existingCollection || []).reduce((acc: any, c: any) => {
+      acc[c.person_type] = (acc[c.person_type] || 0) + 1;
+      return acc;
+    }, {});
+
     console.log(`Owned cards: ${ownedPersonIds.size}`);
+    console.log(`Collection by type:`, collectionByType);
+
+    // Check collection limit (5 per type)
+    const COLLECTION_LIMIT = 5;
+    const currentTypeCount = collectionByType[pack.pack_type] || 0;
+    
+    if (currentTypeCount >= COLLECTION_LIMIT) {
+      return new Response(JSON.stringify({ 
+        error: 'COLLECTION_FULL',
+        message: `Your ${pack.pack_type} collection is full (${COLLECTION_LIMIT}/${COLLECTION_LIMIT}). Please sell a card or reject this one.`,
+        collectionCount: currentTypeCount,
+        limit: COLLECTION_LIMIT,
+        packType: pack.pack_type
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Rarity tiers with weighted odds
     const RARITY_TIERS = [

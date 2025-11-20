@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Send, Clock, Loader2, Search } from "lucide-react";
+import { Send, Clock, Loader2, Search, Coins } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
@@ -61,6 +61,8 @@ const Companion = () => {
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [remainingFree, setRemainingFree] = useState<number | null>(null);
+  const [coins, setCoins] = useState(0);
 
   // Search TMDB when query changes
   useEffect(() => {
@@ -184,6 +186,51 @@ const Companion = () => {
     fetchRuntime();
   }, [selectedContent, selectedSeason, selectedEpisode]);
 
+  // Load user stats and AI usage
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Load coins
+        let { data: stats } = await supabase
+          .from('user_stats')
+          .select('coins')
+          .eq('user_id', user.id)
+          .single();
+
+        if (stats) {
+          setCoins(stats.coins);
+        }
+
+        // Load AI usage
+        const today = new Date().toISOString().split('T')[0];
+        let { data: aiUsage } = await supabase
+          .from('user_ai_usage')
+          .select('questions_today, last_reset_date')
+          .eq('user_id', user.id)
+          .single();
+
+        if (aiUsage) {
+          // Reset if new day
+          if (aiUsage.last_reset_date !== today) {
+            setRemainingFree(5);
+          } else {
+            setRemainingFree(Math.max(0, 5 - aiUsage.questions_today));
+          }
+        } else {
+          setRemainingFree(5);
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+        setRemainingFree(5); // Default to 5 if error
+      }
+    };
+
+    loadUserData();
+  }, []);
+
   // Convert minutes to HH:MM:SS format
   const formatTimestamp = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -241,7 +288,29 @@ const Companion = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        // Handle specific error cases
+        if (error.status === 402) {
+          const errorData = error.data || error;
+          toast({
+            title: "Insufficient Coins",
+            description: errorData.error || `You need 150 coins for this question. You have ${errorData.coinsAvailable || 0} coins.`,
+            variant: "destructive"
+          });
+          // Reload coins
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: stats } = await supabase
+              .from('user_stats')
+              .select('coins')
+              .eq('user_id', user.id)
+              .single();
+            if (stats) setCoins(stats.coins);
+          }
+          return;
+        }
+        throw error;
+      }
 
       const newMessage: Message = {
         id: messages.length + 1,
@@ -253,10 +322,24 @@ const Companion = () => {
 
       setMessages([newMessage, ...messages]);
       setQuestion("");
+
+      // Update remaining free questions and coins
+      if (data.remainingFreeQuestions !== undefined) {
+        setRemainingFree(data.remainingFreeQuestions);
+      }
+      if (data.usedCoins) {
+        setCoins(prev => Math.max(0, prev - data.usedCoins));
+      }
+      
+      const description = data.remainingFreeQuestions !== undefined && data.remainingFreeQuestions >= 0
+        ? `${data.remainingFreeQuestions} free questions remaining today.`
+        : data.usedCoins
+        ? `Used ${data.usedCoins} coins.`
+        : "Spoiler-free response generated!";
       
       toast({
         title: "Answer received",
-        description: "Spoiler-free response generated!",
+        description: description,
       });
     } catch (error) {
       console.error('Error asking question:', error);
@@ -273,9 +356,23 @@ const Companion = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h2 className="text-2xl font-bold mb-2">Spoiler-Free Companion</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-2xl font-bold">Spoiler-Free Companion</h2>
+          <div className="flex items-center gap-4">
+            {remainingFree !== null && (
+              <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border">
+                <span className="text-sm text-muted-foreground">Free:</span>
+                <span className="font-bold text-primary">{remainingFree}/5</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border">
+              <Coins className="h-4 w-4 text-primary" />
+              <span className="font-bold">{coins}</span>
+            </div>
+          </div>
+        </div>
         <p className="text-muted-foreground">
-          Ask questions about your show without spoilers
+          Ask questions about your show without spoilers. 5 free questions per day, then 150 coins per question.
         </p>
       </div>
 

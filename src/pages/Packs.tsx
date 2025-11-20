@@ -202,7 +202,7 @@ const Packs = () => {
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Win the Actor Connect game in under 2 minutes to earn packs!
+          Win the Actor Connect game in under 2 minutes to earn 75 coins, then buy packs from the store!
         </p>
       </div>
 
@@ -268,19 +268,38 @@ const Packs = () => {
         </div>
       )}
 
-      <PackOpeningModal
-        isOpen={isOpening}
-        onClose={handlePackOpened}
-        packId={selectedPackId}
-      />
+              <PackOpeningModal
+                isOpen={isOpening}
+                onClose={handlePackOpened}
+                packId={selectedPackId}
+                onPackOpened={handlePackOpened}
+              />
 
       {/* Collection Section */}
       {collection.length > 0 && (
         <div className="space-y-4 pt-6 border-t border-border">
-          <h2 className="text-2xl font-bold tracking-tight">Your Collection</h2>
-          <p className="text-sm text-muted-foreground">
-            Hover over cards to sell them for coins based on their popularity
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight">Your Collection</h2>
+              <p className="text-sm text-muted-foreground">
+                Hover over cards to sell them for coins based on their popularity
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border">
+                <span className="text-sm text-muted-foreground">Actors:</span>
+                <span className="font-bold text-primary">
+                  {collection.filter(c => c.person_type === 'actor').length}/5
+                </span>
+              </div>
+              <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border">
+                <span className="text-sm text-muted-foreground">Directors:</span>
+                <span className="font-bold text-accent">
+                  {collection.filter(c => c.person_type === 'director').length}/5
+                </span>
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {collection.map((item) => (
               <Card 

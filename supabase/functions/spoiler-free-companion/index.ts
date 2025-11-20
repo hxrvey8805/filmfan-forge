@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,8 +8,9 @@ const corsHeaders = {
 };
 
 // Configurable parameters
-const EPISODE_CONTEXT_WINDOW = 5;  // how many previous episodes to pull
-const MAX_SUBTITLE_LINES_PER_EPISODE = 200; // limit lines per episode to manage token count
+const EPISODE_CONTEXT_WINDOW = 5;  // how many previous episodes to pull for TV shows
+const MAX_SUBTITLE_LINES_PER_EPISODE = 200; // limit lines per episode/movie to manage token count
+const AI_MODEL = 'google/gemini-2.5-flash'; // Best model for accuracy and context understanding
 
 // In-memory subtitle cache
 const subtitleCache = new Map<string, string>();
@@ -24,31 +26,155 @@ function timestampToSeconds(timestamp: string): number {
   return 0;
 }
 
-// Fetch TMDb metadata for validation
-async function getTMDbMetadata(tmdbId: number, mediaType: string, seasonNumber?: number, episodeNumber?: number, apiKey?: string) {
+interface CharacterSummary {
+  character: string;
+  actor?: string;
+}
+
+interface TMDbContext {
+  type: 'tv' | 'movie';
+  title?: string;
+  year?: string;
+  overview?: string;
+  seasonOverview?: string;
+  episodeOverview?: string;
+  movieOverview?: string;
+  runtimeMinutes?: number;
+  genres?: string[];
+  tagline?: string;
+  characters?: CharacterSummary[];
+}
+
+function extractYear(dateString?: string | null): string | undefined {
+  if (!dateString) return undefined;
+  return dateString.split('-')[0];
+}
+
+function buildCharacterList(cast: any[] | undefined, limit = 15): CharacterSummary[] {
+  if (!Array.isArray(cast)) return [];
+  const seen = new Set<string>();
+  const summaries: CharacterSummary[] = [];
+
+  for (const member of cast) {
+    const actor = member.name || member.original_name;
+    const character =
+      member.character ||
+      member.roles?.[0]?.character ||
+      (member.roles?.[0]?.credit_id ? member.roles[0].character : undefined);
+
+    if (!character) continue;
+
+    const key = character.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    summaries.push({ character, actor });
+    if (summaries.length >= limit) break;
+  }
+
+  return summaries;
+}
+
+// Enhanced TMDB context fetching with summaries and character info
+async function getTMDbContext(
+  tmdbId: number,
+  mediaType: 'tv' | 'movie',
+  seasonNumber?: number,
+  episodeNumber?: number,
+  apiKey?: string
+): Promise<TMDbContext | null> {
   try {
     if (!apiKey) {
       console.log('No TMDb API key available');
       return null;
     }
 
-    let url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${apiKey}`;
-    
-    if (mediaType === 'tv' && seasonNumber && episodeNumber) {
-      url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${apiKey}`;
+    if (mediaType === 'tv') {
+      const seriesUrl = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${apiKey}&append_to_response=aggregate_credits`;
+      const seasonUrl = seasonNumber !== undefined
+        ? `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${apiKey}`
+        : undefined;
+      const episodeUrl = seasonNumber !== undefined && episodeNumber !== undefined
+        ? `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${apiKey}&append_to_response=credits`
+        : undefined;
+
+      const [seriesResult, seasonResult, episodeResult] = await Promise.allSettled([
+        fetch(seriesUrl).then(res => res.ok ? res.json() : Promise.reject(res.status)),
+        seasonUrl ? fetch(seasonUrl).then(res => res.ok ? res.json() : Promise.reject(res.status)) : Promise.resolve(null),
+        episodeUrl ? fetch(episodeUrl).then(res => res.ok ? res.json() : Promise.reject(res.status)) : Promise.resolve(null),
+      ]);
+
+      const context: TMDbContext = { type: 'tv' };
+
+      if (seriesResult.status === 'fulfilled' && seriesResult.value) {
+        const series = seriesResult.value;
+        context.title = series.name;
+        context.year = extractYear(series.first_air_date);
+        context.overview = series.overview;
+        context.genres = series.genres?.map((g: any) => g.name).filter(Boolean);
+        const aggregateCast = series.aggregate_credits?.cast;
+        if (aggregateCast) {
+          context.characters = buildCharacterList(aggregateCast);
+        }
+      }
+
+      if (seasonResult.status === 'fulfilled' && seasonResult.value) {
+        const season = seasonResult.value;
+        context.seasonOverview = season.overview || season.name;
+      }
+
+      if (episodeResult.status === 'fulfilled' && episodeResult.value) {
+        const episode = episodeResult.value;
+        context.episodeOverview = episode.overview;
+        context.runtimeMinutes = episode.runtime;
+        const episodeCast = episode.credits?.cast;
+        if (episodeCast && episodeCast.length > 0) {
+          // Prefer episode-specific cast if available
+          context.characters = buildCharacterList(episodeCast);
+        }
+      }
+
+      console.log('TMDb TV context fetched:', {
+        title: context.title,
+        hasOverview: Boolean(context.overview),
+        hasSeasonOverview: Boolean(context.seasonOverview),
+        hasEpisodeOverview: Boolean(context.episodeOverview),
+        characterCount: context.characters?.length || 0,
+      });
+
+      return context;
     }
-    
-    const response = await fetch(url);
+
+    // Movie handling
+    const movieUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&append_to_response=credits`;
+    const response = await fetch(movieUrl);
     if (!response.ok) {
-      console.error('TMDb API error:', response.status);
+      console.error('TMDb movie API error:', response.status);
       return null;
     }
-    
-    const data = await response.json();
-    console.log('TMDb metadata fetched:', { title: data.title || data.name, year: data.release_date || data.first_air_date });
-    return data;
+    const movie = await response.json();
+
+    const context: TMDbContext = {
+      type: 'movie',
+      title: movie.title,
+      year: extractYear(movie.release_date),
+      overview: movie.overview,
+      movieOverview: movie.overview,
+      runtimeMinutes: movie.runtime,
+      genres: movie.genres?.map((g: any) => g.name).filter(Boolean),
+      tagline: movie.tagline,
+      characters: buildCharacterList(movie.credits?.cast),
+    };
+
+    console.log('TMDb movie context fetched:', { 
+      title: context.title, 
+      hasOverview: Boolean(context.overview),
+      characterCount: context.characters?.length || 0,
+    });
+
+    return context;
   } catch (error) {
-    console.error('Error fetching TMDb metadata:', error);
+    console.error('Error fetching TMDb context:', error);
     return null;
   }
 }
@@ -91,22 +217,46 @@ function parseSRT(srtText: string): SubtitleEntry[] {
   return entries;
 }
 
-// Fetch and cache subtitles for a single episode
-async function fetchEpisodeSubtitles(
-  tmdbId: number,
-  seasonNumber: number,
-  episodeNumber: number,
-  apiKey: string
-): Promise<SubtitleEntry[] | null> {
-  const cacheKey = `${tmdbId}:${seasonNumber}:${episodeNumber}`;
+interface FetchSubtitlesParams {
+  mediaType: 'tv' | 'movie';
+  tmdbId: number;
+  apiKey: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
+}
+
+// Fetch and cache subtitles for TV episodes or movies
+async function fetchSubtitles({
+  mediaType,
+  tmdbId,
+  apiKey,
+  seasonNumber,
+  episodeNumber,
+}: FetchSubtitlesParams): Promise<SubtitleEntry[] | null> {
+  const cacheKey = mediaType === 'tv'
+    ? `tv:${tmdbId}:${seasonNumber}:${episodeNumber}`
+    : `movie:${tmdbId}`;
   
   if (subtitleCache.has(cacheKey)) {
-    console.log(`Using cached subtitles for S${seasonNumber}E${episodeNumber}`);
+    console.log(`Using cached subtitles for ${cacheKey}`);
     return parseSRT(subtitleCache.get(cacheKey)!);
   }
   
   try {
-    const searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?tmdb_id=${tmdbId}&languages=en&season_number=${seasonNumber}&episode_number=${episodeNumber}&type=episode&order_by=download_count&order_direction=desc`;
+    const params = new URLSearchParams({
+      tmdb_id: String(tmdbId),
+      languages: 'en',
+      type: mediaType === 'tv' ? 'episode' : 'movie',
+      order_by: 'download_count',
+      order_direction: 'desc',
+    });
+
+    if (mediaType === 'tv' && seasonNumber !== undefined && episodeNumber !== undefined) {
+      params.set('season_number', String(seasonNumber));
+      params.set('episode_number', String(episodeNumber));
+    }
+
+    const searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?${params.toString()}`;
     
     const searchResponse = await fetch(searchUrl, {
       method: 'GET',
@@ -117,7 +267,7 @@ async function fetchEpisodeSubtitles(
     });
 
     if (!searchResponse.ok) {
-      console.error(`Subtitle search failed for S${seasonNumber}E${episodeNumber}:`, searchResponse.status);
+      console.error('Subtitle search failed:', searchResponse.status);
       return null;
     }
 
@@ -125,7 +275,7 @@ async function fetchEpisodeSubtitles(
     const results = searchData.data || [];
     
     if (results.length === 0) {
-      console.log(`No subtitles found for S${seasonNumber}E${episodeNumber}`);
+      console.log(`No subtitles found for ${cacheKey}`);
       return null;
     }
 
@@ -146,7 +296,7 @@ async function fetchEpisodeSubtitles(
     });
 
     if (!downloadResponse.ok) {
-      console.error(`Subtitle download failed for S${seasonNumber}E${episodeNumber}`);
+      console.error('Subtitle download failed:', downloadResponse.status);
       return null;
     }
 
@@ -157,17 +307,17 @@ async function fetchEpisodeSubtitles(
     const subtitleText = await subtitleResponse.text();
     
     subtitleCache.set(cacheKey, subtitleText);
-    console.log(`Cached subtitles for S${seasonNumber}E${episodeNumber}`);
+    console.log(`Cached subtitles for ${cacheKey}`);
     
     return parseSRT(subtitleText);
   } catch (error) {
-    console.error(`Error fetching subtitles for S${seasonNumber}E${episodeNumber}:`, error);
+    console.error('Error fetching subtitles:', error);
     return null;
   }
 }
 
 // Format subtitle entries into readable text
-function formatSubtitles(entries: SubtitleEntry[], episodeLabel: string): string {
+function formatSubtitles(entries: SubtitleEntry[], label: string): string {
   if (entries.length === 0) return '';
   
   // Sample subtitles evenly if too many to fit token limits
@@ -176,12 +326,11 @@ function formatSubtitles(entries: SubtitleEntry[], episodeLabel: string): string
     : entries;
   
   const text = sampled.map(e => e.text).join(' ');
-  return `**${episodeLabel}:**\n${text}`;
+  return `**${label}:**\n${text}`;
 }
 
-
-// Fetch multi-episode context with full subtitle text
-async function getMultiEpisodeContext(
+// Fetch multi-episode context for TV shows
+async function getTVContext(
   tmdbId: number,
   currentSeason: number,
   currentEpisode: number,
@@ -200,7 +349,13 @@ async function getMultiEpisodeContext(
   console.log(`Fetching ${episodesToFetch.length} prior episodes for context`);
   
   for (const { season, episode } of episodesToFetch.reverse()) {
-    const entries = await fetchEpisodeSubtitles(tmdbId, season, episode, apiKey);
+    const entries = await fetchSubtitles({
+      mediaType: 'tv',
+      tmdbId,
+      apiKey,
+      seasonNumber: season,
+      episodeNumber: episode,
+    });
     if (entries && entries.length > 0) {
       const formatted = formatSubtitles(entries, `S${season}E${episode}`);
       if (formatted) {
@@ -210,17 +365,108 @@ async function getMultiEpisodeContext(
   }
   
   // Fetch current episode up to timestamp
-  const currentEntries = await fetchEpisodeSubtitles(tmdbId, currentSeason, currentEpisode, apiKey);
+  const currentEntries = await fetchSubtitles({
+    mediaType: 'tv',
+    tmdbId,
+    apiKey,
+    seasonNumber: currentSeason,
+    episodeNumber: currentEpisode,
+  });
   if (currentEntries && currentEntries.length > 0) {
     const filteredEntries = currentEntries.filter(e => e.end <= currentTimestamp);
     console.log(`Current episode: ${filteredEntries.length} subtitle entries up to timestamp`);
     
     if (filteredEntries.length > 0) {
-      currentContext = formatSubtitles(filteredEntries, `S${currentSeason}E${currentEpisode} (up to ${Math.floor(currentTimestamp / 60)}:${String(Math.floor(currentTimestamp % 60)).padStart(2, '0')})`);
+      const hours = Math.floor(currentTimestamp / 3600);
+      const mins = Math.floor((currentTimestamp % 3600) / 60);
+      const secs = Math.floor(currentTimestamp % 60);
+      const timeStr = hours > 0 
+        ? `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+        : `${mins}:${String(secs).padStart(2, '0')}`;
+      currentContext = formatSubtitles(filteredEntries, `S${currentSeason}E${currentEpisode} (up to ${timeStr})`);
     }
   }
   
   return { priorContext, currentContext };
+}
+
+// Fetch movie context
+async function getMovieContext(
+  tmdbId: number,
+  currentTimestamp: number,
+  apiKey: string
+): Promise<string> {
+  const entries = await fetchSubtitles({
+    mediaType: 'movie',
+    tmdbId,
+    apiKey,
+  });
+  
+  if (entries && entries.length > 0) {
+    const filteredEntries = entries.filter(e => e.end <= currentTimestamp);
+    console.log(`Movie: ${filteredEntries.length} subtitle entries up to timestamp`);
+    
+    if (filteredEntries.length > 0) {
+      const hours = Math.floor(currentTimestamp / 3600);
+      const mins = Math.floor((currentTimestamp % 3600) / 60);
+      const secs = Math.floor(currentTimestamp % 60);
+      const timeStr = hours > 0 
+        ? `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+        : `${mins}:${String(secs).padStart(2, '0')}`;
+      return formatSubtitles(filteredEntries, `Movie (up to ${timeStr})`);
+    }
+  }
+  
+  return '';
+}
+
+// Format TMDB context for AI prompt
+function formatTMDbContext(context: TMDbContext | null, mediaType: 'tv' | 'movie', seasonNumber?: number, episodeNumber?: number): string {
+  if (!context) return '';
+
+  const parts: string[] = [];
+  
+  if (context.title) {
+    parts.push(`**Title:** ${context.title}`);
+  }
+  if (context.year) {
+    parts.push(`**Year:** ${context.year}`);
+  }
+  if (context.genres && context.genres.length > 0) {
+    parts.push(`**Genres:** ${context.genres.join(', ')}`);
+  }
+  if (context.tagline) {
+    parts.push(`**Tagline:** ${context.tagline}`);
+  }
+  
+  if (mediaType === 'tv') {
+    if (context.overview) {
+      parts.push(`\n**Series Overview:** ${context.overview}`);
+    }
+    if (context.seasonOverview) {
+      parts.push(`\n**Season ${seasonNumber} Overview:** ${context.seasonOverview}`);
+    }
+    if (context.episodeOverview) {
+      parts.push(`\n**Episode ${episodeNumber} Overview:** ${context.episodeOverview}`);
+    }
+  } else {
+    if (context.movieOverview || context.overview) {
+      parts.push(`\n**Movie Overview:** ${context.movieOverview || context.overview}`);
+    }
+  }
+  
+  if (context.characters && context.characters.length > 0) {
+    parts.push(`\n**Main Characters:**`);
+    context.characters.forEach(char => {
+      if (char.actor) {
+        parts.push(`- ${char.character} (played by ${char.actor})`);
+      } else {
+        parts.push(`- ${char.character}`);
+      }
+    });
+  }
+  
+  return parts.join('\n');
 }
 
 serve(async (req) => {
@@ -229,9 +475,33 @@ serve(async (req) => {
   }
 
   try {
+    // Get authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized. Please log in.' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Get user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized. Please log in.' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question } = await req.json();
     
-    console.log('Spoiler-free request:', { tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question });
+    console.log('Spoiler-free request:', { userId: user.id, tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question });
 
     // Validate required fields
     if (!tmdbId || !mediaType || !timestamp || !question) {
@@ -239,6 +509,90 @@ serve(async (req) => {
         JSON.stringify({ error: 'Missing required fields: tmdbId, mediaType, timestamp, question' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Validate mediaType
+    if (mediaType !== 'tv' && mediaType !== 'movie') {
+      return new Response(
+        JSON.stringify({ error: 'Invalid mediaType. Must be "tv" or "movie"' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate TV show requires season/episode
+    if (mediaType === 'tv' && (!seasonNumber || !episodeNumber)) {
+      return new Response(
+        JSON.stringify({ error: 'TV shows require seasonNumber and episodeNumber' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check usage limits and charge coins if needed
+    const FREE_QUESTIONS_PER_DAY = 5;
+    const COINS_PER_QUESTION = 150;
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get or create AI usage record
+    let { data: aiUsage } = await supabase
+      .from('user_ai_usage')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!aiUsage) {
+      const { data: newUsage } = await supabase
+        .from('user_ai_usage')
+        .insert({ user_id: user.id, questions_today: 0, last_reset_date: today })
+        .select()
+        .single();
+      aiUsage = newUsage;
+    }
+
+    // Reset daily count if it's a new day
+    if (aiUsage.last_reset_date !== today) {
+      await supabase
+        .from('user_ai_usage')
+        .update({ questions_today: 0, last_reset_date: today })
+        .eq('user_id', user.id);
+      aiUsage.questions_today = 0;
+    }
+
+    // Check if user has free questions remaining
+    const hasFreeQuestions = aiUsage.questions_today < FREE_QUESTIONS_PER_DAY;
+    
+    if (!hasFreeQuestions) {
+      // Need to charge coins - check user's balance
+      let { data: userStats } = await supabase
+        .from('user_stats')
+        .select('coins')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userStats) {
+        const { data: newStats } = await supabase
+          .from('user_stats')
+          .insert({ user_id: user.id, coins: 100 })
+          .select()
+          .single();
+        userStats = newStats;
+      }
+
+      if (!userStats || userStats.coins < COINS_PER_QUESTION) {
+        return new Response(
+          JSON.stringify({ 
+            error: `Insufficient coins. You need ${COINS_PER_QUESTION} coins for this question. You have ${userStats?.coins || 0} coins.`,
+            coinsNeeded: COINS_PER_QUESTION,
+            coinsAvailable: userStats?.coins || 0
+          }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Deduct coins
+      await supabase
+        .from('user_stats')
+        .update({ coins: userStats.coins - COINS_PER_QUESTION })
+        .eq('user_id', user.id);
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -252,76 +606,131 @@ serve(async (req) => {
       throw new Error('OPENSUBTITLES_API_KEY is not configured');
     }
 
-    // Fetch TMDb metadata for validation
-    const tmdbMetadata = await getTMDbMetadata(tmdbId, mediaType, seasonNumber, episodeNumber, TMDB_API_KEY);
-    
-    if (!tmdbMetadata) {
-      console.log('Could not validate TMDb metadata');
-    }
-
     // Parse timestamp to seconds
     const currentSeconds = timestampToSeconds(timestamp);
-
-    // Check if this is a TV show
-    if (mediaType !== 'tv' || !seasonNumber || !episodeNumber) {
+    if (currentSeconds === 0) {
       return new Response(
-        JSON.stringify({ 
-          answer: "Multi-episode summaries are currently only supported for TV shows. For movies, please ask specific questions about the content." 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Invalid timestamp format. Use HH:MM:SS or MM:SS' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Fetch multi-episode context with full subtitle text
-    const { priorContext, currentContext } = await getMultiEpisodeContext(
-      tmdbId,
-      seasonNumber,
-      episodeNumber,
-      currentSeconds,
-      OPENSUBTITLES_API_KEY
-    );
-
-    if (!currentContext) {
-      return new Response(
-        JSON.stringify({ 
-          answer: "I don't have enough subtitle data up to this point to answer accurately without risking spoilers." 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Fetch enhanced TMDB context (summaries, characters, etc.)
+    const tmdbContext = await getTMDbContext(tmdbId, mediaType, seasonNumber, episodeNumber, TMDB_API_KEY);
+    
+    // Fetch subtitle context
+    let subtitleContext = '';
+    let priorContext: string[] = [];
+    
+    if (mediaType === 'tv') {
+      const tvContext = await getTVContext(tmdbId, seasonNumber!, episodeNumber!, currentSeconds, OPENSUBTITLES_API_KEY);
+      priorContext = tvContext.priorContext;
+      subtitleContext = tvContext.currentContext;
+    } else {
+      subtitleContext = await getMovieContext(tmdbId, currentSeconds, OPENSUBTITLES_API_KEY);
     }
 
-    console.log(`Context: ${priorContext.length} prior episodes, current episode data up to timestamp`);
-
-    // Build context for AI
-    const metadataContext = tmdbMetadata ? `
-Title: ${tmdbMetadata.title || tmdbMetadata.name}
-Season ${seasonNumber}, Episode ${episodeNumber}
-Year: ${tmdbMetadata.release_date?.split('-')[0] || tmdbMetadata.first_air_date?.split('-')[0] || 'N/A'}
-` : '';
-
+    // Build context sections for AI
+    const tmdbContextText = formatTMDbContext(tmdbContext, mediaType, seasonNumber, episodeNumber);
+    
     const priorContextText = priorContext.length > 0 
-      ? `\n\nPREVIOUS EPISODES:\n${priorContext.join('\n\n')}`
+      ? `\n\n**PREVIOUS EPISODES (for context):**\n${priorContext.join('\n\n')}`
       : '';
 
-    const currentContextText = `\n\nCURRENT EPISODE (S${seasonNumber}E${episodeNumber} up to ${timestamp}):\n${currentContext}`;
+    const currentSubtitleText = subtitleContext
+      ? `\n\n**SUBTITLE DIALOGUE (up to ${timestamp}):**\n${subtitleContext}`
+      : '';
 
-    // Create context-aware system prompt
-    const systemPrompt = `You are a spoiler-free TV companion assistant. Your role is to answer questions about shows WITHOUT revealing any spoilers.
+    // Determine if we have enough context
+    const hasSubtitleContext = subtitleContext.length > 0;
+    const hasTMDbContext = tmdbContext !== null;
+    
+    if (!hasSubtitleContext && !hasTMDbContext) {
+      return new Response(
+        JSON.stringify({ 
+          answer: "I couldn't find subtitle data or metadata for this content. Please ensure the content exists and has available subtitles." 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-CRITICAL RULES:
-1. The user is watching "${title}" at Season ${seasonNumber}, Episode ${episodeNumber}, timestamp ${timestamp}
-2. You have subtitle dialogue from previous episodes and the current episode up to this timestamp
-3. Base your answers ONLY on the provided subtitle context - this represents everything that has happened so far
-4. Use TMDb metadata only for confirming episode details (title, season, runtime, character names) - NOT for plot events
-5. Reason through the dialogue to answer the user's specific question directly and accurately
-6. NEVER include or infer events after the provided timestamp or from later episodes
-7. NEVER speculate about future plot points, endings, or twists
-8. If asked about the future, refuse politely: "I can't answer that without spoiling what happens next"
-9. Keep responses concise and natural - answer the question directly
+    // Build enhanced system prompt
+    const mediaLabel = mediaType === 'tv' 
+      ? `Season ${seasonNumber}, Episode ${episodeNumber}`
+      : 'this movie';
+    
+    const systemPrompt = `You are a spoiler-free companion assistant for "${title}" at ${mediaLabel}, timestamp ${timestamp}. Answer questions accurately and directly while NEVER revealing spoilers beyond this point.
 
-${metadataContext}
+**ANSWER STYLE - MATCH QUESTION COMPLEXITY:**
+- Simple questions → Direct, concise answers (1-3 sentences)
+- Complex/in-depth questions → Detailed, comprehensive answers
+- Recaps/summaries → Structured lists or paragraphs as appropriate
+- Specific detail questions → Precise answers with exact details from subtitles
+- Match the depth the user is asking for - don't over-explain simple questions, don't under-explain complex ones
 
-Your goal is to provide accurate, context-aware answers based solely on what has occurred up to the user's current timestamp.`;
+**COVERAGE - EVERYTHING IS FAIR GAME:**
+- Answer questions about ANY point in the episode/movie up to ${timestamp}
+- Major plot points, minor details, character moments, dialogue, background events - all valid
+- If asked about a specific scene, timestamp, or moment, provide details from that exact point
+- Don't limit yourself to "major" events - users can ask about anything they've seen
+
+**QUESTION TYPE EXAMPLES:**
+
+1. **"What's happening?" / "Recap" / "What happened so far?"**
+   - Provide chronological summary of events up to ${timestamp}
+   - Include both major and minor plot points
+   - Use structure appropriate to complexity (bullets for quick recap, paragraphs for detailed)
+
+2. **"Who is [character]?" / "Tell me about [character]"**
+   - Brief answer: Name, role, key relationships (2-3 sentences)
+   - Detailed answer: Full background, relationships, motivations, what they've done (if asked for more)
+
+3. **"What happened at [specific time/moment]?" / "What did [character] say/do at [point]?"**
+   - Provide exact details from that specific point
+   - Reference dialogue, actions, context
+   - Be precise about what occurred
+
+4. **"Why did [character] do X?" / "What does [event] mean?" / "Explain [concept]"**
+   - Explain based on context shown up to ${timestamp}
+   - Reference specific dialogue, scenes, or character motivations
+   - Provide depth matching the question's complexity
+
+5. **"Tell me everything about [topic]" / "Explain in detail"**
+   - Comprehensive, in-depth answer covering all relevant details
+   - Organize information clearly
+   - Include all relevant context from subtitles and metadata
+
+**INFORMATION SOURCES:**
+- Subtitle dialogue: PRIMARY source for chronological events and dialogue
+- TMDB metadata: Character backgrounds, relationships, episode summaries
+- Your knowledge: Fill gaps, provide context, but stay within timeline
+- If subtitles missing, use metadata + knowledge but indicate limitations
+
+**CRITICAL RULES:**
+- NEVER mention events after ${timestamp}
+- NEVER reference future episodes or later movie scenes
+- Answer with appropriate depth - simple questions get simple answers, complex questions get detailed answers
+- Cover ALL details asked about, not just major plot points
+- Be direct and get to the point quickly, but expand when depth is needed
+
+${tmdbContextText ? `\n**CONTENT METADATA:**\n${tmdbContextText}` : ''}
+
+Answer the question with appropriate depth - be direct for simple questions, comprehensive for complex ones. Cover everything the user asks about.`;
+
+    const userPrompt = `Question: "${question}"
+
+${priorContextText}${currentSubtitleText}
+
+${!hasSubtitleContext ? '\n**Note:** Subtitle data unavailable. Use metadata and knowledge, but indicate limitations.' : ''}
+
+Answer the question with appropriate depth. If it's a simple question, be direct and concise. If it's asking for details or explanation, provide comprehensive information. Cover all aspects of what the user is asking about, including specific moments, dialogue, or minor details if relevant.`;
+
+    console.log('Sending request to AI with context:', {
+      hasSubtitleContext,
+      hasTMDbContext,
+      priorEpisodes: priorContext.length,
+      model: AI_MODEL,
+    });
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -330,14 +739,13 @@ Your goal is to provide accurate, context-aware answers based solely on what has
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: AI_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
-          { 
-            role: 'user', 
-            content: `User's question: "${question}"${priorContextText}${currentContextText}\n\nAnswer the question using ONLY the subtitle context provided above. Ground your answer in the dialogue and events that have occurred up to the timestamp.` 
-          }
+          { role: 'user', content: userPrompt }
         ],
+        temperature: 0.4, // Balanced - focused but can expand when needed
+        max_tokens: 800, // Allow for longer answers when needed for in-depth questions
       }),
     });
 
@@ -361,12 +769,27 @@ Your goal is to provide accurate, context-aware answers based solely on what has
     }
 
     const data = await response.json();
-    const answer = data.choices[0].message.content;
+    const answer = data.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
 
     console.log('AI response generated successfully');
 
+    // Update usage tracking
+    await supabase
+      .from('user_ai_usage')
+      .update({ 
+        questions_today: aiUsage.questions_today + 1,
+        total_questions: (aiUsage.total_questions || 0) + 1
+      })
+      .eq('user_id', user.id);
+
+    const remainingFree = Math.max(0, FREE_QUESTIONS_PER_DAY - (aiUsage.questions_today + 1));
+
     return new Response(
-      JSON.stringify({ answer }),
+      JSON.stringify({ 
+        answer,
+        remainingFreeQuestions: remainingFree,
+        usedCoins: hasFreeQuestions ? 0 : COINS_PER_QUESTION
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

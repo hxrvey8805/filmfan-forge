@@ -120,7 +120,7 @@ const Home = () => {
               <h3 className="text-2xl font-bold">Actor Connect Game
             </h3>
               <p className="text-muted-foreground leading-relaxed">
-                Test your movie knowledge by connecting two actors in under 2 minutes. Win rounds to earn free packs and discover surprising film connections as you play.
+                Test your movie knowledge by connecting two actors in under 2 minutes. Win rounds to earn 75 coins and discover surprising film connections as you play.
               </p>
             </Card>
 
