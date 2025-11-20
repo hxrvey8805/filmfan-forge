@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Package, Sparkles, Crown, User, Coins, DollarSign } from "lucide-react";
+import { Package, Sparkles, Crown, User, Coins, DollarSign, Camera, Glasses } from "lucide-react";
 import PackOpeningModal from "@/components/PackOpeningModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -278,32 +278,29 @@ const Packs = () => {
               />
 
       {/* Collection Section */}
-      {collection.length > 0 && (
-        <div className="space-y-4 pt-6 border-t border-border">
+      <div className="space-y-8 pt-6 border-t border-border">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Your Collection</h2>
+            <p className="text-sm text-muted-foreground">
+              Hover over cards to sell them for coins based on their popularity
+            </p>
+          </div>
+        </div>
+
+        {/* Actors Section */}
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight">Your Collection</h2>
-              <p className="text-sm text-muted-foreground">
-                Hover over cards to sell them for coins based on their popularity
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border">
-                <span className="text-sm text-muted-foreground">Actors:</span>
-                <span className="font-bold text-primary">
-                  {collection.filter(c => c.person_type === 'actor').length}/5
-                </span>
-              </div>
-              <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border">
-                <span className="text-sm text-muted-foreground">Directors:</span>
-                <span className="font-bold text-accent">
-                  {collection.filter(c => c.person_type === 'director').length}/5
-                </span>
-              </div>
+            <h3 className="text-xl font-bold">Actors</h3>
+            <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border">
+              <span className="text-sm text-muted-foreground">Actors:</span>
+              <span className="font-bold text-primary">
+                {collection.filter(c => c.person_type === 'actor').length}/5
+              </span>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {collection.map((item) => (
+            {collection.filter(c => c.person_type === 'actor').map((item) => (
               <Card 
                 key={item.id} 
                 className="relative overflow-hidden bg-card border-border hover:shadow-lg transition-all group"
@@ -367,9 +364,120 @@ const Packs = () => {
                 </div>
               </Card>
             ))}
+            {/* Actor Placeholders */}
+            {Array.from({ length: Math.max(0, 5 - collection.filter(c => c.person_type === 'actor').length) }).map((_, index) => (
+              <Card 
+                key={`actor-placeholder-${index}`}
+                className="relative overflow-hidden bg-primary/10 border-2 border-dashed border-primary/30 animate-pulse"
+              >
+                <div className="w-full aspect-[2/3] bg-gradient-to-br from-primary/20 to-primary/5 flex flex-col items-center justify-center gap-3">
+                  <Camera className="h-12 w-12 text-primary/50" />
+                  <p className="text-xs font-medium text-primary/60">Empty Slot</p>
+                </div>
+                <div className="p-3 space-y-1">
+                  <p className="font-semibold text-sm text-primary/40 line-clamp-1">—</p>
+                  <p className="text-xs text-primary/30 capitalize">Actor</p>
+                </div>
+              </Card>
+            ))}
           </div>
         </div>
-      )}
+
+        {/* Directors Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold">Directors</h3>
+            <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border">
+              <span className="text-sm text-muted-foreground">Directors:</span>
+              <span className="font-bold text-accent">
+                {collection.filter(c => c.person_type === 'director').length}/5
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {collection.filter(c => c.person_type === 'director').map((item) => (
+              <Card 
+                key={item.id} 
+                className="relative overflow-hidden bg-card border-border hover:shadow-lg transition-all group"
+                onMouseEnter={() => setHoveredCard(item.id)}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                {item.profile_path ? (
+                  <img
+                    src={`https://image.tmdb.org/t/p/w500${item.profile_path}`}
+                    alt={item.person_name}
+                    className="w-full aspect-[2/3] object-cover"
+                  />
+                ) : (
+                  <div className="w-full aspect-[2/3] bg-muted flex items-center justify-center">
+                    <User className="h-12 w-12 text-muted-foreground" />
+                  </div>
+                )}
+                
+                {/* Sell overlay */}
+                {hoveredCard === item.id && (
+                  <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center gap-3 animate-fade-in">
+                    {cardPrices[item.id] ? (() => {
+                      const tier = getPriceTier(cardPrices[item.id]);
+                      return (
+                        <>
+                          <div className={`flex items-center gap-2 ${tier.bgColor} px-3 py-1.5 rounded-full border border-current`}>
+                            <span className="text-lg">{tier.icon}</span>
+                            <span className={`font-semibold text-sm ${tier.color}`}>
+                              {tier.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-primary/20 px-4 py-2 rounded-lg border border-primary/30">
+                            <Coins className="h-6 w-6 text-primary" />
+                            <span className="font-bold text-2xl text-white">
+                              {cardPrices[item.id]}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })() : (
+                      <div className="flex items-center gap-2 bg-muted/20 px-4 py-2 rounded-lg">
+                        <Coins className="h-5 w-5 text-muted-foreground" />
+                        <span className="font-bold text-lg text-muted-foreground">...</span>
+                      </div>
+                    )}
+                    <Button
+                      onClick={() => handleSellCard(item.id, item.person_name)}
+                      disabled={sellingCard === item.id || !cardPrices[item.id]}
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 gap-2 min-w-[120px]"
+                    >
+                      <DollarSign className="h-4 w-4" />
+                      {sellingCard === item.id ? 'Selling...' : 'Sell Card'}
+                    </Button>
+                  </div>
+                )}
+                
+                <div className="p-3 space-y-1">
+                  <p className="font-semibold text-sm line-clamp-1">{item.person_name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{item.person_type}</p>
+                </div>
+              </Card>
+            ))}
+            {/* Director Placeholders */}
+            {Array.from({ length: Math.max(0, 5 - collection.filter(c => c.person_type === 'director').length) }).map((_, index) => (
+              <Card 
+                key={`director-placeholder-${index}`}
+                className="relative overflow-hidden bg-accent/10 border-2 border-dashed border-accent/30 animate-pulse"
+              >
+                <div className="w-full aspect-[2/3] bg-gradient-to-br from-accent/20 to-accent/5 flex flex-col items-center justify-center gap-3">
+                  <Glasses className="h-12 w-12 text-accent/50" />
+                  <p className="text-xs font-medium text-accent/60">Empty Slot</p>
+                </div>
+                <div className="p-3 space-y-1">
+                  <p className="font-semibold text-sm text-accent/40 line-clamp-1">—</p>
+                  <p className="text-xs text-accent/30 capitalize">Director</p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
