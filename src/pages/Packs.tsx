@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Package, Sparkles, Crown, User, Coins, DollarSign, Camera, Glasses } from "lucide-react";
+import { Package, Sparkles, Crown, User, Coins, DollarSign, Users, Film } from "lucide-react";
 import PackOpeningModal from "@/components/PackOpeningModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -368,15 +368,23 @@ const Packs = () => {
             {Array.from({ length: Math.max(0, 5 - collection.filter(c => c.person_type === 'actor').length) }).map((_, index) => (
               <Card 
                 key={`actor-placeholder-${index}`}
-                className="relative overflow-hidden bg-primary/10 border-2 border-dashed border-primary/30 animate-pulse"
+                className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40 transition-all"
               >
-                <div className="w-full aspect-[2/3] bg-gradient-to-br from-primary/20 to-primary/5 flex flex-col items-center justify-center gap-3">
-                  <Camera className="h-12 w-12 text-primary/50" />
-                  <p className="text-xs font-medium text-primary/60">Empty Slot</p>
+                <div className="w-full aspect-[2/3] bg-gradient-to-br from-primary/15 via-primary/8 to-primary/15 flex flex-col items-center justify-center gap-4 relative">
+                  {/* Subtle shimmer effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-1000" />
+                  
+                  {/* Icon with glow */}
+                  <div className="relative z-10 flex flex-col items-center gap-3">
+                    <div className="p-4 rounded-full bg-primary/10 border border-primary/20">
+                      <Users className="h-10 w-10 text-primary/60" />
+                    </div>
+                    <p className="text-xs font-semibold text-primary/50 uppercase tracking-wider">Empty Slot</p>
+                  </div>
                 </div>
-                <div className="p-3 space-y-1">
-                  <p className="font-semibold text-sm text-primary/40 line-clamp-1">—</p>
-                  <p className="text-xs text-primary/30 capitalize">Actor</p>
+                <div className="p-3 space-y-1 bg-gradient-to-t from-background/50 to-transparent">
+                  <p className="font-semibold text-sm text-primary/30 line-clamp-1 text-center">—</p>
+                  <p className="text-xs text-primary/20 capitalize text-center">Actor</p>
                 </div>
               </Card>
             ))}
@@ -463,15 +471,23 @@ const Packs = () => {
             {Array.from({ length: Math.max(0, 5 - collection.filter(c => c.person_type === 'director').length) }).map((_, index) => (
               <Card 
                 key={`director-placeholder-${index}`}
-                className="relative overflow-hidden bg-accent/10 border-2 border-dashed border-accent/30 animate-pulse"
+                className="relative overflow-hidden bg-gradient-to-br from-accent/5 via-accent/10 to-accent/5 border border-accent/20 hover:border-accent/40 transition-all"
               >
-                <div className="w-full aspect-[2/3] bg-gradient-to-br from-accent/20 to-accent/5 flex flex-col items-center justify-center gap-3">
-                  <Glasses className="h-12 w-12 text-accent/50" />
-                  <p className="text-xs font-medium text-accent/60">Empty Slot</p>
+                <div className="w-full aspect-[2/3] bg-gradient-to-br from-accent/15 via-accent/8 to-accent/15 flex flex-col items-center justify-center gap-4 relative">
+                  {/* Subtle shimmer effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent/5 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-1000" />
+                  
+                  {/* Icon with glow */}
+                  <div className="relative z-10 flex flex-col items-center gap-3">
+                    <div className="p-4 rounded-full bg-accent/10 border border-accent/20">
+                      <Film className="h-10 w-10 text-accent/60" />
+                    </div>
+                    <p className="text-xs font-semibold text-accent/50 uppercase tracking-wider">Empty Slot</p>
+                  </div>
                 </div>
-                <div className="p-3 space-y-1">
-                  <p className="font-semibold text-sm text-accent/40 line-clamp-1">—</p>
-                  <p className="text-xs text-accent/30 capitalize">Director</p>
+                <div className="p-3 space-y-1 bg-gradient-to-t from-background/50 to-transparent">
+                  <p className="font-semibold text-sm text-accent/30 line-clamp-1 text-center">—</p>
+                  <p className="text-xs text-accent/20 capitalize text-center">Director</p>
                 </div>
               </Card>
             ))}
