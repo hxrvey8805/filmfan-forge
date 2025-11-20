@@ -121,42 +121,60 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
   };
 
   const handleRejectCard = async () => {
-    // If card was already added to collection (shouldn't happen, but safety check)
-    // Remove it if user rejects
-    if (person) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Check if this card is in the collection
-        const { data: existingCard } = await supabase
-          .from('user_collection')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('person_id', person.id)
-          .eq('person_type', packType)
-          .single();
-
-        // If card exists, remove it
-        if (existingCard) {
-          await supabase
+    try {
+      // If card was already added to collection (shouldn't happen, but safety check)
+      // Remove it if user rejects
+      if (person) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // Check if this card is in the collection
+          const { data: existingCard } = await supabase
             .from('user_collection')
-            .delete()
-            .eq('id', existingCard.id);
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('person_id', person.id)
+            .eq('person_type', packType)
+            .single();
 
-          // Mark pack as unopened
-          await supabase
-            .from('user_packs')
-            .update({ is_opened: false, opened_at: null })
-            .eq('id', packId);
+          // If card exists, remove it
+          if (existingCard) {
+            await supabase
+              .from('user_collection')
+              .delete()
+              .eq('id', existingCard.id);
+          }
         }
       }
-    }
 
-    toast({
-      title: "Card rejected",
-      description: "The pack remains unopened. You can try again later.",
-    });
-    onClose();
-    onPackOpened?.(); // Refresh collection
+      // Delete the pack so it disappears from the list
+      const { error: deleteError } = await supabase
+        .from('user_packs')
+        .delete()
+        .eq('id', packId);
+
+      if (deleteError) {
+        console.error('Error deleting pack:', deleteError);
+        // Fallback: mark as opened so it doesn't show
+        await supabase
+          .from('user_packs')
+          .update({ is_opened: true, opened_at: new Date().toISOString() })
+          .eq('id', packId);
+      }
+
+      toast({
+        title: "Card rejected",
+        description: "The pack has been removed.",
+      });
+      onClose();
+      onPackOpened?.(); // Refresh packs list
+    } catch (error) {
+      console.error('Error rejecting card:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reject pack. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleReplaceCard = async (cardIdToReplace: string) => {
