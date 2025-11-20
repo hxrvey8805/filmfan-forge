@@ -36,6 +36,9 @@ const Index = () => {
   const [watched, setWatched] = useState<Title[]>([]);
   const [loading, setLoading] = useState(true);
   const [watchListFilter, setWatchListFilter] = useState<string>("all");
+  const [favouritesFilter, setFavouritesFilter] = useState<string>("all");
+  const [currentlyWatchingFilter, setCurrentlyWatchingFilter] = useState<string>("all");
+  const [watchedFilter, setWatchedFilter] = useState<string>("all");
   const [customFilters, setCustomFilters] = useState<CustomFilter[]>([]);
   const [customFilterDialogOpen, setCustomFilterDialogOpen] = useState(false);
   const [sortedWatchList, setSortedWatchList] = useState<Title[]>([]);
@@ -550,6 +553,18 @@ const Index = () => {
     }
   };
 
+  const handleFavouritesFilterChange = (value: string) => {
+    setFavouritesFilter(value);
+  };
+
+  const handleCurrentlyWatchingFilterChange = (value: string) => {
+    setCurrentlyWatchingFilter(value);
+  };
+
+  const handleWatchedFilterChange = (value: string) => {
+    setWatchedFilter(value);
+  };
+
   const handleSearchSelect = (title: Title) => {
     if (searchModalType === "favourite") {
       handleAddToFavourites(title);
@@ -576,18 +591,38 @@ const Index = () => {
     ? sortedWatchList.filter(item => item.type === watchListFilter)
     : sortedWatchList;
 
+  const displayedFavourites = favouritesFilter === "all"
+    ? favourites
+    : favouritesFilter === "movie" || favouritesFilter === "tv"
+    ? favourites.filter(item => item.type === favouritesFilter)
+    : favourites;
+
+  const displayedCurrentlyWatching = currentlyWatchingFilter === "all"
+    ? currentlyWatching
+    : currentlyWatchingFilter === "movie" || currentlyWatchingFilter === "tv"
+    ? currentlyWatching.filter(item => item.type === currentlyWatchingFilter)
+    : currentlyWatching;
+
+  const displayedWatched = watchedFilter === "all"
+    ? watched
+    : watchedFilter === "movie" || watchedFilter === "tv"
+    ? watched.filter(item => item.type === watchedFilter)
+    : watched;
+
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
       {/* Favourites Row */}
       <PosterRow 
         title="Favourites" 
-        items={favourites}
+        items={displayedFavourites}
         onPosterClick={(title) => {
           setSelectedTitle(title);
           setSelectedTitleSource("favourite");
         }}
         onAddClick={() => openSearchModal("favourite")}
         onDeleteClick={handleDeleteFromFavourites}
+        filterValue={favouritesFilter}
+        onFilterChange={handleFavouritesFilterChange}
       />
 
       {/* Watch List Row */}
@@ -610,25 +645,29 @@ const Index = () => {
       {/* Currently Watching Row */}
       <PosterRow 
         title="Currently Watching" 
-        items={currentlyWatching}
+        items={displayedCurrentlyWatching}
         onPosterClick={(title) => {
           setSelectedTitle(title);
           setSelectedTitleSource("watching");
         }}
         onAddClick={() => openSearchModal("watching")}
         onDeleteClick={handleDeleteFromCurrentlyWatching}
+        filterValue={currentlyWatchingFilter}
+        onFilterChange={handleCurrentlyWatchingFilterChange}
       />
 
       {/* Watched Row */}
       <PosterRow 
         title="Watched" 
-        items={watched}
+        items={displayedWatched}
         onPosterClick={(title) => {
           setSelectedTitle(title);
           setSelectedTitleSource("watched");
         }}
         onAddClick={() => openSearchModal("watched")}
         onDeleteClick={handleDeleteFromWatched}
+        filterValue={watchedFilter}
+        onFilterChange={handleWatchedFilterChange}
       />
 
       {/* Title Detail Modal */}
