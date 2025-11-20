@@ -82,6 +82,10 @@ serve(async (req) => {
 
     if (collectionFetchError) {
       console.error('Error fetching existing collection:', collectionFetchError);
+      return new Response(JSON.stringify({ error: 'Failed to check collection limits' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const ownedPersonIds = new Set((existingCollection || []).map((c: any) => c.person_id));
@@ -93,7 +97,7 @@ serve(async (req) => {
     console.log(`Owned cards: ${ownedPersonIds.size}`);
     console.log(`Collection by type:`, collectionByType);
 
-    // Check collection limit (5 per type)
+    // Check collection limit (5 per type) - ENFORCE STRICTLY
     const COLLECTION_LIMIT = 5;
     const currentTypeCount = collectionByType[pack.pack_type] || 0;
     
