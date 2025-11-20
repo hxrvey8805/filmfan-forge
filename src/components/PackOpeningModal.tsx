@@ -283,7 +283,7 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md bg-background border-border overflow-hidden">
+      <DialogContent className="max-w-md bg-background border-border overflow-hidden max-h-[90vh] flex flex-col">
         <DialogTitle className="sr-only">Pack Opening</DialogTitle>
         <DialogDescription className="sr-only">Cinematic reveal of your new card</DialogDescription>
         {stage === "opening" && (
@@ -351,7 +351,7 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
         )}
 
         {stage === "reveal" && person && (
-          <div className="py-6 space-y-6">
+          <div className="py-4 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="text-center space-y-2">
               <h3 className="text-2xl font-bold">Your New Card!</h3>
               <p className="text-sm font-bold text-primary">{getRarityText(person.popularity || 0)}</p>
@@ -383,21 +383,24 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
             </div>
 
             {isCollectionFullAtReveal ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                  <p className="text-sm text-center text-yellow-600 dark:text-yellow-400">
-                    Your {packType} collection is full (5/5). Choose an option below:
+              <div className="space-y-4 pt-2">
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-sm text-center font-medium text-yellow-600 dark:text-yellow-400">
+                    Your {packType} collection is full (5/5)
+                  </p>
+                  <p className="text-xs text-center text-muted-foreground mt-1">
+                    Replace a card below or reject this one
                   </p>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide text-center">
-                    Replace a Card
+                    Your {packType === 'actor' ? 'Actors' : 'Directors'}
                   </h4>
-                  <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto">
+                  <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto pr-1">
                     {currentCollection.map((card: any) => (
-                      <Card key={card.id} className="p-3 space-y-2 border-border hover:border-primary/50 transition-colors cursor-pointer">
-                        <div className="aspect-[2/3] rounded overflow-hidden bg-muted mb-2">
+                      <Card key={card.id} className="p-2 space-y-2 border-border hover:border-primary/50 transition-all hover:shadow-md">
+                        <div className="aspect-[2/3] rounded overflow-hidden bg-muted">
                           {card.profile_path ? (
                             <img
                               src={`https://image.tmdb.org/t/p/w200${card.profile_path}`}
@@ -406,36 +409,39 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
-                              <Sparkles className="h-8 w-8 text-muted-foreground" />
+                              <Sparkles className="h-6 w-6 text-muted-foreground" />
                             </div>
                           )}
                         </div>
-                        <p className="font-semibold text-xs text-center truncate">{card.person_name}</p>
-                        <p className="text-xs text-muted-foreground text-center">
-                          {cardPrices[card.id] ? `$${cardPrices[card.id]}` : '...'}
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleReplaceCard(card.id)}
-                          disabled={sellingCard === card.id}
-                          className="w-full text-xs"
-                        >
-                          {sellingCard === card.id ? (
-                            <>Selling...</>
-                          ) : (
-                            <>
-                              <DollarSign className="h-3 w-3 mr-1" />
-                              Replace
-                            </>
-                          )}
-                        </Button>
+                        <div className="space-y-1.5">
+                          <p className="font-semibold text-xs text-center truncate px-1">{card.person_name}</p>
+                          <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                            <DollarSign className="h-3 w-3" />
+                            <span>{cardPrices[card.id] || '...'}</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleReplaceCard(card.id)}
+                            disabled={sellingCard === card.id}
+                            className="w-full text-xs h-7"
+                          >
+                            {sellingCard === card.id ? (
+                              "Selling..."
+                            ) : (
+                              <>
+                                <DollarSign className="h-3 w-3 mr-1" />
+                                Replace
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </Card>
                     ))}
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-2 border-t border-border">
+                <div className="flex gap-2 pt-2 border-t border-border">
                   <Button
                     variant="outline"
                     onClick={handleRejectCard}
