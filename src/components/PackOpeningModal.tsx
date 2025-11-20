@@ -36,69 +36,9 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
   }, [isOpen, packId]);
 
   const checkCollectionBeforeOpening = async () => {
-    try {
-      // First, get the pack to know its type
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: pack, error: packError } = await supabase
-        .from('user_packs')
-        .select('pack_type')
-        .eq('id', packId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (packError || !pack) {
-        toast({
-          title: "Error",
-          description: "Pack not found",
-          variant: "destructive"
-        });
-        onClose();
-        return;
-      }
-
-      // Check collection count for this pack type
-      const { data: collection, error: collectionError } = await supabase
-        .from('user_collection')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('person_type', pack.pack_type);
-
-      if (collectionError) {
-        console.error('Error checking collection:', collectionError);
-        // Continue anyway - let backend handle it
-        openPack();
-        return;
-      }
-
-      const COLLECTION_LIMIT = 5;
-      const currentCount = collection?.length || 0;
-
-      console.log(`[FRONTEND CHECK] Pack type: ${pack.pack_type}, Current count: ${currentCount}, Limit: ${COLLECTION_LIMIT}`);
-
-      if (currentCount >= COLLECTION_LIMIT) {
-        // Collection is full - show the collection full dialog
-        setPackType(pack.pack_type);
-        setCollectionFull({
-          error: 'COLLECTION_FULL',
-          message: `Your ${pack.pack_type} collection is full (${COLLECTION_LIMIT}/${COLLECTION_LIMIT}). Please sell a card or reject this one.`,
-          collectionCount: currentCount,
-          limit: COLLECTION_LIMIT,
-          packType: pack.pack_type
-        });
-        await loadCollectionForType(pack.pack_type);
-        setStage("collection-full");
-        return;
-      }
-
-      // Collection has space - proceed with opening
-      openPack();
-    } catch (error: any) {
-      console.error('Error checking collection before opening:', error);
-      // On error, try opening anyway - backend will handle it
-      openPack();
-    }
+    // Allow pack to open - we'll check collection status when card is revealed
+    // This allows users to see the card and choose replace/reject options
+    openPack();
   };
 
   const loadCollectionForType = async (type: string) => {

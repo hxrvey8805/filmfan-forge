@@ -138,53 +138,10 @@ const Packs = () => {
   };
 
   const handleOpenPack = async (packId: string) => {
-    try {
-      // Frontend check: Verify collection isn't full before opening
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Get pack type
-      const { data: pack } = await supabase
-        .from('user_packs')
-        .select('pack_type')
-        .eq('id', packId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (pack) {
-        // Check collection count
-        const { data: collection } = await supabase
-          .from('user_collection')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('person_type', pack.pack_type);
-
-        const COLLECTION_LIMIT = 5;
-        const currentCount = collection?.length || 0;
-
-        console.log(`[PACKS PAGE CHECK] Pack type: ${pack.pack_type}, Current count: ${currentCount}, Limit: ${COLLECTION_LIMIT}`);
-
-        if (currentCount >= COLLECTION_LIMIT) {
-          toast({
-            title: "Collection Full",
-            description: `Your ${pack.pack_type} collection is full (${COLLECTION_LIMIT}/${COLLECTION_LIMIT}). Please sell a card first.`,
-            variant: "destructive"
-          });
-          // Reload collection to show current state
-          loadCollection();
-          return;
-        }
-      }
-
-      // Collection has space - proceed
-      setSelectedPackId(packId);
-      setIsOpening(true);
-    } catch (error) {
-      console.error('Error checking collection:', error);
-      // On error, proceed anyway - backend will handle it
-      setSelectedPackId(packId);
-      setIsOpening(true);
-    }
+    // Allow opening pack - the modal will handle collection full state
+    // and show replace/reject options in the reveal stage
+    setSelectedPackId(packId);
+    setIsOpening(true);
   };
 
   const handlePackOpened = () => {
