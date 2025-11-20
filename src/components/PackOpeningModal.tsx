@@ -239,16 +239,47 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
       });
 
       if (error) {
-        // Check if it's a collection full error
-        if (error.message?.includes('COLLECTION_FULL') || error.error === 'COLLECTION_FULL') {
+        // Check if it's a collection full error - handle multiple error formats
+        const errorMessage = error.message || error.error || JSON.stringify(error);
+        const isCollectionFull = 
+          errorMessage?.includes('COLLECTION_FULL') || 
+          error.error === 'COLLECTION_FULL' ||
+          error.status === 409; // Conflict status code
+        
+        if (isCollectionFull) {
+          // Try to extract pack type from error data
           const errorData = error.data || error;
-          setCollectionFull(errorData);
-          setPackType(errorData.packType || 'actor');
-          await loadCollectionForType(errorData.packType || 'actor');
+          const packTypeFromError = errorData.packType || errorData.pack_type;
+          
+          // If we can't get pack type from error, we need to get it from the pack
+          let detectedPackType = packTypeFromError;
+          if (!detectedPackType) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const { data: pack } = await supabase
+                .from('user_packs')
+                .select('pack_type')
+                .eq('id', packId)
+                .eq('user_id', user.id)
+                .single();
+              detectedPackType = pack?.pack_type || 'actor';
+            }
+          }
+          
+          setPackType(detectedPackType || 'actor');
+          await loadCollectionForType(detectedPackType || 'actor');
           setStage("collection-full");
           return;
         }
-        throw error;
+        
+        // For other errors, show error toast but don't close modal
+        toast({
+          title: "Error opening pack",
+          description: errorMessage || "Failed to open pack",
+          variant: "destructive"
+        });
+        onClose();
+        return;
       }
 
       // Determine pack type from person data
@@ -271,8 +302,9 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
         // Check if the newly added card is in the collection
         const cardAlreadyAdded = collection?.some(c => c.person_id === data.person.id);
 
-        if (currentCount > COLLECTION_LIMIT && cardAlreadyAdded) {
-          // Card was added incorrectly - remove it and mark pack as unopened
+        // If collection is at or over limit AND card was already added by backend
+        if (currentCount >= COLLECTION_LIMIT && cardAlreadyAdded) {
+          // Card was added when collection was full - remove it and mark pack as unopened
           const cardToRemove = collection?.find(c => c.person_id === data.person.id);
           if (cardToRemove) {
             await supabase
@@ -286,21 +318,21 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
               .update({ is_opened: false, opened_at: null })
               .eq('id', packId);
             
-            toast({
-              title: "Collection Full",
-              description: `Your ${type} collection is full (${COLLECTION_LIMIT}/${COLLECTION_LIMIT}). Please sell a card first.`,
-              variant: "destructive"
-            });
-            onClose();
-            onPackOpened?.();
-            return;
+            // Show replace/reject UI instead of error
+            setIsCollectionFullAtReveal(true);
+            await loadCollectionForType(type);
+            // Continue to reveal stage to show replace/reject options
+          } else {
+            // Collection is full but card wasn't added - show replace/reject UI
+            setIsCollectionFullAtReveal(true);
+            await loadCollectionForType(type);
           }
-        }
-
-        if (currentCount >= COLLECTION_LIMIT) {
+        } else if (currentCount >= COLLECTION_LIMIT) {
+          // Collection is full but card wasn't added yet - show replace/reject UI
           setIsCollectionFullAtReveal(true);
           await loadCollectionForType(type);
         } else {
+          // Collection has space - normal flow
           setIsCollectionFullAtReveal(false);
         }
       }
