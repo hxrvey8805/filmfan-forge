@@ -148,8 +148,10 @@ serve(async (req) => {
 
     // Get TV show cast
     if (action === 'getTVCast' && tvId) {
+      // Use aggregate_credits to get ALL cast members across all seasons/episodes
+      // This includes guest stars, recurring characters, and supporting cast
       const response = await fetch(
-        `https://api.themoviedb.org/3/tv/${tvId}/credits?api_key=${TMDB_API_KEY}`
+        `https://api.themoviedb.org/3/tv/${tvId}/aggregate_credits?api_key=${TMDB_API_KEY}`
       );
       
       if (!response.ok) {
@@ -158,17 +160,30 @@ serve(async (req) => {
 
       const data = await response.json();
       // Filter for actors with photos and sort by order (main cast first)
-      // TMDB returns cast in order of importance - lower order = main cast
+      // TMDB aggregate_credits returns cast with roles array - use first role for character/order
+      // Lower order = main cast, higher episode_count = more prominent
       const cast = data.cast
         .filter((actor: any) => actor.profile_path) // Only actors with photos
-        .map((actor: any) => ({
-          id: actor.id,
-          name: actor.name,
-          character: actor.character,
-          profilePath: actor.profile_path,
-          order: actor.order || 999 // Lower order = main cast, default to 999 if missing
-        }))
-        .sort((a: any, b: any) => a.order - b.order); // Sort by order ascending
+        .map((actor: any) => {
+          // Get the most prominent role (first role or role with most episodes)
+          const primaryRole = actor.roles && actor.roles.length > 0
+            ? actor.roles.sort((a: any, b: any) => (b.episode_count || 0) - (a.episode_count || 0))[0]
+            : null;
+          
+          return {
+            id: actor.id,
+            name: actor.name,
+            character: primaryRole?.character || actor.character || 'Unknown',
+            profilePath: actor.profile_path,
+            order: primaryRole?.order ?? actor.order ?? 999, // Lower order = main cast
+            episodeCount: primaryRole?.episode_count || actor.episode_count || 0
+          };
+        })
+        .sort((a: any, b: any) => {
+          // Sort by order first (main cast), then by episode count (more episodes = more prominent)
+          if (a.order !== b.order) return a.order - b.order;
+          return (b.episodeCount || 0) - (a.episodeCount || 0);
+        });
 
       return new Response(
         JSON.stringify({ cast }),
