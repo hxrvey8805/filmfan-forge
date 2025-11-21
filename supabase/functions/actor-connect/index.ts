@@ -127,14 +127,18 @@ serve(async (req) => {
       }
 
       const data = await response.json();
+      // Filter for actors with photos and sort by order (main cast first)
+      // TMDB returns cast in order of importance - lower order = main cast
       const cast = data.cast
-        .filter((actor: any) => actor.profile_path)
+        .filter((actor: any) => actor.profile_path) // Only actors with photos
         .map((actor: any) => ({
           id: actor.id,
           name: actor.name,
           character: actor.character,
-          profilePath: actor.profile_path
-        }));
+          profilePath: actor.profile_path,
+          order: actor.order || 999 // Lower order = main cast, default to 999 if missing
+        }))
+        .sort((a: any, b: any) => a.order - b.order); // Sort by order ascending
 
       return new Response(
         JSON.stringify({ cast }),
@@ -153,14 +157,18 @@ serve(async (req) => {
       }
 
       const data = await response.json();
+      // Filter for actors with photos and sort by order (main cast first)
+      // TMDB returns cast in order of importance - lower order = main cast
       const cast = data.cast
-        .filter((actor: any) => actor.profile_path)
+        .filter((actor: any) => actor.profile_path) // Only actors with photos
         .map((actor: any) => ({
           id: actor.id,
           name: actor.name,
           character: actor.character,
-          profilePath: actor.profile_path
-        }));
+          profilePath: actor.profile_path,
+          order: actor.order || 999 // Lower order = main cast, default to 999 if missing
+        }))
+        .sort((a: any, b: any) => a.order - b.order); // Sort by order ascending
 
       return new Response(
         JSON.stringify({ cast }),

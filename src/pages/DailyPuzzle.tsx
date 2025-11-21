@@ -27,6 +27,7 @@ interface CastMember {
   name: string;
   character: string;
   profilePath: string;
+  order?: number; // Lower order = main cast
 }
 
 type PathStep = {
@@ -486,31 +487,123 @@ const DailyPuzzle = () => {
               </div>
             </div>
           ) : (
-            <div>
-              <h3 className="text-lg font-semibold mb-4 tracking-tight">
+            <div className="space-y-6">
+              <h3 className="text-lg font-semibold tracking-tight">
                 Cast of {path[path.length - 1].name}
               </h3>
-              <div className="grid grid-cols-3 gap-4">
-                {cast.map((actor) => (
-                  <button
-                    key={actor.id}
-                    onClick={() => selectActor(actor)}
-                    className={`text-center active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg ${
-                      actor.id === targetActor?.id ? 'ring-2 ring-primary' : ''
-                    }`}
-                  >
-                    <img
-                      src={`https://image.tmdb.org/t/p/w342${actor.profilePath}`}
-                      alt={actor.name}
-                      className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
-                    />
-                    <p className="text-xs font-medium leading-tight">{actor.name}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                      {actor.character}
-                    </p>
-                  </button>
-                ))}
-              </div>
+              
+              {/* Group cast by order - main cast first, then supporting, then rest */}
+              {(() => {
+                const mainCast = cast.filter(actor => (actor.order ?? 999) < 10);
+                const supportingCast = cast.filter(actor => {
+                  const order = actor.order ?? 999;
+                  return order >= 10 && order < 50;
+                });
+                const restOfCast = cast.filter(actor => (actor.order ?? 999) >= 50);
+
+                return (
+                  <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
+                    {/* Main Cast */}
+                    {mainCast.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
+                            Main Cast
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">({mainCast.length})</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          {mainCast.map((actor) => (
+                            <button
+                              key={actor.id}
+                              onClick={() => selectActor(actor)}
+                              className={`text-center active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg ${
+                                actor.id === targetActor?.id ? 'ring-2 ring-primary' : ''
+                              }`}
+                            >
+                              <img
+                                src={`https://image.tmdb.org/t/p/w342${actor.profilePath}`}
+                                alt={actor.name}
+                                className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
+                              />
+                              <p className="text-xs font-medium leading-tight">{actor.name}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                                {actor.character}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Supporting Cast */}
+                    {supportingCast.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-accent/10 text-accent border-accent/30">
+                            Supporting Cast
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">({supportingCast.length})</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          {supportingCast.map((actor) => (
+                            <button
+                              key={actor.id}
+                              onClick={() => selectActor(actor)}
+                              className={`text-center active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg ${
+                                actor.id === targetActor?.id ? 'ring-2 ring-primary' : ''
+                              }`}
+                            >
+                              <img
+                                src={`https://image.tmdb.org/t/p/w342${actor.profilePath}`}
+                                alt={actor.name}
+                                className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
+                              />
+                              <p className="text-xs font-medium leading-tight">{actor.name}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                                {actor.character}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Rest of Cast */}
+                    {restOfCast.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-muted/20 text-muted-foreground border-border">
+                            Cast
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">({restOfCast.length})</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          {restOfCast.map((actor) => (
+                            <button
+                              key={actor.id}
+                              onClick={() => selectActor(actor)}
+                              className={`text-center active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-lg ${
+                                actor.id === targetActor?.id ? 'ring-2 ring-primary' : ''
+                              }`}
+                            >
+                              <img
+                                src={`https://image.tmdb.org/t/p/w342${actor.profilePath}`}
+                                alt={actor.name}
+                                className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg mb-2"
+                              />
+                              <p className="text-xs font-medium leading-tight">{actor.name}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                                {actor.character}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </Card>
