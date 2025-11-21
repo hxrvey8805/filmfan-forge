@@ -177,6 +177,20 @@ const DailyPuzzle = () => {
       });
 
       if (error) throw error;
+      
+      // Validate response
+      if (!data || !data.cast || !Array.isArray(data.cast)) {
+        console.error('Invalid cast response:', data);
+        toast({
+          title: "Error",
+          description: "Invalid cast data received",
+          variant: "destructive"
+        });
+        setCast([]);
+        return;
+      }
+      
+      console.log(`Loaded ${data.cast.length} cast members for ${title} (${type})`);
       setCast(data.cast);
     } catch (error) {
       console.error('Error loading cast:', error);
@@ -185,6 +199,7 @@ const DailyPuzzle = () => {
         description: "Failed to load cast",
         variant: "destructive"
       });
+      setCast([]);
     } finally {
       setIsLoading(false);
     }

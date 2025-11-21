@@ -127,6 +127,16 @@ serve(async (req) => {
       }
 
       const data = await response.json();
+      
+      // Ensure cast array exists
+      if (!data.cast || !Array.isArray(data.cast)) {
+        console.error(`Movie ${movieId}: Invalid cast data`, data);
+        return new Response(
+          JSON.stringify({ cast: [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       // Filter for actors with photos and sort by order (main cast first)
       // TMDB returns cast in order of importance - lower order = main cast
       const cast = data.cast
@@ -140,6 +150,8 @@ serve(async (req) => {
         }))
         .sort((a: any, b: any) => a.order - b.order); // Sort by order ascending
 
+      console.log(`Movie ${movieId}: ${data.cast.length} total cast, ${cast.length} with photos`);
+      
       return new Response(
         JSON.stringify({ cast }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -159,6 +171,16 @@ serve(async (req) => {
       }
 
       const data = await response.json();
+      
+      // Ensure cast array exists
+      if (!data.cast || !Array.isArray(data.cast)) {
+        console.error(`TV ${tvId}: Invalid aggregate_credits data`, data);
+        return new Response(
+          JSON.stringify({ cast: [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       // Filter for actors with photos and sort by order (main cast first)
       // TMDB aggregate_credits returns cast with roles array - use first role for character/order
       // Lower order = main cast, higher episode_count = more prominent
@@ -185,6 +207,8 @@ serve(async (req) => {
           return (b.episodeCount || 0) - (a.episodeCount || 0);
         });
 
+      console.log(`TV ${tvId}: ${data.cast.length} total cast, ${cast.length} with photos`);
+      
       return new Response(
         JSON.stringify({ cast }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
