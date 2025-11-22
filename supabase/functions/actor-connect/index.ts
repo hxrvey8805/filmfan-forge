@@ -137,10 +137,37 @@ serve(async (req) => {
         );
       }
       
+      // Log detailed info about what TMDB returned
+      const totalCast = data.cast.length;
+      const withPhotos = data.cast.filter((a: any) => a.profile_path).length;
+      const withoutPhotos = totalCast - withPhotos;
+      
+      console.log(`Movie ${movieId}: TMDB returned ${totalCast} total cast members`);
+      console.log(`Movie ${movieId}: ${withPhotos} have photos, ${withoutPhotos} missing photos`);
+      
+      // Log first 10 cast member IDs and names for debugging
+      if (data.cast.length > 0) {
+        console.log(`Movie ${movieId}: Sample cast (first 10):`, 
+          data.cast.slice(0, 10).map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            hasPhoto: !!a.profile_path,
+            order: a.order
+          }))
+        );
+      }
+      
       // Filter for actors with photos and sort by order (main cast first)
       // TMDB returns cast in order of importance - lower order = main cast
+      // IMPORTANT: We filter by profile_path to ensure only actors with photos are shown
       const cast = data.cast
-        .filter((actor: any) => actor.profile_path) // Only actors with photos
+        .filter((actor: any) => {
+          if (!actor.profile_path) {
+            console.log(`Movie ${movieId}: Filtering out ${actor.name} (ID: ${actor.id}) - no photo`);
+            return false;
+          }
+          return true;
+        })
         .map((actor: any) => ({
           id: actor.id,
           name: actor.name,
@@ -150,7 +177,8 @@ serve(async (req) => {
         }))
         .sort((a: any, b: any) => a.order - b.order); // Sort by order ascending
 
-      console.log(`Movie ${movieId}: ${data.cast.length} total cast, ${cast.length} with photos`);
+      console.log(`Movie ${movieId}: Returning ${cast.length} cast members with photos`);
+      console.log(`Movie ${movieId}: Cast IDs:`, cast.map((c: any) => c.id).slice(0, 20));
       
       return new Response(
         JSON.stringify({ cast }),
@@ -181,11 +209,37 @@ serve(async (req) => {
         );
       }
       
+      // Log detailed info about what TMDB returned
+      const totalCast = data.cast.length;
+      const withPhotos = data.cast.filter((a: any) => a.profile_path).length;
+      const withoutPhotos = totalCast - withPhotos;
+      
+      console.log(`TV ${tvId}: TMDB aggregate_credits returned ${totalCast} total cast members`);
+      console.log(`TV ${tvId}: ${withPhotos} have photos, ${withoutPhotos} missing photos`);
+      
+      // Log first 10 cast member IDs and names for debugging
+      if (data.cast.length > 0) {
+        console.log(`TV ${tvId}: Sample cast (first 10):`, 
+          data.cast.slice(0, 10).map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            hasPhoto: !!a.profile_path,
+            rolesCount: a.roles?.length || 0
+          }))
+        );
+      }
+      
       // Filter for actors with photos and sort by order (main cast first)
       // TMDB aggregate_credits returns cast with roles array - use first role for character/order
       // Lower order = main cast, higher episode_count = more prominent
       const cast = data.cast
-        .filter((actor: any) => actor.profile_path) // Only actors with photos
+        .filter((actor: any) => {
+          if (!actor.profile_path) {
+            console.log(`TV ${tvId}: Filtering out ${actor.name} (ID: ${actor.id}) - no photo`);
+            return false;
+          }
+          return true;
+        })
         .map((actor: any) => {
           // Get the most prominent role (first role or role with most episodes)
           const primaryRole = actor.roles && actor.roles.length > 0
@@ -207,7 +261,8 @@ serve(async (req) => {
           return (b.episodeCount || 0) - (a.episodeCount || 0);
         });
 
-      console.log(`TV ${tvId}: ${data.cast.length} total cast, ${cast.length} with photos`);
+      console.log(`TV ${tvId}: Returning ${cast.length} cast members with photos`);
+      console.log(`TV ${tvId}: Cast IDs:`, cast.map((c: any) => c.id).slice(0, 20));
       
       return new Response(
         JSON.stringify({ cast }),
