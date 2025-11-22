@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      user_ai_usage: {
+        Row: {
+          created_at: string
+          id: string
+          last_reset_date: string
+          questions_today: number
+          total_questions: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_reset_date?: string
+          questions_today?: number
+          total_questions?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_reset_date?: string
+          questions_today?: number
+          total_questions?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_collection: {
         Row: {
           collected_at: string
