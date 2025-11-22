@@ -282,6 +282,21 @@ serve(async (req) => {
 
     if (collectionError) {
       console.error('Error adding to collection:', collectionError);
+      
+      // Handle database trigger for collection limit (code P0001)
+      if (collectionError.code === 'P0001' && collectionError.message?.includes('Collection limit exceeded')) {
+        return new Response(JSON.stringify({ 
+          error: 'COLLECTION_FULL',
+          message: `Your ${pack.pack_type} collection is full (${COLLECTION_LIMIT}/${COLLECTION_LIMIT}). Please sell a card or reject this one.`,
+          collectionCount: COLLECTION_LIMIT,
+          limit: COLLECTION_LIMIT,
+          packType: pack.pack_type
+        }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
       // If duplicate slipped through for any reason, return a soft error prompting retry without consuming pack
       if (collectionError.code === '23505') {
         return new Response(JSON.stringify({ error: 'Duplicate card prevented. Please try opening again.' }), {
@@ -289,6 +304,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      
       return new Response(JSON.stringify({ error: 'Failed to add to collection' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
