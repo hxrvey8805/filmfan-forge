@@ -178,9 +178,15 @@ const DailyPuzzle = () => {
 
       if (error) throw error;
       
+      // Detailed logging to debug cast member issue
+      console.log(`=== CAST DATA FOR ${title} (${type}) - ID: ${contentId} ===`);
+      console.log('Full response from backend:', data);
+      console.log('Cast array:', data.cast);
+      console.log('Cast count:', data.cast?.length || 0);
+      
       // Validate response
       if (!data || !data.cast || !Array.isArray(data.cast)) {
-        console.error('Invalid cast response:', data);
+        console.error('❌ Invalid cast response:', data);
         toast({
           title: "Error",
           description: "Invalid cast data received",
@@ -190,7 +196,27 @@ const DailyPuzzle = () => {
         return;
       }
       
-      console.log(`Loaded ${data.cast.length} cast members for ${title} (${type})`);
+      // Log all cast members received
+      if (data.cast && Array.isArray(data.cast)) {
+        console.log('All cast members received:', data.cast.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          character: c.character,
+          hasPhoto: !!c.profilePath,
+          order: c.order,
+          episodeCount: c.episodeCount
+        })));
+        
+        // Check if any cast members are missing photos
+        const withoutPhotos = data.cast.filter((c: any) => !c.profilePath);
+        if (withoutPhotos.length > 0) {
+          console.warn(`⚠️ ${withoutPhotos.length} cast members missing photos:`, 
+            withoutPhotos.map((c: any) => `${c.name} (ID: ${c.id})`)
+          );
+        }
+      }
+      
+      console.log(`✅ Loaded ${data.cast.length} cast members for ${title} (${type})`);
       setCast(data.cast);
     } catch (error) {
       console.error('Error loading cast:', error);

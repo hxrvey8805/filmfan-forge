@@ -188,84 +188,88 @@ serve(async (req) => {
 
     // Get TV show cast
     if (action === 'getTVCast' && tvId) {
-      // Use aggregate_credits to get ALL cast members across all seasons/episodes
-      // This includes guest stars, recurring characters, and supporting cast
-      const response = await fetch(
-        `https://api.themoviedb.org/3/tv/${tvId}/aggregate_credits?api_key=${TMDB_API_KEY}`
-      );
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch TV show cast');
+      // Try both aggregate_credits (all seasons) and regular credits (main cast) to ensure we get everyone
+      // aggregate_credits includes all cast across all seasons/episodes
+      // regular credits might have different cast members
+      const [aggregateResponse, creditsResponse] = await Promise.allSettled([
+        fetch(`https://api.themoviedb.org/3/tv/${tvId}/aggregate_credits?api_key=${TMDB_API_KEY}`),
+        fetch(`https://api.themoviedb.org/3/tv/${tvId}/credits?api_key=${TMDB_API_KEY}`)
+      ]);
+
+      let aggregateData: any = null;
+      let creditsData: any = null;
+
+      if (aggregateResponse.status === 'fulfilled' && aggregateResponse.value.ok) {
+        aggregateData = await aggregateResponse.value.json();
+      } else {
+        console.warn(`TV ${tvId}: Failed to fetch aggregate_credits`);
       }
 
-      const data = await response.json();
-      
-      // Ensure cast array exists
-      if (!data.cast || !Array.isArray(data.cast)) {
-        console.error(`TV ${tvId}: Invalid aggregate_credits data`, data);
-        return new Response(
-          JSON.stringify({ cast: [] }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      if (creditsResponse.status === 'fulfilled' && creditsResponse.value.ok) {
+        creditsData = await creditsResponse.value.json();
+      } else {
+        console.warn(`TV ${tvId}: Failed to fetch credits`);
       }
-      
-      // Log detailed info about what TMDB returned
-      const totalCast = data.cast.length;
-      const withPhotos = data.cast.filter((a: any) => a.profile_path).length;
-      const withoutPhotos = totalCast - withPhotos;
-      
-      console.log(`TV ${tvId}: TMDB aggregate_credits returned ${totalCast} total cast members`);
-      console.log(`TV ${tvId}: ${withPhotos} have photos, ${withoutPhotos} missing photos`);
-      
-      // Log first 10 cast member IDs and names for debugging
-      if (data.cast.length > 0) {
-        console.log(`TV ${tvId}: Sample cast (first 10):`, 
-          data.cast.slice(0, 10).map((a: any) => ({
-            id: a.id,
-            name: a.name,
-            hasPhoto: !!a.profile_path,
-            rolesCount: a.roles?.length || 0
-          }))
-        );
-      }
-      
-      // Filter for actors with photos and sort by order (main cast first)
-      // TMDB aggregate_credits returns cast with roles array - use first role for character/order
-      // Lower order = main cast, higher episode_count = more prominent
-      const cast = data.cast
-        .filter((actor: any) => {
-          if (!actor.profile_path) {
-            console.log(`TV ${tvId}: Filtering out ${actor.name} (ID: ${actor.id}) - no photo`);
-            return false;
+
+      // Merge cast from both endpoints, prioritizing aggregate_credits
+      const castMap = new Map<number, any>();
+
+      // First, add all from aggregate_credits (most comprehensive)
+      if (aggregateData?.cast && Array.isArray(aggregateData.cast)) {
+        console.log(`TV ${tvId}: aggregate_credits returned ${aggregateData.cast.length} cast members`);
+        aggregateData.cast.forEach((actor: any) => {
+          if (actor.profile_path) {
+            const primaryRole = actor.roles && actor.roles.length > 0
+              ? actor.roles.sort((a: any, b: any) => (b.episode_count || 0) - (a.episode_count || 0))[0]
+              : null;
+            
+            castMap.set(actor.id, {
+              id: actor.id,
+              name: actor.name,
+              character: primaryRole?.character || actor.character || 'Unknown',
+              profilePath: actor.profile_path,
+              order: primaryRole?.order ?? actor.order ?? 999,
+              episodeCount: primaryRole?.episode_count || actor.episode_count || 0,
+              source: 'aggregate'
+            });
           }
-          return true;
-        })
-        .map((actor: any) => {
-          // Get the most prominent role (first role or role with most episodes)
-          const primaryRole = actor.roles && actor.roles.length > 0
-            ? actor.roles.sort((a: any, b: any) => (b.episode_count || 0) - (a.episode_count || 0))[0]
-            : null;
-          
-          return {
-            id: actor.id,
-            name: actor.name,
-            character: primaryRole?.character || actor.character || 'Unknown',
-            profilePath: actor.profile_path,
-            order: primaryRole?.order ?? actor.order ?? 999, // Lower order = main cast
-            episodeCount: primaryRole?.episode_count || actor.episode_count || 0
-          };
-        })
-        .sort((a: any, b: any) => {
-          // Sort by order first (main cast), then by episode count (more episodes = more prominent)
-          if (a.order !== b.order) return a.order - b.order;
-          return (b.episodeCount || 0) - (a.episodeCount || 0);
         });
+      }
 
-      console.log(`TV ${tvId}: Returning ${cast.length} cast members with photos`);
+      // Then, add any from regular credits that aren't already in the map
+      if (creditsData?.cast && Array.isArray(creditsData.cast)) {
+        console.log(`TV ${tvId}: credits returned ${creditsData.cast.length} cast members`);
+        creditsData.cast.forEach((actor: any) => {
+          if (actor.profile_path && !castMap.has(actor.id)) {
+            castMap.set(actor.id, {
+              id: actor.id,
+              name: actor.name,
+              character: actor.character || 'Unknown',
+              profilePath: actor.profile_path,
+              order: actor.order ?? 999,
+              episodeCount: 0,
+              source: 'credits'
+            });
+          }
+        });
+      }
+
+      // Convert map to array and sort
+      const cast = Array.from(castMap.values()).sort((a: any, b: any) => {
+        if (a.order !== b.order) return a.order - b.order;
+        return (b.episodeCount || 0) - (a.episodeCount || 0);
+      });
+
+      console.log(`TV ${tvId}: Merged ${cast.length} unique cast members with photos`);
+      console.log(`TV ${tvId}: From aggregate_credits: ${cast.filter((c: any) => c.source === 'aggregate').length}`);
+      console.log(`TV ${tvId}: From credits: ${cast.filter((c: any) => c.source === 'credits').length}`);
       console.log(`TV ${tvId}: Cast IDs:`, cast.map((c: any) => c.id).slice(0, 20));
+
+      // Remove source field before returning
+      const finalCast = cast.map(({ source, ...rest }) => rest);
       
       return new Response(
-        JSON.stringify({ cast }),
+        JSON.stringify({ cast: finalCast }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
