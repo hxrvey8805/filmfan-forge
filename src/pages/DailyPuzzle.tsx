@@ -341,9 +341,9 @@ const DailyPuzzle = () => {
     );
   }
 
-  // More inclusive filtering - only exclude clearly non-acting content
-  const TALK_TITLE_RE = /(Tonight Show|Talk Show|Late Show|Kimmel|Norton|Ellen|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The View|Live with)/i;
-  const BTS_TITLE_RE = /(Behind the Scenes|Making[- ]?of|Featurette|Interview|Press|Promo|Teaser|Clip|Bloopers|Outtakes|Red Carpet)/i;
+  // Strengthen filtering on client as well to ensure only movies/TV and exclude talk/news/etc.
+  const TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Awards|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The Tonight Show|The View|Live!|Variety|Actors on Actors)/i;
+  const BTS_TITLE_RE = /(Behind the Scenes|Making[- ]?of|Featurette|Interview|Press|Promo|Teaser|Clip|Bloopers|Outtakes|Red Carpet|Special)/i;
   
   // Deduplicate by ID and filter
   const seenIds = new Set<string>();
@@ -351,15 +351,7 @@ const DailyPuzzle = () => {
     const key = `${c.type}-${c.id}`;
     if (seenIds.has(key)) return false;
     seenIds.add(key);
-    
-    // Only exclude BTS content
-    if (BTS_TITLE_RE.test(c.title)) return false;
-    
-    // Only exclude talk shows where they appear as "Self"
-    if (TALK_TITLE_RE.test(c.title) && /\bself\b|himself|herself/i.test(c.character || '')) return false;
-    
-    // Include all other movies and TV shows
-    return (c.type === 'movie' || c.type === 'tv');
+    return (c.type === 'movie' || c.type === 'tv') && !TALK_TITLE_RE.test(c.title) && !BTS_TITLE_RE.test(c.title) && !/\bself\b|himself|herself/i.test(c.character || '');
   });
 
   // Split into movies and TV shows
