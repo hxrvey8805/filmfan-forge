@@ -128,14 +128,17 @@ PRICING TIERS WITH SPECIFIC EXAMPLES (10-500 coin range):
 - Working Professional (80-150 coins):
   * Established character actors, TV series regulars, consistent work
   * Popularity 15-30, 50-150 credits, regular film/TV work
-  * Example: Character actors you'd recognize but not A-list, TV series leads
+  * Example: Character actors you'd recognize but not A-list, TV series regulars (not leads)
   * If they've been in multiple major films/shows, price 100-150
+  * If they're a regular cast member (not lead) in popular TV shows, price 80-120
 
 - Established Star (150-250 coins):
   * Well-known actors with major roles, recognizable names
-  * Popularity 25-50 OR 100+ credits with major works OR awards
+  * Popularity 25-50 OR 100+ credits with major works OR awards OR major TV series leads
   * Examples: Chris Evans, Scarlett Johansson, Ryan Gosling, Emma Stone, Bradley Cooper
-  * If they've starred in blockbusters or won major awards, price 200-250
+  * TV Examples: Actors from major shows (The White Lotus, Succession, The Crown, Game of Thrones, etc.)
+  * If they've starred in blockbusters, major TV shows, or won major awards, price 200-250
+  * If they're a lead/significant cast member in a popular/critically acclaimed TV series, price 150-200
 
 - A-List Celebrity (250-400 coins):
   * Household names, major stars, Oscar winners, franchise leads
@@ -153,13 +156,19 @@ PRICING TIERS WITH SPECIFIC EXAMPLES (10-500 coin range):
 
 EVALUATION CRITERIA (in order of importance):
 1. NAME RECOGNITION: If you easily recognize the name, they're NOT emerging (150+ coins)
-2. MAJOR ROLES: Lead roles in blockbusters, major TV shows, award-winning films
-3. AWARDS: Oscars, Golden Globes, Emmys significantly boost price
-4. BOX OFFICE: Billion-dollar franchises, major hits boost price
-5. CAREER SPAN: Long careers (20+ years) with consistent work
-6. CRITICAL ACCLAIM: High ratings on top works
-7. CULTURAL IMPACT: Household name recognition, cultural phenomenon
-8. TMDB POPULARITY: Use as reference, but don't rely solely on it
+2. MAJOR ROLES: Lead/significant roles in blockbusters, major TV shows (The White Lotus, Succession, etc.), award-winning films
+3. TV SERIES: Lead or significant cast member in popular/critically acclaimed TV series = Established (150+)
+4. AWARDS: Oscars, Golden Globes, Emmys significantly boost price
+5. BOX OFFICE: Billion-dollar franchises, major hits boost price
+6. CAREER SPAN: Long careers (20+ years) with consistent work
+7. CRITICAL ACCLAIM: High ratings on top works
+8. CULTURAL IMPACT: Household name recognition, cultural phenomenon
+9. TMDB POPULARITY: Use as reference, but don't rely solely on it
+
+SPECIFIC TV ACTOR GUIDELINES:
+- Lead or significant cast in major TV shows (The White Lotus, Succession, The Crown, Game of Thrones, Breaking Bad, etc.) = Established Star (150-250 coins)
+- Regular cast member (not lead) in popular TV shows = Working Professional (100-150 coins)
+- Supporting/recurring in major shows = Working Professional (80-120 coins)
 
 DIRECTORS: Add 20% bonus (max 500 total). Directors often have lower popularity but massive impact.
 
@@ -180,7 +189,7 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.1-70b-versatile',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
