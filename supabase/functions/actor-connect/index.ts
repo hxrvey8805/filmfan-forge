@@ -71,18 +71,18 @@ serve(async (req) => {
       // Use ACTING (cast) credits only, keep only movie/TV with posters
       const rawCredits = (data.cast || []).filter((item: any) => item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv'));
 
-      // Exclusions: talk/news/reality/etc., documentaries, behind-the-scenes, featurettes, promos, interviews, and 'Self' appearances
-      const EXCLUDED_TV_GENRES = new Set([99, 10762, 10763, 10764, 10766, 10767]); // Documentary, Kids, News, Reality, Soap, Talk
+      // More inclusive filtering - only exclude documentaries, talk shows, and behind-the-scenes content
+      const EXCLUDED_TV_GENRES = new Set([99, 10763, 10764, 10767]); // Documentary, News, Reality, Talk
       const EXCLUDED_MOVIE_GENRES = new Set([99]); // Documentary
-      const EXCLUDED_TITLE_RE = /(Behind the Scenes|Making[- ]?of|Featurette|Interview|Press|Promo|Teaser|Clip|Bloopers|Outtakes|Awards?|Red Carpet|Special|Variety|Studio: Actors on Actors)/i;
-      const EXCLUDED_TALK_TITLE_RE = /(Tonight|Talk|Late|Kimmel|Norton|Clarkson|Ellen|View|Wetten|Parkinson|Skavlan|Golden\s?Globes?|Oscars?|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The Tonight Show|The View|Live!)/i;
+      const EXCLUDED_TITLE_RE = /(Behind the Scenes|Making[- ]?of|Featurette|Interview|Press|Promo|Teaser|Clip|Bloopers|Outtakes|Red Carpet)/i;
+      const EXCLUDED_TALK_TITLE_RE = /(Tonight Show|Talk Show|Late Show|Kimmel|Norton|Ellen|Graham Norton|Kelly Clarkson|Jimmy Kimmel|The View|Live with)/i;
 
       const dedup = new Map<string, any>();
       for (const item of rawCredits) {
-        // Exclude 'video' only items
+        // Exclude 'video' only items (direct-to-video releases)
         if (item.media_type === 'movie' && item.video === true) continue;
 
-        // Exclude documentaries and talk/news/etc.
+        // Exclude documentaries and talk/news/reality shows
         if (Array.isArray(item.genre_ids)) {
           if (item.media_type === 'tv' && item.genre_ids.some((id: number) => EXCLUDED_TV_GENRES.has(id))) continue;
           if (item.media_type === 'movie' && item.genre_ids.some((id: number) => EXCLUDED_MOVIE_GENRES.has(id))) continue;
@@ -90,8 +90,12 @@ serve(async (req) => {
 
         const title = (item.title || item.name || '') as string;
         const character = (item.character || '') as string;
-        if (EXCLUDED_TITLE_RE.test(title) || EXCLUDED_TALK_TITLE_RE.test(title)) continue;
-        if (/\bself\b|himself|herself/i.test(character)) continue;
+        
+        // Only exclude if it's clearly BTS/promotional content
+        if (EXCLUDED_TITLE_RE.test(title)) continue;
+        
+        // Only exclude talk shows where they appear as "Self"
+        if (EXCLUDED_TALK_TITLE_RE.test(title) && /\bself\b|himself|herself/i.test(character)) continue;
 
         const key = `${item.media_type}-${item.id}`;
         if (!dedup.has(key)) dedup.set(key, item);
