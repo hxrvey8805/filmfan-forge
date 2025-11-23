@@ -360,13 +360,6 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
       careerSpan,
       personType,
       personName
-      personName
-    );
-      aiPrice,
-      tmdbPopularity,
-      tmdbCredits,
-      careerSpan,
-      personType
     );
 
     const wasAdjusted = aiPrice !== validatedPrice;
