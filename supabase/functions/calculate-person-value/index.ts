@@ -237,11 +237,24 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
       const spanMatch = careerSpan.match(/(\d{4})-(\d{4})/);
       const careerYears = spanMatch ? parseInt(spanMatch[2]) - parseInt(spanMatch[1]) : 0;
       
+      console.log(`Validation Input:`, {
+        aiPrice,
+        popularity,
+        credits,
+        careerYears,
+        personType,
+        personName
+      });
+      
       // If AI priced high (150+), trust it more - likely well-known person
       if (aiPrice >= 150) {
+        console.log(`AI priced high (${aiPrice}), trusting AI more...`);
         // Only cap if truly suspicious (very low popularity AND few credits AND short career)
         if (popularity < 3 && credits < 15 && careerYears < 3) {
+          console.log(`WARNING: Suspicious high price - capping at 200`);
           validatedPrice = Math.min(validatedPrice, 200); // Still allow up to 200
+        } else {
+          console.log(`Trusting AI price of ${aiPrice} - person likely well-known`);
         }
         // Otherwise trust the AI for well-known people
         return Math.min(validatedPrice, 500);
@@ -255,16 +268,21 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
       // Count red flags
       const redFlags = [lowPopularity, fewCredits, shortCareer].filter(Boolean).length;
       
+      console.log(`Red flags: ${redFlags} (lowPopularity: ${lowPopularity}, fewCredits: ${fewCredits}, shortCareer: ${shortCareer})`);
+      
       // Only cap aggressively if ALL red flags (truly unknown)
       if (redFlags >= 3) {
+        console.log(`All red flags - capping at 50 (truly unknown)`);
         validatedPrice = Math.min(validatedPrice, 50);
       }
       // Light cap if 2 red flags
       else if (redFlags === 2) {
         // But if they have substantial credits, they might be character actor
         if (credits > 30) {
+          console.log(`2 red flags but substantial credits (${credits}) - capping at 150`);
           validatedPrice = Math.min(validatedPrice, 150);
         } else {
+          console.log(`2 red flags - capping at 80`);
           validatedPrice = Math.min(validatedPrice, 80);
         }
       }
@@ -272,23 +290,33 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
       else if (redFlags === 1) {
         if (lowPopularity && credits > 50) {
           // Long career despite low popularity = character actor/cult figure
+          console.log(`1 red flag but long career (${credits} credits) - allowing up to 400`);
           validatedPrice = Math.min(validatedPrice, 400);
         } else if (fewCredits && popularity > 10) {
           // New but popular = emerging star
+          console.log(`1 red flag but popular (${popularity}) - allowing up to 200`);
           validatedPrice = Math.min(validatedPrice, 200);
+        } else {
+          console.log(`1 red flag - trusting AI price`);
         }
+      } else {
+        console.log(`No red flags - trusting AI price of ${aiPrice}`);
       }
       
       // Director bonus consideration (they often have lower popularity)
       if (personType === 'director') {
         if (credits > 20) {
           // Directors with substantial work - trust AI more
+          console.log(`Director with substantial work (${credits} credits) - trusting AI`);
           validatedPrice = Math.min(aiPrice, 500);
         } else if (credits > 10 && popularity > 5) {
           // Emerging directors
+          console.log(`Emerging director - capping at 300`);
           validatedPrice = Math.min(validatedPrice, 300);
         }
       }
+      
+      console.log(`Validation result: ${aiPrice} -> ${validatedPrice}`);
       
       // Hard cap at 500
       return Math.min(validatedPrice, 500);
@@ -359,9 +387,24 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
 
     const result = JSON.parse(toolCall.function.arguments);
     const aiPrice = result.price;
+    const aiReasoning = result.reasoning;
 
     // Smart multi-factor validation
     const careerSpan = tmdbContext.match(/Career Span: (.*)/)?.[1] || 'Unknown';
+    
+    // Log AI's raw response
+    console.log(`=== PRICING DEBUG FOR ${personName} (${personType}) ===`);
+    console.log(`TMDB Data:`, {
+      popularity: tmdbPopularity,
+      credits: tmdbCredits,
+      careerSpan: careerSpan,
+      context: tmdbContext.substring(0, 200) + '...'
+    });
+    console.log(`AI Raw Response:`, {
+      price: aiPrice,
+      reasoning: aiReasoning
+    });
+    
     const validatedPrice = validatePrice(
       aiPrice,
       tmdbPopularity,
@@ -373,10 +416,11 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
 
     const wasAdjusted = aiPrice !== validatedPrice;
     const adjustmentNote = wasAdjusted 
-      ? ` (adjusted from ${aiPrice} using multi-factor validation)` 
-      : '';
+      ? ` (VALIDATION ADJUSTED from ${aiPrice} to ${validatedPrice})` 
+      : ' (no validation adjustment)';
 
-    console.log(`AI Pricing for ${personName}: ${validatedPrice} coins${adjustmentNote}`);
+    console.log(`Final Price: ${validatedPrice} coins${adjustmentNote}`);
+    console.log(`=== END PRICING DEBUG ===`);
     console.log(`Reasoning: ${result.reasoning}`);
     console.log(`Factors: Popularity ${tmdbPopularity.toFixed(1)}, Credits ${tmdbCredits}, Career ${careerSpan}, Type ${personType}`);
     
