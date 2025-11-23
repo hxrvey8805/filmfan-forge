@@ -103,45 +103,71 @@ Known For: ${personData.known_for_department || 'Unknown'}`;
       throw new Error('GROQ_API_KEY not configured');
     }
 
-    const systemPrompt = `You are an expert in entertainment industry valuation. Price actors/directors based on their real-world fame, career achievements, and cultural impact.
+    const systemPrompt = `You are an expert in entertainment industry valuation. Price actors/directors based on their REAL-WORLD FAME, career achievements, and cultural impact.
 
-CRITICAL: Maximum price is 500 coins. Use TMDB data holistically - don't rely on popularity alone.
+CRITICAL RULES:
+1. Maximum price is 500 coins
+2. DO NOT rely solely on TMDB popularity scores - they can be inaccurate
+3. PRIORITIZE: Name recognition, major roles, awards, box office success, cultural impact
+4. Well-known actors/directors should be priced 150-500 coins, NOT 30-80 coins
+5. If the person's name is recognizable to general audiences, they are NOT "emerging talent"
 
-Pricing Tiers with Examples (10-500 coin range):
+PRICING TIERS WITH SPECIFIC EXAMPLES (10-500 coin range):
 
 - Unknown/Minor (10-30 coins): 
-  * Popularity <5, <20 credits, no recognizable roles
-  * Example: Background actors, one-time appearances
+  * Truly unknown: Background actors, one-time appearances, no recognizable roles
+  * Popularity <5 AND <20 credits AND no major works
+  * Example: Day players, extras, unknown character actors
 
 - Emerging Talent (30-80 coins):
-  * Popularity 5-15, 20-50 credits, TV/supporting roles
-  * Example: Rising stars, recurring TV actors
+  * Rising stars with recent breakout roles, but not yet household names
+  * Popularity 5-20, 20-50 credits, some notable TV/film roles
+  * Example: Actors in popular TV shows but not leads, supporting cast in major films
+  * NOT well-known actors - if you recognize the name easily, they're higher tier
 
 - Working Professional (80-150 coins):
-  * Popularity 15-25, 50-100 credits, regular film work
-  * Example: Character actors, TV series regulars
+  * Established character actors, TV series regulars, consistent work
+  * Popularity 15-30, 50-150 credits, regular film/TV work
+  * Example: Character actors you'd recognize but not A-list, TV series leads
+  * If they've been in multiple major films/shows, price 100-150
 
 - Established Star (150-250 coins):
-  * Popularity 25-40, 100+ credits, leading roles
-  * Example: Chris Evans, Scarlett Johansson, Ryan Gosling
+  * Well-known actors with major roles, recognizable names
+  * Popularity 25-50 OR 100+ credits with major works OR awards
+  * Examples: Chris Evans, Scarlett Johansson, Ryan Gosling, Emma Stone, Bradley Cooper
+  * If they've starred in blockbusters or won major awards, price 200-250
 
 - A-List Celebrity (250-400 coins):
-  * Popularity 40-60 OR major awards/cultural impact
-  * Example: Matt Damon, Leonardo DiCaprio, Sandra Bullock
-  * Note: Popularity may be lower but achievements/awards compensate
+  * Household names, major stars, Oscar winners, franchise leads
+  * Popularity 40-70 OR major awards (Oscars, Golden Globes) OR billion-dollar franchises
+  * Examples: Matt Damon, Leonardo DiCaprio, Sandra Bullock, Jennifer Lawrence, Tom Cruise
+  * Directors of major films: Christopher Nolan, Quentin Tarantino, Ridley Scott
+  * If they're a household name, price 300-400
 
 - Legendary Icon (400-500 coins):
-  * Popularity 60+ OR multiple Oscars/cultural phenomenon
-  * Example: Tom Hanks, Meryl Streep, Spielberg, Scorsese
-  * Note: Directors often have lower popularity but massive impact
+  * Cultural icons, multiple Oscars, legendary status
+  * Popularity 60+ OR multiple major awards OR cultural phenomenon
+  * Examples: Tom Hanks, Meryl Streep, Denzel Washington, Spielberg, Scorsese, Martin Scorsese
+  * Directors with massive impact: Steven Spielberg, Martin Scorsese, Christopher Nolan
+  * If they're legendary, price 450-500
 
-Consider beyond TMDB popularity:
-- Awards (Oscars, Golden Globes, BAFTAs)
-- Box office success (billion-dollar franchises)
-- Career span and consistency
-- Critical acclaim (top works ratings)
-- Cultural impact (household name recognition)
-- For directors: add 20% bonus (max 500 total)
+EVALUATION CRITERIA (in order of importance):
+1. NAME RECOGNITION: If you easily recognize the name, they're NOT emerging (150+ coins)
+2. MAJOR ROLES: Lead roles in blockbusters, major TV shows, award-winning films
+3. AWARDS: Oscars, Golden Globes, Emmys significantly boost price
+4. BOX OFFICE: Billion-dollar franchises, major hits boost price
+5. CAREER SPAN: Long careers (20+ years) with consistent work
+6. CRITICAL ACCLAIM: High ratings on top works
+7. CULTURAL IMPACT: Household name recognition, cultural phenomenon
+8. TMDB POPULARITY: Use as reference, but don't rely solely on it
+
+DIRECTORS: Add 20% bonus (max 500 total). Directors often have lower popularity but massive impact.
+
+COMMON MISTAKES TO AVOID:
+- DO NOT price well-known actors as "emerging" (30-80) just because popularity is low
+- DO NOT underestimate directors - they often have lower popularity but high value
+- DO NOT rely solely on popularity scores - use your knowledge of the person's fame
+- If the name is recognizable, they're at least "Established Star" (150+)
 
 Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
 
@@ -187,37 +213,57 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
       }),
     });
 
-    // Multi-factor validation function
+    // Improved validation function - less restrictive, trusts AI more for well-known people
     const validatePrice = (
       aiPrice: number, 
       popularity: number, 
       credits: number, 
       careerSpan: string,
-      personType: string
+      personType: string,
+      personName: string
     ): number => {
       let validatedPrice = aiPrice;
       
       // Extract career length
       const spanMatch = careerSpan.match(/(\d{4})-(\d{4})/);
-      const careerYears = spanMatch ? parseInt(spanMatch[1]) - parseInt(spanMatch[0]) : 0;
+      const careerYears = spanMatch ? parseInt(spanMatch[2]) - parseInt(spanMatch[1]) : 0;
       
-      // Only apply caps if multiple red flags exist
+      // If AI priced high (150+), trust it more - likely well-known person
+      if (aiPrice >= 150) {
+        // Only cap if truly suspicious (very low popularity AND few credits AND short career)
+        if (popularity < 3 && credits < 15 && careerYears < 3) {
+          validatedPrice = Math.min(validatedPrice, 200); // Still allow up to 200
+        }
+        // Otherwise trust the AI for well-known people
+        return Math.min(validatedPrice, 500);
+      }
+      
+      // For lower prices, check if we might be underestimating
       const lowPopularity = popularity < 5;
       const fewCredits = credits < 20;
-      const shortCareer = careerYears < 5;
+      const shortCareer = careerYears < 3;
       
       // Count red flags
       const redFlags = [lowPopularity, fewCredits, shortCareer].filter(Boolean).length;
       
-      // Only cap if 2+ red flags (truly unknown/minor)
-      if (redFlags >= 2) {
+      // Only cap aggressively if ALL red flags (truly unknown)
+      if (redFlags >= 3) {
         validatedPrice = Math.min(validatedPrice, 50);
       }
-      // Light validation for 1 red flag
+      // Light cap if 2 red flags
+      else if (redFlags === 2) {
+        // But if they have substantial credits, they might be character actor
+        if (credits > 30) {
+          validatedPrice = Math.min(validatedPrice, 150);
+        } else {
+          validatedPrice = Math.min(validatedPrice, 80);
+        }
+      }
+      // For 1 or 0 red flags, trust AI more
       else if (redFlags === 1) {
         if (lowPopularity && credits > 50) {
           // Long career despite low popularity = character actor/cult figure
-          validatedPrice = Math.min(validatedPrice, 300);
+          validatedPrice = Math.min(validatedPrice, 400);
         } else if (fewCredits && popularity > 10) {
           // New but popular = emerging star
           validatedPrice = Math.min(validatedPrice, 200);
@@ -225,9 +271,14 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
       }
       
       // Director bonus consideration (they often have lower popularity)
-      if (personType === 'director' && popularity < 15 && credits > 30) {
-        // Trust AI more for directors with substantial work
-        validatedPrice = Math.min(aiPrice, 500);
+      if (personType === 'director') {
+        if (credits > 20) {
+          // Directors with substantial work - trust AI more
+          validatedPrice = Math.min(aiPrice, 500);
+        } else if (credits > 10 && popularity > 5) {
+          // Emerging directors
+          validatedPrice = Math.min(validatedPrice, 300);
+        }
       }
       
       // Hard cap at 500
@@ -303,6 +354,14 @@ Return ONLY JSON: {"price": number, "reasoning": "brief explanation"}`;
     // Smart multi-factor validation
     const careerSpan = tmdbContext.match(/Career Span: (.*)/)?.[1] || 'Unknown';
     const validatedPrice = validatePrice(
+      aiPrice,
+      tmdbPopularity,
+      tmdbCredits,
+      careerSpan,
+      personType,
+      personName
+      personName
+    );
       aiPrice,
       tmdbPopularity,
       tmdbCredits,
