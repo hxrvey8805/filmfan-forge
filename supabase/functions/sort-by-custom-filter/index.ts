@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 const TMDB_API_KEY = Deno.env.get("TMDB_API_KEY");
 
 interface Title {
@@ -155,15 +155,15 @@ Consider:
 
 Respond with ONLY the JSON array, no other text.`;
 
-    console.log("Calling Lovable AI for sorting...");
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    console.log("Calling Groq AI for sorting...");
+    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "llama-3.1-70b-versatile",
         messages: [
           { role: "user", content: prompt }
         ],
