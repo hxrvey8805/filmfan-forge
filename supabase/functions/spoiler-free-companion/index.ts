@@ -10,7 +10,7 @@ const corsHeaders = {
 // Configurable parameters
 const EPISODE_CONTEXT_WINDOW = 5;  // how many previous episodes to pull for TV shows
 const MAX_SUBTITLE_LINES_PER_EPISODE = 200; // limit lines per episode/movie to manage token count
-const AI_MODEL = 'llama-3.1-70b-versatile'; // Groq model - fast and accurate
+const AI_MODEL = 'llama-3.3-70b-versatile'; // Groq model - fast and accurate
 
 // In-memory subtitle cache
 const subtitleCache = new Map<string, string>();
