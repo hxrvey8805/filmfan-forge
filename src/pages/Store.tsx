@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Sparkles, Crown, Coins, MessageSquareQuestion } from "lucide-react";
+import { Sparkles, Crown, Coins, MessageSquareQuote } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -196,7 +196,7 @@ const Store = () => {
           <Card className="p-5 bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/30 shadow-md">
             <div className="flex items-center gap-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
-                <MessageSquareQuestion className="h-9 w-9 text-white" />
+                <MessageSquareQuote className="h-9 w-9 text-white" />
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-lg tracking-tight">Spoiler-Free Question</h3>
