@@ -337,6 +337,7 @@ const Companion = () => {
 
       // Update remaining free questions and coins
       if (data.remainingFreeQuestions !== undefined) {
+        console.log('Updating remainingFree from', remainingFree, 'to', data.remainingFreeQuestions);
         setRemainingFree(data.remainingFreeQuestions);
       }
       if (data.usedCoins) {
