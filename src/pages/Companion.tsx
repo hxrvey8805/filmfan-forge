@@ -618,7 +618,7 @@ const Companion = () => {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             className="min-h-[80px] bg-background/50"
-            disabled={remainingFree !== null && remainingFree === 0 && coins < 150 && selectedContent}
+            disabled={remainingFree !== null && remainingFree === 0 && coins < 150 && !!selectedContent}
           />
         </div>
 
