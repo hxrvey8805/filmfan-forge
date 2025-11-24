@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Glasses } from "lucide-react";
+import { Glasses, Zap, Sparkles } from "lucide-react";
 import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
@@ -7,6 +7,8 @@ import CustomFilterDialog from "@/components/CustomFilterDialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 interface Title {
   id: number;
@@ -43,11 +45,41 @@ const Index = () => {
   const [customFilterDialogOpen, setCustomFilterDialogOpen] = useState(false);
   const [sortedWatchList, setSortedWatchList] = useState<Title[]>([]);
   const [isSorting, setIsSorting] = useState(false);
+  const [remainingFree, setRemainingFree] = useState<number | null>(null);
 
   useEffect(() => {
     checkAuth();
     loadCustomFilters();
+    loadAIUsage();
   }, []);
+
+  const loadAIUsage = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      let { data: aiUsage } = await supabase
+        .from('user_ai_usage')
+        .select('questions_today, last_reset_date')
+        .eq('user_id', user.id)
+        .single();
+
+      if (aiUsage) {
+        // Reset if new day
+        if (aiUsage.last_reset_date !== today) {
+          setRemainingFree(5);
+        } else {
+          setRemainingFree(Math.max(0, 5 - aiUsage.questions_today));
+        }
+      } else {
+        setRemainingFree(5);
+      }
+    } catch (error) {
+      console.error('Error loading AI usage:', error);
+      setRemainingFree(5); // Default to 5 if error
+    }
+  };
 
   const loadCustomFilters = () => {
     const stored = localStorage.getItem("customFilters");
@@ -611,6 +643,99 @@ const Index = () => {
 
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
+      {/* Spoiler-Free Companion Limit Display - Top of Dashboard */}
+      {remainingFree !== null && (
+        <div className="animate-fade-in">
+          <Card className="relative overflow-hidden backdrop-blur-md bg-card/60 border-2 border-primary/30 hover:border-primary/50 transition-all duration-500 group">
+            {/* Animated Gradient Background */}
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 opacity-50 group-hover:opacity-75 transition-opacity duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-primary/5 to-transparent" />
+            
+            {/* Glow Effect */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 rounded-lg blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
+            
+            <div className="relative p-6 md:p-8">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4 flex-1">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-primary/30 blur-2xl rounded-full animate-pulse" />
+                    <div className="relative w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-primary/40 to-accent/30 flex items-center justify-center border border-primary/50 backdrop-blur-sm">
+                      <Zap className="h-6 w-6 md:h-7 md:w-7 text-primary drop-shadow-lg" />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg md:text-xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+                      Spoiler-Free Companion
+                    </h3>
+                    <p className="text-sm md:text-base text-muted-foreground mt-1">
+                      Daily free questions remaining
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-6">
+                  {/* Progress Ring/Display */}
+                  <div className="relative flex items-center justify-center">
+                    <div className="absolute inset-0 bg-primary/10 rounded-full blur-md" />
+                    <div className="relative w-20 h-20 md:w-24 md:h-24">
+                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                        {/* Background circle */}
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          stroke="currentColor"
+                          strokeWidth="8"
+                          fill="none"
+                          className="text-primary/20"
+                        />
+                        {/* Progress circle */}
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          stroke="url(#companion-gradient)"
+                          strokeWidth="8"
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeDasharray={`${2 * Math.PI * 40}`}
+                          strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
+                          className="transition-all duration-1000 ease-out"
+                        />
+                        <defs>
+                          <linearGradient id="companion-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="hsl(var(--primary))" />
+                            <stop offset="100%" stopColor="hsl(var(--accent))" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                            {remainingFree}
+                          </div>
+                          <div className="text-xs md:text-sm text-muted-foreground">/ 5</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Quick Action Button */}
+                  <Button
+                    onClick={() => navigate("/companion")}
+                    variant="outline"
+                    className="border-primary/40 hover:border-primary/60 hover:bg-primary/10 transition-all duration-300 backdrop-blur-sm"
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Try It
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Favourites Row */}
       <PosterRow 
         title="Favourites" 
