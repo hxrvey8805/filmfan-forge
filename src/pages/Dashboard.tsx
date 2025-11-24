@@ -14,14 +14,45 @@ type Tab = "home" | "packs" | "puzzle" | "store";
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [remainingFree, setRemainingFree] = useState<number | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         navigate("/auth");
+      } else {
+        loadAIUsage();
       }
     });
   }, [navigate]);
+
+  const loadAIUsage = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      let { data: aiUsage } = await supabase
+        .from('user_ai_usage')
+        .select('questions_today, last_reset_date')
+        .eq('user_id', user.id)
+        .single();
+
+      if (aiUsage) {
+        // Reset if new day
+        if (aiUsage.last_reset_date !== today) {
+          setRemainingFree(5);
+        } else {
+          setRemainingFree(Math.max(0, 5 - aiUsage.questions_today));
+        }
+      } else {
+        setRemainingFree(5);
+      }
+    } catch (error) {
+      console.error('Error loading AI usage:', error);
+      setRemainingFree(5); // Default to 5 if error
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -57,9 +88,55 @@ const Dashboard = () => {
           <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             CineGeek
           </h1>
-          <Button variant="ghost" size="icon" onClick={handleLogout}>
-            <LogOut className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Minimal Spoiler-Free Companion Limit Display */}
+            {remainingFree !== null && (
+              <div className="relative w-10 h-10">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  {/* Background circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="currentColor"
+                    strokeWidth="6"
+                    fill="none"
+                    className="text-primary/20"
+                  />
+                  {/* Progress circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="url(#header-gradient)"
+                    strokeWidth="6"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 40}`}
+                    strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
+                    className="transition-all duration-1000 ease-out"
+                  />
+                  <defs>
+                    <linearGradient id="header-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="hsl(var(--primary))" />
+                      <stop offset="100%" stopColor="hsl(var(--accent))" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-xs font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
+                      {remainingFree}
+                    </div>
+                    <div className="text-[8px] text-muted-foreground leading-none">/5</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <Button variant="ghost" size="icon" onClick={handleLogout}>
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </header>
 

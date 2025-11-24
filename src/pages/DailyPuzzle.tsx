@@ -54,6 +54,7 @@ const DailyPuzzle = () => {
   const [timeLeft, setTimeLeft] = useState<number>(120);
   const [gameStartTime, setGameStartTime] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [randomizeCount, setRandomizeCount] = useState<number>(0);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -61,10 +62,14 @@ const DailyPuzzle = () => {
     try {
       const savedStart = localStorage.getItem('dp_startActor');
       const savedTarget = localStorage.getItem('dp_targetActor');
+      const savedRandomizeCount = localStorage.getItem('dp_randomizeCount');
       if (savedStart && savedTarget) {
         setStartActor(JSON.parse(savedStart));
         setTargetActor(JSON.parse(savedTarget));
         setGameState('ready');
+        if (savedRandomizeCount) {
+          setRandomizeCount(parseInt(savedRandomizeCount, 10));
+        }
         return; // do not fetch new actors
       }
     } catch (_) {}
@@ -94,6 +99,16 @@ const DailyPuzzle = () => {
   }, [gameState, timeLeft, toast]);
 
   const loadRandomActors = async () => {
+    // Check if randomize limit reached
+    if (randomizeCount >= 3) {
+      toast({
+        title: "Randomize limit reached",
+        description: "You've used all 3 randomizes. Start the game to continue!",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setGameState('loading');
     try {
       const { data, error } = await supabase.functions.invoke('actor-connect', {
@@ -102,11 +117,14 @@ const DailyPuzzle = () => {
 
       if (error) throw error;
       
+      const newCount = randomizeCount + 1;
       setStartActor(data.actors[0]);
       setTargetActor(data.actors[1]);
+      setRandomizeCount(newCount);
       // Persist to avoid auto-randomizing on navigation
       localStorage.setItem('dp_startActor', JSON.stringify(data.actors[0]));
       localStorage.setItem('dp_targetActor', JSON.stringify(data.actors[1]));
+      localStorage.setItem('dp_randomizeCount', newCount.toString());
       setGameState('ready');
     } catch (error) {
       console.error('Error loading actors:', error);
@@ -120,6 +138,10 @@ const DailyPuzzle = () => {
 
   const startGame = async () => {
     if (!startActor) return;
+    
+    // Reset randomize count when starting game
+    setRandomizeCount(0);
+    localStorage.removeItem('dp_randomizeCount');
     
     setGameState('playing');
     setCurrentActor(startActor);
@@ -292,6 +314,8 @@ const DailyPuzzle = () => {
       // Auto-randomize actors for next game
       localStorage.removeItem('dp_startActor');
       localStorage.removeItem('dp_targetActor');
+      localStorage.removeItem('dp_randomizeCount');
+      setRandomizeCount(0);
       setTimeout(() => {
         loadRandomActors();
       }, 2000);
@@ -325,6 +349,8 @@ const DailyPuzzle = () => {
     setViewMode('filmography');
     setTimeLeft(120);
     setGameStartTime(null);
+    setRandomizeCount(0);
+    localStorage.removeItem('dp_randomizeCount');
   };
 
   const formatTime = (seconds: number) => {
@@ -368,6 +394,64 @@ const DailyPuzzle = () => {
           Connect in under 2 minutes to earn 75 coins!
         </p>
       </div>
+
+      {/* Randomize Counter Display - Cinematic */}
+      {gameState === 'ready' && (
+        <div className="px-1">
+          <Card className="relative overflow-hidden backdrop-blur-md bg-gradient-to-br from-card/80 to-card/60 border-2 border-primary/30 shadow-lg group">
+            {/* Animated Gradient Background */}
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 opacity-50 group-hover:opacity-75 transition-opacity duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-primary/5 to-transparent" />
+            
+            {/* Glow Effect */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 rounded-lg blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
+            
+            <div className="relative p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-primary/30 blur-2xl rounded-full animate-pulse" />
+                  <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-primary/40 to-accent/30 flex items-center justify-center border border-primary/50 backdrop-blur-sm">
+                    <RotateCcw className="h-5 w-5 text-primary drop-shadow-lg" />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+                    Randomizes Remaining
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {randomizeCount >= 3 ? 'Limit reached - Start game to continue' : 'Get new actors before starting'}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Progress Display */}
+              <div className="flex items-center gap-2">
+                {[1, 2, 3].map((num) => (
+                  <div
+                    key={num}
+                    className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 ${
+                      num <= (3 - randomizeCount)
+                        ? 'bg-gradient-to-br from-primary/40 to-accent/30 border-2 border-primary/50 shadow-lg scale-100'
+                        : 'bg-muted/30 border-2 border-border/50 scale-90 opacity-50'
+                    }`}
+                  >
+                    {num <= (3 - randomizeCount) ? (
+                      <>
+                        <div className="absolute inset-0 bg-primary/20 blur-md rounded-full animate-pulse" />
+                        <span className="relative text-lg font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                          {num}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm font-semibold text-muted-foreground">✓</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Start and Target Actors */}
       {(gameState === 'ready' || gameState === 'won') && startActor && targetActor && (
@@ -657,10 +741,11 @@ const DailyPuzzle = () => {
             onClick={loadRandomActors}
             size="lg"
             variant="outline"
-            className="flex-1 min-h-[56px] text-base font-semibold"
+            disabled={randomizeCount >= 3}
+            className="flex-1 min-h-[56px] text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RotateCcw className="mr-2 h-5 w-5" />
-            Randomize
+            Randomize {randomizeCount >= 3 ? '(Limit Reached)' : `(${3 - randomizeCount} left)`}
           </Button>
           <Button 
             onClick={startGame} 
