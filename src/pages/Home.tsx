@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Glasses, Users, Package, Sparkles, ChevronDown } from "lucide-react";
+import { Glasses, Users, Package, Sparkles, ChevronDown, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,7 @@ const Home = () => {
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showFeatures, setShowFeatures] = useState(false);
+  const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     supabase.auth.getSession().then(({
@@ -17,6 +18,8 @@ const Home = () => {
     }) => {
       if (session) {
         setIsAuthenticated(true);
+        // Load AI usage for authenticated users
+        loadAIUsage();
       }
     });
     const observer = new IntersectionObserver(([entry]) => {
@@ -31,6 +34,34 @@ const Home = () => {
     }
     return () => observer.disconnect();
   }, []);
+
+  const loadAIUsage = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      let { data: aiUsage } = await supabase
+        .from('user_ai_usage')
+        .select('questions_today, last_reset_date')
+        .eq('user_id', user.id)
+        .single();
+
+      if (aiUsage) {
+        // Reset if new day
+        if (aiUsage.last_reset_date !== today) {
+          setRemainingFree(5);
+        } else {
+          setRemainingFree(Math.max(0, 5 - aiUsage.questions_today));
+        }
+      } else {
+        setRemainingFree(5);
+      }
+    } catch (error) {
+      console.error('Error loading AI usage:', error);
+      setRemainingFree(5); // Default to 5 if error
+    }
+  };
   const handleGetStarted = () => {
     if (isAuthenticated) {
       navigate("/dashboard");
@@ -51,6 +82,101 @@ const Home = () => {
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1400px] h-[1400px] bg-primary/20 rounded-full blur-[200px] pointer-events-none" />
       <div className="fixed bottom-0 right-0 w-[1200px] h-[1200px] bg-accent/15 rounded-full blur-[180px] pointer-events-none" />
       <div className="fixed top-1/2 left-0 w-[1000px] h-[1000px] bg-primary/10 rounded-full blur-[160px] pointer-events-none" />
+      
+      {/* Spoiler-Free Companion Limit Display - Top of Page */}
+      {isAuthenticated && remainingFree !== null && (
+        <div className="relative z-20 pt-6 pb-4 px-4 animate-fade-in">
+          <div className="max-w-4xl mx-auto">
+            <Card className="relative overflow-hidden backdrop-blur-md bg-card/60 border-2 border-primary/30 hover:border-primary/50 transition-all duration-500 group">
+              {/* Animated Gradient Background */}
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 opacity-50 group-hover:opacity-75 transition-opacity duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-br from-transparent via-primary/5 to-transparent" />
+              
+              {/* Glow Effect */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 rounded-lg blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
+              
+              <div className="relative p-6 md:p-8">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-primary/30 blur-2xl rounded-full animate-pulse" />
+                      <div className="relative w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-primary/40 to-accent/30 flex items-center justify-center border border-primary/50 backdrop-blur-sm">
+                        <Zap className="h-6 w-6 md:h-7 md:w-7 text-primary drop-shadow-lg" />
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg md:text-xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+                        Spoiler-Free Companion
+                      </h3>
+                      <p className="text-sm md:text-base text-muted-foreground mt-1">
+                        Daily free questions remaining
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-6">
+                    {/* Progress Ring/Display */}
+                    <div className="relative flex items-center justify-center">
+                      <div className="absolute inset-0 bg-primary/10 rounded-full blur-md" />
+                      <div className="relative w-20 h-20 md:w-24 md:h-24">
+                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                          {/* Background circle */}
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            stroke="currentColor"
+                            strokeWidth="8"
+                            fill="none"
+                            className="text-primary/20"
+                          />
+                          {/* Progress circle */}
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            stroke="url(#gradient)"
+                            strokeWidth="8"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2 * Math.PI * 40}`}
+                            strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
+                            className="transition-all duration-1000 ease-out"
+                          />
+                          <defs>
+                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="hsl(var(--primary))" />
+                              <stop offset="100%" stopColor="hsl(var(--accent))" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                              {remainingFree}
+                            </div>
+                            <div className="text-xs md:text-sm text-muted-foreground">/ 5</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Quick Action Button */}
+                    <Button
+                      onClick={() => navigate("/companion")}
+                      variant="outline"
+                      className="border-primary/40 hover:border-primary/60 hover:bg-primary/10 transition-all duration-300 backdrop-blur-sm"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Try It
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
       
       {/* Hero Section - Full Screen */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-4">
