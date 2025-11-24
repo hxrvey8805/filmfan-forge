@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Glasses, Package, Menu, LogOut, Store as StoreIcon } from "lucide-react";
+import { Glasses, Package, Menu, LogOut, Store as StoreIcon, Coins } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
+  const [coins, setCoins] = useState<number>(0);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -22,6 +23,7 @@ const Dashboard = () => {
         navigate("/auth");
       } else {
         loadAIUsage();
+        loadUserStats();
       }
     });
   }, [navigate]);
@@ -54,6 +56,35 @@ const Dashboard = () => {
     }
   };
 
+  const loadUserStats = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      let { data: stats } = await supabase
+        .from('user_stats')
+        .select('coins')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!stats) {
+        // Create stats if they don't exist
+        const { data: newStats } = await supabase
+          .from('user_stats')
+          .insert({ user_id: user.id, coins: 100 })
+          .select()
+          .single();
+        if (newStats) {
+          setCoins(newStats.coins);
+        }
+      } else {
+        setCoins(stats.coins);
+      }
+    } catch (error) {
+      console.error('Error loading user stats:', error);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     toast.success("Logged out successfully");
@@ -66,6 +97,13 @@ const Dashboard = () => {
     { id: "packs" as Tab, label: "Packs", icon: Package },
     { id: "store" as Tab, label: "Store", icon: StoreIcon },
   ];
+
+  // Refresh coins when tab changes (in case coins changed in game/store)
+  useEffect(() => {
+    if (activeTab) {
+      loadUserStats();
+    }
+  }, [activeTab]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -133,6 +171,11 @@ const Dashboard = () => {
                 </div>
               </div>
             )}
+            {/* Coins Display */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card/80 border border-border/50">
+              <Coins className="h-4 w-4 text-primary" />
+              <span className="text-sm font-bold">{coins}</span>
+            </div>
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="h-5 w-5" />
             </Button>
