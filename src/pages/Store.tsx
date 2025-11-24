@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Sparkles, Crown, Coins } from "lucide-react";
+import { Sparkles, Crown, Coins, MessageSquareQuestion } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -102,6 +102,75 @@ const Store = () => {
     }
   };
 
+  const handlePurchaseQuestion = async () => {
+    const cost = 150;
+    if (coins < cost) {
+      toast({
+        title: "Not enough coins",
+        description: `You need ${cost} coins to purchase a question`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setPurchasing('question');
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Deduct coins
+      const { error: updateError } = await supabase
+        .from('user_stats')
+        .update({ coins: coins - cost })
+        .eq('user_id', user.id);
+
+      if (updateError) throw updateError;
+
+      // Add a free question by resetting one question from today's count
+      const today = new Date().toISOString().split('T')[0];
+      let { data: aiUsage } = await supabase
+        .from('user_ai_usage')
+        .select('questions_today, last_reset_date')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!aiUsage) {
+        // Create AI usage record if it doesn't exist
+        await supabase
+          .from('user_ai_usage')
+          .insert({ 
+            user_id: user.id, 
+            questions_today: 0, 
+            last_reset_date: today 
+          });
+      } else {
+        // Decrement questions_today (effectively giving them a free question)
+        const newCount = Math.max(0, aiUsage.questions_today - 1);
+        await supabase
+          .from('user_ai_usage')
+          .update({ questions_today: newCount })
+          .eq('user_id', user.id);
+      }
+
+      setCoins(coins - cost);
+      
+      toast({
+        title: "Question purchased!",
+        description: `You bought a question for ${cost} coins. You can now ask one more question!`,
+      });
+    } catch (error: any) {
+      console.error('Error purchasing question:', error);
+      toast({
+        title: "Purchase failed",
+        description: error.message || "Failed to purchase question",
+        variant: "destructive"
+      });
+    } finally {
+      setPurchasing(null);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-4 max-w-4xl mx-auto">
       <div className="space-y-2">
@@ -113,7 +182,7 @@ const Store = () => {
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Purchase packs with coins earned from selling cards
+          Purchase packs and questions with coins earned from selling cards
         </p>
       </div>
 
@@ -123,6 +192,33 @@ const Store = () => {
         </div>
       ) : (
         <div className="space-y-4">
+          {/* Question Purchase */}
+          <Card className="p-5 bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/30 shadow-md">
+            <div className="flex items-center gap-4">
+              <div className="p-4 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
+                <MessageSquareQuestion className="h-9 w-9 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-lg tracking-tight">Spoiler-Free Question</h3>
+                <p className="text-sm text-muted-foreground">
+                  Purchase an additional question for the spoiler-free companion
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <Coins className="h-4 w-4 text-primary" />
+                  <span className="font-semibold">150 coins</span>
+                </div>
+              </div>
+              <Button
+                onClick={handlePurchaseQuestion}
+                disabled={coins < 150 || purchasing === 'question'}
+                size="lg"
+                className="bg-gradient-to-r from-primary to-accent hover:opacity-90 shrink-0 min-h-[48px] px-6"
+              >
+                {purchasing === 'question' ? 'Purchasing...' : 'Buy Question'}
+              </Button>
+            </div>
+          </Card>
+
           <Card className="p-5 bg-gradient-to-r from-primary/10 to-accent/10 border-border shadow-md">
             <div className="flex items-center gap-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">

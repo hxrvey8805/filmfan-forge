@@ -4,8 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Send, Clock, Loader2, Search, Coins } from "lucide-react";
+import { Send, Clock, Loader2, Search, Coins, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ interface Message {
 }
 
 const Companion = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -377,10 +379,57 @@ const Companion = () => {
       </div>
 
       {/* Input Section */}
-      <Card className="p-4 space-y-4 bg-gradient-to-br from-card to-secondary border-border">
+      <Card className="relative p-4 space-y-4 bg-gradient-to-br from-card to-secondary border-border overflow-hidden">
+        {/* Faulty Projector Overlay - Dimmed Effect */}
+        {selectedContent && remainingFree !== null && remainingFree === 0 && coins < 150 && (
+          <>
+            {/* Dimmed Background with Film Grain */}
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-10 pointer-events-none" 
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                opacity: 0.15
+              }}
+            />
+            
+            {/* Cinematic Message */}
+            <div className="absolute inset-0 z-20 flex items-center justify-center p-6 pointer-events-auto">
+              <div className="text-center space-y-4 max-w-md animate-fade-in">
+                {/* Projector Icon/Effect */}
+                <div className="relative mx-auto w-20 h-20 mb-4">
+                  <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full animate-pulse" />
+                  <div className="relative w-full h-full rounded-full bg-gradient-to-br from-primary/40 to-accent/30 flex items-center justify-center border-2 border-primary/50 backdrop-blur-sm">
+                    <Sparkles className="h-10 w-10 text-primary drop-shadow-lg" />
+                  </div>
+                </div>
+                
+                {/* Message Text */}
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+                    Projector Malfunction
+                  </h3>
+                  <p className="text-base text-foreground/90 leading-relaxed">
+                    Your daily free questions have been exhausted. Visit the <span className="font-semibold text-primary">Store</span> to purchase additional questions for 150 coins.
+                  </p>
+                </div>
+                
+                {/* CTA Button */}
+                <Button
+                  onClick={() => navigate("/store")}
+                  size="lg"
+                  className="mt-4 bg-gradient-to-r from-primary to-accent hover:opacity-90 text-base font-semibold px-8"
+                >
+                  <Coins className="h-5 w-5 mr-2" />
+                  Go to Store
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
         {/* Selected Content Display */}
         {selectedContent && (
-          <div className="flex items-center gap-4 p-3 bg-background/50 rounded-lg border border-border">
+          <div className={`flex items-center gap-4 p-3 bg-background/50 rounded-lg border border-border transition-opacity ${
+            remainingFree !== null && remainingFree === 0 && coins < 150 ? 'opacity-30' : ''
+          }`}>
             <div className="flex-1">
               <h3 className="font-semibold text-lg">{selectedContent.title}</h3>
               <p className="text-sm text-muted-foreground">
@@ -398,7 +447,9 @@ const Companion = () => {
         )}
 
         {/* Content Search */}
-        <div className="space-y-2">
+        <div className={`space-y-2 transition-opacity ${
+          remainingFree !== null && remainingFree === 0 && coins < 150 && selectedContent ? 'opacity-30' : ''
+        }`}>
           <label className="text-sm font-medium">Movie or TV Show</label>
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
@@ -495,7 +546,9 @@ const Companion = () => {
 
         {/* Season & Episode Selects (only for TV shows) */}
         {selectedContent?.type === "tv" && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid grid-cols-2 gap-4 transition-opacity ${
+            remainingFree !== null && remainingFree === 0 && coins < 150 ? 'opacity-30' : ''
+          }`}>
             <div className="space-y-2">
               <label className="text-sm font-medium">Season</label>
               <Select value={selectedSeason} onValueChange={setSelectedSeason}>
@@ -534,7 +587,9 @@ const Companion = () => {
         )}
         
         {/* Timestamp Slider */}
-        <div className="space-y-3">
+        <div className={`space-y-3 transition-opacity ${
+          remainingFree !== null && remainingFree === 0 && coins < 150 && selectedContent ? 'opacity-30' : ''
+        }`}>
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium flex items-center gap-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
@@ -555,19 +610,27 @@ const Companion = () => {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className={`flex gap-2 transition-opacity ${
+          remainingFree !== null && remainingFree === 0 && coins < 150 && selectedContent ? 'opacity-30' : ''
+        }`}>
           <Textarea
             placeholder="Ask a question about the story so far..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             className="min-h-[80px] bg-background/50"
+            disabled={remainingFree !== null && remainingFree === 0 && coins < 150 && selectedContent}
           />
         </div>
 
+        {remainingFree !== null && remainingFree === 0 && coins < 150 && (
+          <div className="text-sm text-destructive text-center py-2 px-3 bg-destructive/10 rounded-lg border border-destructive/20">
+            No free questions remaining and insufficient coins. You need 150 coins to ask a question.
+          </div>
+        )}
         <Button 
           onClick={handleAskQuestion}
-          disabled={isLoading}
-          className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 disabled:opacity-50"
+          disabled={isLoading || (remainingFree !== null && remainingFree === 0 && coins < 150)}
+          className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? (
             <>
