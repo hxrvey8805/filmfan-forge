@@ -244,6 +244,16 @@ const Companion = () => {
   const timestamp = formatTimestamp(timestampMinutes[0]);
 
   const handleAskQuestion = async () => {
+    // Check if user has questions remaining or coins
+    if (remainingFree !== null && remainingFree === 0 && coins < 150) {
+      toast({
+        title: "No questions available",
+        description: "You've used all 5 free questions today and don't have enough coins. Purchase questions in the Store.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!question.trim()) {
       toast({
         title: "Question required",
@@ -617,6 +627,14 @@ const Companion = () => {
             placeholder="Ask a question about the story so far..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!(remainingFree !== null && remainingFree === 0 && coins < 150) && !isLoading) {
+                  handleAskQuestion();
+                }
+              }
+            }}
             className="min-h-[80px] bg-background/50"
             disabled={remainingFree !== null && remainingFree === 0 && coins < 150 && !!selectedContent}
           />
