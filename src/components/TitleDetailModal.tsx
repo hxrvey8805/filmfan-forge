@@ -5,7 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clapperboard, Tv, Clock, Send, Loader2, Plus, Eye, Heart, X } from "lucide-react";
+import { Clapperboard, Tv, Clock, Send, Loader2, Plus, Eye, Heart, X, Zap, Coins, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -47,10 +48,13 @@ interface TitleDetailModalProps {
 }
 
 const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddToWatchList, onAddToCurrentlyWatching, onAddToWatched, onMoveToCurrentlyWatching, onMoveToWatched, sourceList }: TitleDetailModalProps) => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [remainingFree, setRemainingFree] = useState<number | null>(null);
+  const [coins, setCoins] = useState(0);
   
   // TV-specific state
   const [selectedSeason, setSelectedSeason] = useState("1");
@@ -137,6 +141,72 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
     fetchRuntime();
   }, [title, selectedSeason, selectedEpisode]);
 
+  // Load AI usage and coins when modal opens
+  useEffect(() => {
+    if (open) {
+      loadAIUsage();
+      loadUserStats();
+    }
+  }, [open]);
+
+  // Listen for custom event from Companion page
+  useEffect(() => {
+    const handleQuestionAsked = () => {
+      loadAIUsage();
+      loadUserStats();
+    };
+
+    window.addEventListener('questionAsked', handleQuestionAsked);
+    return () => window.removeEventListener('questionAsked', handleQuestionAsked);
+  }, []);
+
+  const loadAIUsage = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date().toISOString().split('T')[0];
+      let { data: aiUsage } = await supabase
+        .from('user_ai_usage')
+        .select('questions_today, last_reset_date')
+        .eq('user_id', user.id)
+        .single();
+
+      if (aiUsage) {
+        // Reset if new day
+        if (aiUsage.last_reset_date !== today) {
+          setRemainingFree(5);
+        } else {
+          setRemainingFree(Math.max(0, 5 - aiUsage.questions_today));
+        }
+      } else {
+        setRemainingFree(5);
+      }
+    } catch (error) {
+      console.error('Error loading AI usage:', error);
+      setRemainingFree(5); // Default to 5 if error
+    }
+  };
+
+  const loadUserStats = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      let { data: stats } = await supabase
+        .from('user_stats')
+        .select('coins')
+        .eq('user_id', user.id)
+        .single();
+
+      if (stats) {
+        setCoins(stats.coins);
+      }
+    } catch (error) {
+      console.error('Error loading user stats:', error);
+    }
+  };
+
   const formatTimestamp = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = Math.floor(minutes % 60);
@@ -175,7 +245,21 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        // Handle specific error cases
+        if (error.status === 402) {
+          const errorData = error.data || error;
+          toast({
+            title: "Insufficient Coins",
+            description: errorData.error || `You need 150 coins for this question. You have ${errorData.coinsAvailable || 0} coins.`,
+            variant: "destructive"
+          });
+          // Reload coins
+          loadUserStats();
+          return;
+        }
+        throw error;
+      }
 
       const newMessage: Message = {
         id: messages.length + 1,
@@ -188,9 +272,26 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
       setMessages([newMessage, ...messages]);
       setQuestion("");
       
+      // Update remaining free questions and coins
+      if (data.remainingFreeQuestions !== undefined && data.remainingFreeQuestions !== null) {
+        setRemainingFree(data.remainingFreeQuestions);
+      }
+      if (data.usedCoins) {
+        setCoins(prev => Math.max(0, prev - data.usedCoins));
+      }
+      
+      // Dispatch custom event to notify Dashboard to refresh
+      window.dispatchEvent(new CustomEvent('questionAsked'));
+      
+      const description = data.remainingFreeQuestions !== undefined && data.remainingFreeQuestions >= 0
+        ? `${data.remainingFreeQuestions} free questions remaining today.`
+        : data.usedCoins
+        ? `Used ${data.usedCoins} coins.`
+        : "Spoiler-free response generated!";
+      
       toast({
         title: "Answer received",
-        description: "Spoiler-free response generated!",
+        description: description,
       });
     } catch (error) {
       console.error('Error asking question:', error);
@@ -351,6 +452,156 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
                 <p className="text-sm text-muted-foreground">
                   Ask questions about the story up to a specific point without spoilers
                 </p>
+                {/* Question Counter */}
+                {remainingFree !== null && (
+                  remainingFree === 0 ? (
+                    <Card className="p-4 bg-gradient-to-br from-card/90 to-card/70 border-2 border-primary/30 shadow-lg mt-2">
+                      <div className="flex flex-col items-center gap-4">
+                        {/* Enlarged 0/5 Display */}
+                        <div className="relative w-24 h-24">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                            {/* Background circle */}
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="40"
+                              stroke="currentColor"
+                              strokeWidth="8"
+                              fill="none"
+                              className="text-primary/20"
+                            />
+                            {/* Progress circle - full (0 remaining) */}
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="40"
+                              stroke="url(#modal-gradient-zero)"
+                              strokeWidth="8"
+                              fill="none"
+                              strokeLinecap="round"
+                              strokeDasharray={`${2 * Math.PI * 40}`}
+                              strokeDashoffset="0"
+                              className="transition-all duration-1000 ease-out"
+                            />
+                            <defs>
+                              <linearGradient id="modal-gradient-zero" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="hsl(var(--primary))" />
+                                <stop offset="100%" stopColor="hsl(var(--accent))" />
+                              </linearGradient>
+                            </defs>
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
+                                0
+                              </div>
+                              <div className="text-sm text-muted-foreground leading-none">/5</div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Prompts */}
+                        <div className="text-center space-y-3 w-full">
+                          <p className="text-sm font-semibold text-foreground">
+                            No free questions remaining
+                          </p>
+                          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                            {coins >= 150 ? (
+                              <Button
+                                onClick={() => {
+                                  onOpenChange(false);
+                                  navigate("/store");
+                                }}
+                                className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                              >
+                                <Coins className="h-4 w-4 mr-2" />
+                                Buy Question (150 coins)
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  onClick={() => {
+                                    onOpenChange(false);
+                                    navigate("/store");
+                                  }}
+                                  variant="outline"
+                                  className="border-primary/40"
+                                >
+                                  <Coins className="h-4 w-4 mr-2" />
+                                  Buy Question
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    onOpenChange(false);
+                                    navigate("/dashboard");
+                                  }}
+                                  className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                                >
+                                  <Sparkles className="h-4 w-4 mr-2" />
+                                  Play Game to Earn Coins
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                          {coins < 150 && (
+                            <p className="text-xs text-muted-foreground">
+                              Win Actor Connect in under 2 minutes to earn 75 coins
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ) : (
+                    <div className="flex items-center gap-3 pt-2">
+                      <div className="relative w-12 h-12">
+                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                          {/* Background circle */}
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            stroke="currentColor"
+                            strokeWidth="6"
+                            fill="none"
+                            className="text-primary/20"
+                          />
+                          {/* Progress circle */}
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            stroke="url(#modal-gradient)"
+                            strokeWidth="6"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2 * Math.PI * 40}`}
+                            strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
+                            className="transition-all duration-1000 ease-out"
+                          />
+                          <defs>
+                            <linearGradient id="modal-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="hsl(var(--primary))" />
+                              <stop offset="100%" stopColor="hsl(var(--accent))" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="text-sm font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
+                              {remainingFree}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground leading-none">/5</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs text-muted-foreground">
+                          {remainingFree} free question{remainingFree !== 1 ? 's' : ''} remaining today
+                        </p>
+                      </div>
+                    </div>
+                  )
+                )}
               </div>
             </div>
           </div>

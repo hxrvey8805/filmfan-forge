@@ -17,6 +17,7 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const [coins, setCoins] = useState<number>(0);
+  const [isGamePlaying, setIsGamePlaying] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -58,6 +59,42 @@ const Dashboard = () => {
     window.addEventListener('questionAsked', handleQuestionAsked);
     return () => window.removeEventListener('questionAsked', handleQuestionAsked);
   }, []);
+
+  // Listen for game state changes
+  useEffect(() => {
+    const handleGameStateChange = (e: CustomEvent) => {
+      setIsGamePlaying(e.detail === 'playing');
+    };
+
+    window.addEventListener('gameStateChange', handleGameStateChange as EventListener);
+    return () => window.removeEventListener('gameStateChange', handleGameStateChange as EventListener);
+  }, []);
+
+  // Prevent navigation/closing when game is playing
+  useEffect(() => {
+    if (isGamePlaying) {
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      };
+
+      const handlePopState = (e: PopStateEvent) => {
+        if (isGamePlaying) {
+          window.history.pushState(null, '', location.pathname);
+        }
+      };
+
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      window.history.pushState(null, '', location.pathname);
+      window.addEventListener('popstate', handlePopState);
+
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [isGamePlaying, location.pathname]);
 
   const loadAIUsage = async () => {
     try {
@@ -227,15 +264,24 @@ const Dashboard = () => {
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
+              const isDisabled = isGamePlaying && !isActive;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    if (!isGamePlaying || isActive) {
+                      setActiveTab(tab.id);
+                    }
+                  }}
+                  disabled={isDisabled}
                   className={`flex flex-col items-center gap-1.5 px-6 py-2.5 rounded-2xl transition-all min-w-[72px] min-h-[60px] ${
                     isActive
                       ? "text-primary scale-105 bg-primary/10"
+                      : isDisabled
+                      ? "text-muted-foreground/30 opacity-50 cursor-not-allowed"
                       : "text-muted-foreground active:scale-95 active:bg-muted/50"
                   }`}
+                  title={isDisabled ? "Complete the game to switch tabs" : ""}
                 >
                   <Icon className={`h-6 w-6 ${isActive ? 'stroke-[2.5]' : 'stroke-[2]'}`} />
                   <span className={`text-xs font-medium ${isActive ? 'font-semibold' : ''}`}>

@@ -67,6 +67,8 @@ const DailyPuzzle = () => {
         setStartActor(JSON.parse(savedStart));
         setTargetActor(JSON.parse(savedTarget));
         setGameState('ready');
+        // Dispatch game state change event
+        window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
         if (savedRandomizeCount) {
           setRandomizeCount(parseInt(savedRandomizeCount, 10));
         }
@@ -88,6 +90,8 @@ const DailyPuzzle = () => {
               variant: "destructive",
             });
             // Randomize actors when time runs out
+            setGameState('ready');
+            window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
             loadRandomActors();
             return 0;
           }
@@ -126,6 +130,8 @@ const DailyPuzzle = () => {
       localStorage.setItem('dp_targetActor', JSON.stringify(data.actors[1]));
       localStorage.setItem('dp_randomizeCount', newCount.toString());
       setGameState('ready');
+      // Dispatch game state change event
+      window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
     } catch (error) {
       console.error('Error loading actors:', error);
       toast({
@@ -144,6 +150,9 @@ const DailyPuzzle = () => {
     localStorage.removeItem('dp_randomizeCount');
     
     setGameState('playing');
+    // Dispatch game state change event
+    window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'playing' }));
+    
     setCurrentActor(startActor);
     setPath([{
       type: 'actor',
@@ -267,6 +276,8 @@ const DailyPuzzle = () => {
       
       const wonInTime = timeTaken <= 120;
       setGameState('won');
+      // Dispatch game state change event
+      window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'won' }));
       
       if (wonInTime) {
         // Award 75 coins
@@ -316,6 +327,8 @@ const DailyPuzzle = () => {
       localStorage.removeItem('dp_targetActor');
       localStorage.removeItem('dp_randomizeCount');
       setRandomizeCount(0);
+      // Dispatch game state change event
+      window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
       setTimeout(() => {
         loadRandomActors();
       }, 2000);
@@ -342,6 +355,9 @@ const DailyPuzzle = () => {
 
   const resetGame = () => {
     setGameState('ready');
+    // Dispatch game state change event
+    window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
+    
     setCurrentActor(null);
     setFilmography([]);
     setCast([]);
@@ -771,8 +787,9 @@ const DailyPuzzle = () => {
           </Button>
           <Button 
             onClick={() => {
-              loadRandomActors();
               setGameState('loading');
+              window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'loading' }));
+              loadRandomActors();
             }}
             size="lg"
             className="flex-1 bg-gradient-to-r from-primary to-accent hover:opacity-90 min-h-[52px]"
