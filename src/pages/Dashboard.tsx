@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Glasses, Package, Menu, LogOut, Store as StoreIcon, Coins } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ type Tab = "home" | "packs" | "puzzle" | "store";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const [coins, setCoins] = useState<number>(0);
@@ -27,6 +28,36 @@ const Dashboard = () => {
       }
     });
   }, [navigate]);
+
+  // Refresh when navigating back from Companion page
+  useEffect(() => {
+    if (location.pathname === "/dashboard") {
+      loadAIUsage();
+      loadUserStats();
+    }
+  }, [location.pathname]);
+
+  // Refresh when window gains focus (user comes back to tab/window)
+  useEffect(() => {
+    const handleFocus = () => {
+      loadAIUsage();
+      loadUserStats();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Listen for custom event from Companion page
+  useEffect(() => {
+    const handleQuestionAsked = () => {
+      loadAIUsage();
+      loadUserStats();
+    };
+
+    window.addEventListener('questionAsked', handleQuestionAsked);
+    return () => window.removeEventListener('questionAsked', handleQuestionAsked);
+  }, []);
 
   const loadAIUsage = async () => {
     try {
@@ -98,10 +129,11 @@ const Dashboard = () => {
     { id: "store" as Tab, label: "Store", icon: StoreIcon },
   ];
 
-  // Refresh coins when tab changes (in case coins changed in game/store)
+  // Refresh coins and AI usage when tab changes (in case they changed in game/store)
   useEffect(() => {
     if (activeTab) {
       loadUserStats();
+      loadAIUsage();
     }
   }, [activeTab]);
 

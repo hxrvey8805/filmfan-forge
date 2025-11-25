@@ -344,6 +344,9 @@ const Companion = () => {
         setCoins(prev => Math.max(0, prev - data.usedCoins));
       }
       
+      // Dispatch custom event to notify Dashboard to refresh
+      window.dispatchEvent(new CustomEvent('questionAsked'));
+      
       const description = data.remainingFreeQuestions !== undefined && data.remainingFreeQuestions >= 0
         ? `${data.remainingFreeQuestions} free questions remaining today.`
         : data.usedCoins
