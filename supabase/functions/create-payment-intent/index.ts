@@ -59,7 +59,7 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
 
-    // Create Checkout Session (simpler than Payment Intent)
+    // Create Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -76,8 +76,8 @@ serve(async (req) => {
         },
       ],
       mode: 'payment',
-      success_url: `${Deno.env.get('SITE_URL') || 'http://localhost:5173'}/store?success=true&coins=${coinAmount}`,
-      cancel_url: `${Deno.env.get('SITE_URL') || 'http://localhost:5173'}/store?canceled=true`,
+      success_url: `${Deno.env.get('SITE_URL') || req.headers.get('origin') || 'http://localhost:5173'}/store?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${Deno.env.get('SITE_URL') || req.headers.get('origin') || 'http://localhost:5173'}/store?canceled=true`,
       metadata: {
         user_id: user.id,
         coin_amount: coinAmount.toString(),
