@@ -14,7 +14,7 @@ export const GlassesWithLenses = ({ className, ...props }: GlassesWithLensesProp
         className="absolute rounded-full bg-primary opacity-75 blur-[0.5px] pointer-events-none"
         style={{ 
           left: '30%',
-          top: '52%',
+          top: '55%',
           width: '30%',
           height: '30%',
           transform: 'translate(-50%, -50%)',
@@ -25,7 +25,7 @@ export const GlassesWithLenses = ({ className, ...props }: GlassesWithLensesProp
         className="absolute rounded-full bg-accent opacity-75 blur-[0.5px] pointer-events-none"
         style={{ 
           right: '30%',
-          top: '52%',
+          top: '55%',
           width: '30%',
           height: '30%',
           transform: 'translate(50%, -50%)',
