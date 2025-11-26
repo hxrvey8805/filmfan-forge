@@ -80,6 +80,7 @@ export type Database = {
           id: string
           is_opened: boolean
           opened_at: string | null
+          pack_tier: string
           pack_type: string
           user_id: string
         }
@@ -88,6 +89,7 @@ export type Database = {
           id?: string
           is_opened?: boolean
           opened_at?: string | null
+          pack_tier?: string
           pack_type: string
           user_id: string
         }
@@ -96,6 +98,7 @@ export type Database = {
           id?: string
           is_opened?: boolean
           opened_at?: string | null
+          pack_tier?: string
           pack_type?: string
           user_id?: string
         }
