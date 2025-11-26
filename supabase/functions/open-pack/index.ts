@@ -114,8 +114,11 @@ serve(async (req) => {
       });
     }
 
-    // Rarity tiers with weighted odds
-    const RARITY_TIERS = [
+    // Get pack tier (default to 'standard' for backward compatibility)
+    const packTier = pack.pack_tier || 'standard';
+    
+    // Base rarity tiers with weighted odds
+    const BASE_RARITY_TIERS = [
       { name: 'Legendary', min: 60, max: 1000, weight: 5 },
       { name: 'A-List', min: 40, max: 60, weight: 10 },
       { name: 'Established', min: 25, max: 40, weight: 20 },
@@ -124,8 +127,33 @@ serve(async (req) => {
       { name: 'Minor', min: 0, max: 5, weight: 10 },
     ];
 
+    // Adjust weights based on pack tier
+    let RARITY_TIERS;
+    if (packTier === 'premium') {
+      // Premium: 3x better odds for top 3 tiers
+      RARITY_TIERS = [
+        { name: 'Legendary', min: 60, max: 1000, weight: 15 },      // 5 → 15 (3x)
+        { name: 'A-List', min: 40, max: 60, weight: 30 },          // 10 → 30 (3x)
+        { name: 'Established', min: 25, max: 40, weight: 60 },     // 20 → 60 (3x)
+        { name: 'Professional', min: 15, max: 25, weight: 20 },  // 30 → 20 (reduced)
+        { name: 'Emerging', min: 5, max: 15, weight: 10 },        // 25 → 10 (reduced)
+        { name: 'Minor', min: 0, max: 5, weight: 5 },              // 10 → 5 (reduced)
+      ];
+    } else {
+      // Standard: Reduced odds for top tiers
+      RARITY_TIERS = [
+        { name: 'Legendary', min: 60, max: 1000, weight: 2 },       // 5 → 2 (reduced)
+        { name: 'A-List', min: 40, max: 60, weight: 5 },           // 10 → 5 (reduced)
+        { name: 'Established', min: 25, max: 40, weight: 10 },     // 20 → 10 (reduced)
+        { name: 'Professional', min: 15, max: 25, weight: 30 },   // 30 → 30 (unchanged)
+        { name: 'Emerging', min: 5, max: 15, weight: 35 },         // 25 → 35 (increased)
+        { name: 'Minor', min: 0, max: 5, weight: 18 },             // 10 → 18 (increased)
+      ];
+    }
+
     const selectTier = () => {
-      const roll = Math.random() * 100;
+      const totalWeight = RARITY_TIERS.reduce((sum, t) => sum + t.weight, 0);
+      const roll = Math.random() * totalWeight;
       let acc = 0;
       for (const t of RARITY_TIERS) {
         acc += t.weight;

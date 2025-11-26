@@ -81,6 +81,7 @@ export type Database = {
           is_opened: boolean
           opened_at: string | null
           pack_type: string
+          pack_tier: string
           user_id: string
         }
         Insert: {
@@ -89,6 +90,7 @@ export type Database = {
           is_opened?: boolean
           opened_at?: string | null
           pack_type: string
+          pack_tier?: string
           user_id: string
         }
         Update: {
@@ -97,6 +99,7 @@ export type Database = {
           is_opened?: boolean
           opened_at?: string | null
           pack_type?: string
+          pack_tier?: string
           user_id?: string
         }
         Relationships: []

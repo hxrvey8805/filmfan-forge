@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Index from "./Index";
 import Packs from "./Packs";
 import DailyPuzzle from "./DailyPuzzle";
@@ -188,69 +189,90 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col pb-20">
-      {/* Header */}
-      <header className="border-b border-border bg-card/95 backdrop-blur-lg sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-5 py-4 safe-area-inset-top flex justify-between items-center">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            CineGeek
-          </h1>
-          <div className="flex items-center gap-3">
-            {/* Minimal Spoiler-Free Companion Limit Display */}
-            {remainingFree !== null && (
-              <div className="relative w-10 h-10">
-                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  {/* Background circle */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="currentColor"
-                    strokeWidth="6"
-                    fill="none"
-                    className="text-primary/20"
-                  />
-                  {/* Progress circle */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="url(#header-gradient)"
-                    strokeWidth="6"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeDasharray={`${2 * Math.PI * 40}`}
-                    strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
-                    className="transition-all duration-1000 ease-out"
-                  />
-                  <defs>
-                    <linearGradient id="header-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="hsl(var(--primary))" />
-                      <stop offset="100%" stopColor="hsl(var(--accent))" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="text-xs font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
-                      {remainingFree}
+    <TooltipProvider>
+      <div className="min-h-screen bg-background text-foreground flex flex-col pb-20">
+        {/* Header */}
+        <header className="border-b border-border bg-card/95 backdrop-blur-lg sticky top-0 z-50 shadow-sm">
+          <div className="container mx-auto px-5 py-4 safe-area-inset-top flex justify-between items-center">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              CineGeek
+            </h1>
+            <div className="flex items-center gap-3">
+              {/* Minimal Spoiler-Free Companion Limit Display */}
+              {remainingFree !== null && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="relative w-10 h-10 cursor-help">
+                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                        {/* Background circle */}
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          stroke="currentColor"
+                          strokeWidth="6"
+                          fill="none"
+                          className="text-primary/20"
+                        />
+                        {/* Progress circle */}
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          stroke="url(#header-gradient)"
+                          strokeWidth="6"
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeDasharray={`${2 * Math.PI * 40}`}
+                          strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
+                          className="transition-all duration-1000 ease-out"
+                        />
+                        <defs>
+                          <linearGradient id="header-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="hsl(var(--primary))" />
+                            <stop offset="100%" stopColor="hsl(var(--accent))" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-xs font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
+                            {remainingFree}
+                          </div>
+                          <div className="text-[8px] text-muted-foreground leading-none">/5</div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-[8px] text-muted-foreground leading-none">/5</div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-sm">
+                      {remainingFree > 0 
+                        ? `${remainingFree} free question${remainingFree !== 1 ? 's' : ''} remaining today. After that, questions cost 150 coins each.`
+                        : 'No free questions remaining. Visit the Store to purchase questions for 150 coins, or play Actor Connect to earn coins.'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {/* Coins Display */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card/80 border border-border/50 cursor-help">
+                    <Coins className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-bold">{coins}</span>
                   </div>
-                </div>
-              </div>
-            )}
-            {/* Coins Display */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card/80 border border-border/50">
-              <Coins className="h-4 w-4 text-primary" />
-              <span className="text-sm font-bold">{coins}</span>
-            </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-sm">
+                    Your coin balance. Use coins to purchase packs from the Store or buy additional spoiler-free questions. Earn coins by winning Actor Connect games or selling cards.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="h-5 w-5" />
             </Button>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
       {/* Main Content */}
       <main className="flex-1 container mx-auto px-5 py-5">
@@ -293,7 +315,8 @@ const Dashboard = () => {
           </div>
         </div>
       </nav>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 };
 
