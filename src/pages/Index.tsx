@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Glasses } from "lucide-react";
+import { GlassesWithLenses } from "@/components/GlassesWithLenses";
 import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
@@ -580,7 +580,7 @@ const Index = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Glasses className="h-8 w-8 animate-spin text-primary" />
+        <GlassesWithLenses className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
