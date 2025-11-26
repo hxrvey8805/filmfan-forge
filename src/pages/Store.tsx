@@ -21,19 +21,10 @@ const Store = () => {
     // Handle Stripe Checkout return
     const success = searchParams.get('success');
     const canceled = searchParams.get('canceled');
-    const coinAmount = searchParams.get('coins');
+    const sessionId = searchParams.get('session_id');
 
-    if (success === 'true' && coinAmount) {
-      toast({
-        title: "Payment successful!",
-        description: `Your ${coinAmount} coins will be added shortly. Refreshing...`,
-      });
-      // Remove query params
-      setSearchParams({});
-      // Refresh coins after a delay (webhook should process)
-      setTimeout(() => {
-        loadUserStats();
-      }, 2000);
+    if (success === 'true' && sessionId) {
+      verifyPayment(sessionId);
     } else if (canceled === 'true') {
       toast({
         title: "Payment canceled",
@@ -43,6 +34,41 @@ const Store = () => {
       setSearchParams({});
     }
   }, [searchParams, toast, setSearchParams]);
+
+  const verifyPayment = async (sessionId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase.functions.invoke('verify-payment', {
+        body: { sessionId },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error || !data?.success) {
+        throw new Error(error?.message || 'Failed to verify payment');
+      }
+
+      toast({
+        title: "Payment successful!",
+        description: `${data.coinsAdded} coins added to your account!`,
+      });
+      
+      setCoins(data.newBalance);
+      setSearchParams({});
+    } catch (error: any) {
+      console.error('Error verifying payment:', error);
+      toast({
+        title: "Verification failed",
+        description: "Payment succeeded but coins may take a moment to appear. Please refresh if needed.",
+        variant: "destructive"
+      });
+      setSearchParams({});
+      loadUserStats();
+    }
+  };
 
   const loadUserStats = async () => {
     try {
