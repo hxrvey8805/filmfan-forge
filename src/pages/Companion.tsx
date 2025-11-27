@@ -324,10 +324,19 @@ const Companion = () => {
         
         if (error.status === 429) {
           const errorData = error.data || error;
-          const retryAfter = errorData.retryAfter || 30;
+          const retryAfter = errorData.retryAfter || 10;
           toast({
-            title: "Service Busy",
-            description: errorData.error || `The AI service is experiencing high demand. Please wait ${retryAfter} seconds and try again.`,
+            title: "Too Many Requests",
+            description: errorData.error || `Please wait ${retryAfter} seconds and try again.`,
+            variant: "destructive"
+          });
+          return;
+        }
+        
+        if (error.status === 402) {
+          toast({
+            title: "Service Unavailable",
+            description: "AI service credits exhausted. Please contact support.",
             variant: "destructive"
           });
           return;
