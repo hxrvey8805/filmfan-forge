@@ -5,7 +5,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Index from "./Index";
 import Packs from "./Packs";
 import DailyPuzzle from "./DailyPuzzle";
@@ -20,6 +19,7 @@ const Dashboard = () => {
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const [coins, setCoins] = useState<number>(0);
   const [isGamePlaying, setIsGamePlaying] = useState(false);
+  const [hoveredElement, setHoveredElement] = useState<'questions' | 'coins' | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -190,7 +190,6 @@ const Dashboard = () => {
   };
 
   return (
-    <TooltipProvider>
       <div className="min-h-screen bg-background text-foreground flex flex-col pb-20">
         {/* Header */}
         <header className="border-b border-border bg-card/95 backdrop-blur-lg sticky top-0 z-50 shadow-sm">
@@ -198,76 +197,113 @@ const Dashboard = () => {
             <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
               CineGeek
             </h1>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 relative">
               {/* Minimal Spoiler-Free Companion Limit Display */}
               {remainingFree !== null && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="relative w-10 h-10 cursor-help">
-                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                        {/* Background circle */}
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          stroke="currentColor"
-                          strokeWidth="6"
-                          fill="none"
-                          className="text-primary/20"
-                        />
-                        {/* Progress circle */}
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          stroke="url(#header-gradient)"
-                          strokeWidth="6"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeDasharray={`${2 * Math.PI * 40}`}
-                          strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
-                          className="transition-all duration-1000 ease-out"
-                        />
-                        <defs>
-                          <linearGradient id="header-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="hsl(var(--primary))" />
-                            <stop offset="100%" stopColor="hsl(var(--accent))" />
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-xs font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
-                            {remainingFree}
-                          </div>
-                          <div className="text-[8px] text-muted-foreground leading-none">/5</div>
+                <div 
+                  className="relative"
+                  onMouseEnter={() => setHoveredElement('questions')}
+                  onMouseLeave={() => setHoveredElement(null)}
+                >
+                  <div className={`relative w-10 h-10 transition-all duration-300 ${hoveredElement === 'questions' ? 'scale-125 z-50' : 'scale-100'}`}>
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                      {/* Background circle */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        stroke="currentColor"
+                        strokeWidth="6"
+                        fill="none"
+                        className="text-primary/20"
+                      />
+                      {/* Progress circle */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        stroke="url(#header-gradient)"
+                        strokeWidth="6"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeDasharray={`${2 * Math.PI * 40}`}
+                        strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
+                        className="transition-all duration-1000 ease-out"
+                      />
+                      <defs>
+                        <linearGradient id="header-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="hsl(var(--primary))" />
+                          <stop offset="100%" stopColor="hsl(var(--accent))" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-xs font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
+                          {remainingFree}
                         </div>
+                        <div className="text-[8px] text-muted-foreground leading-none">/5</div>
                       </div>
                     </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-sm">
-                      {remainingFree > 0 
-                        ? `${remainingFree} free question${remainingFree !== 1 ? 's' : ''} remaining today. After that, questions cost 150 coins each.`
-                        : 'No free questions remaining. Visit the Store to purchase questions for 150 coins, or play Actor Connect to earn coins.'}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {/* Coins Display */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card/80 border border-border/50 cursor-help">
-                    <Coins className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-bold">{coins}</span>
                   </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-sm">
-                    Your coin balance. Use coins to purchase packs from the Store or buy additional spoiler-free questions. Earn coins by winning Actor Connect games or selling cards.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
+                  
+                  {/* Cinematic Popup */}
+                  {hoveredElement === 'questions' && (
+                    <div className="absolute top-full right-0 mt-3 w-72 p-4 bg-gradient-to-br from-card via-card/95 to-card border border-primary/30 rounded-xl shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                      <div className="absolute -top-2 right-6 w-4 h-4 bg-card border-l border-t border-primary/30 rotate-45"></div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                            <span className="text-sm font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                              {remainingFree}
+                            </span>
+                          </div>
+                          <h3 className="font-bold text-sm bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                            Spoiler-Free Questions
+                          </h3>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {remainingFree > 0 
+                            ? `You have ${remainingFree} free question${remainingFree !== 1 ? 's' : ''} remaining today. Once exhausted, questions cost 150 coins each.`
+                            : 'Your daily free questions are exhausted. Visit the Store to purchase more, or play Actor Connect to earn coins.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Coins Display */}
+              <div 
+                className="relative"
+                onMouseEnter={() => setHoveredElement('coins')}
+                onMouseLeave={() => setHoveredElement(null)}
+              >
+                <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card/80 border border-border/50 transition-all duration-300 ${hoveredElement === 'coins' ? 'scale-125 z-50 border-primary/50 bg-card' : 'scale-100'}`}>
+                  <Coins className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-bold">{coins}</span>
+                </div>
+                
+                {/* Cinematic Popup */}
+                {hoveredElement === 'coins' && (
+                  <div className="absolute top-full right-0 mt-3 w-72 p-4 bg-gradient-to-br from-card via-card/95 to-card border border-primary/30 rounded-xl shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                    <div className="absolute -top-2 right-6 w-4 h-4 bg-card border-l border-t border-primary/30 rotate-45"></div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                          <Coins className="h-4 w-4 text-primary" />
+                        </div>
+                        <h3 className="font-bold text-sm bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                          Coin Balance
+                        </h3>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Your cinematic currency. Use coins to purchase packs from the Store or buy additional spoiler-free questions. Earn coins by winning Actor Connect games or selling cards from your collection.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="h-5 w-5" />
             </Button>
@@ -281,7 +317,7 @@ const Dashboard = () => {
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="border-t border-border bg-card/98 backdrop-blur-lg fixed bottom-0 left-0 right-0 z-50 shadow-lg">
+      <nav className="border-t border-border bg-card/98 backdrop-blur-lg fixed bottom-0 left-0 right-0 z-40 shadow-lg">
         <div className="safe-area-inset-bottom">
           <div className="flex items-center justify-around px-4 py-4">
             {tabs.map((tab) => {
@@ -315,9 +351,8 @@ const Dashboard = () => {
             })}
           </div>
         </div>
-      </nav>
+        </nav>
       </div>
-    </TooltipProvider>
   );
 };
 
