@@ -56,6 +56,7 @@ const DailyPuzzle = () => {
   const [gameStartTime, setGameStartTime] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [randomizeCount, setRandomizeCount] = useState<number>(0);
+  const [isRandomizing, setIsRandomizing] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -114,7 +115,7 @@ const DailyPuzzle = () => {
       return;
     }
 
-    setGameState('loading');
+    setIsRandomizing(true);
     try {
       const { data, error } = await supabase.functions.invoke('actor-connect', {
         body: { action: 'getRandomActors' }
@@ -123,6 +124,10 @@ const DailyPuzzle = () => {
       if (error) throw error;
       
       const newCount = randomizeCount + 1;
+      
+      // Small delay for smooth transition
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       setStartActor(data.actors[0]);
       setTargetActor(data.actors[1]);
       setRandomizeCount(newCount);
@@ -130,11 +135,14 @@ const DailyPuzzle = () => {
       localStorage.setItem('dp_startActor', JSON.stringify(data.actors[0]));
       localStorage.setItem('dp_targetActor', JSON.stringify(data.actors[1]));
       localStorage.setItem('dp_randomizeCount', newCount.toString());
-      setGameState('ready');
-      // Dispatch game state change event
-      window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
+      
+      // Small delay before hiding loading state
+      setTimeout(() => {
+        setIsRandomizing(false);
+      }, 200);
     } catch (error) {
       console.error('Error loading actors:', error);
+      setIsRandomizing(false);
       toast({
         title: "Error",
         description: "Failed to load actors. Please try again.",
@@ -376,7 +384,7 @@ const DailyPuzzle = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (gameState === 'loading') {
+  if (gameState === 'loading' && !startActor && !targetActor) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -473,41 +481,53 @@ const DailyPuzzle = () => {
       {/* Start and Target Actors */}
       {(gameState === 'ready' || gameState === 'won') && startActor && targetActor && (
         <div className="grid grid-cols-2 gap-4 px-1">
-          <Card className="p-4 bg-gradient-to-br from-card to-secondary border-primary/50 shadow-lg">
+          <Card className="p-4 bg-gradient-to-br from-card to-secondary border-primary/50 shadow-lg relative overflow-hidden">
             <div className="space-y-3">
               <Badge variant="outline" className="bg-primary/10 text-xs font-semibold">Start</Badge>
-              <div className="aspect-square bg-muted rounded-xl flex items-center justify-center overflow-hidden shadow-md">
+              <div className="aspect-square bg-muted rounded-xl flex items-center justify-center overflow-hidden shadow-md relative">
+                {isRandomizing && (
+                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                )}
                 {startActor.profilePath ? (
                   <img
                     src={`https://image.tmdb.org/t/p/w500${startActor.profilePath}`}
                     alt={startActor.name}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover transition-opacity duration-300 ${isRandomizing ? 'opacity-0' : 'opacity-100'}`}
+                    key={startActor.id} // Force re-render on change
                   />
                 ) : (
                   <User className="h-16 w-16 text-muted-foreground" />
                 )}
               </div>
-              <div>
+              <div className={`transition-opacity duration-300 ${isRandomizing ? 'opacity-50' : 'opacity-100'}`}>
                 <p className="font-bold text-base leading-tight">{startActor.name}</p>
               </div>
             </div>
           </Card>
           
-          <Card className="p-4 bg-gradient-to-br from-card to-secondary border-accent/50 shadow-lg">
+          <Card className="p-4 bg-gradient-to-br from-card to-secondary border-accent/50 shadow-lg relative overflow-hidden">
             <div className="space-y-3">
               <Badge variant="outline" className="bg-accent/10 text-xs font-semibold">Target</Badge>
-              <div className="aspect-square bg-muted rounded-xl flex items-center justify-center overflow-hidden shadow-md">
+              <div className="aspect-square bg-muted rounded-xl flex items-center justify-center overflow-hidden shadow-md relative">
+                {isRandomizing && (
+                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-accent" />
+                  </div>
+                )}
                 {targetActor.profilePath ? (
                   <img
                     src={`https://image.tmdb.org/t/p/w500${targetActor.profilePath}`}
                     alt={targetActor.name}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover transition-opacity duration-300 ${isRandomizing ? 'opacity-0' : 'opacity-100'}`}
+                    key={targetActor.id} // Force re-render on change
                   />
                 ) : (
                   <User className="h-16 w-16 text-muted-foreground" />
                 )}
               </div>
-              <div>
+              <div className={`transition-opacity duration-300 ${isRandomizing ? 'opacity-50' : 'opacity-100'}`}>
                 <p className="font-bold text-base leading-tight">{targetActor.name}</p>
               </div>
             </div>
