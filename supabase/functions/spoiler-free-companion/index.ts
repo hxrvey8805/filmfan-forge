@@ -751,8 +751,12 @@ Answer the question with appropriate depth. If it's a simple question, be direct
 
     if (!response.ok) {
       if (response.status === 429) {
+        console.error('AI service rate limit hit');
         return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+          JSON.stringify({ 
+            error: 'The AI service is experiencing high demand. Please wait 30 seconds and try again.',
+            retryAfter: 30
+          }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
