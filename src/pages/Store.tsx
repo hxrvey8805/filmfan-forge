@@ -393,8 +393,8 @@ const Store = () => {
               </h3>
             </div>
             <Card className="p-5 bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/30 shadow-lg hover:shadow-xl transition-shadow">
-              <div className="flex items-center gap-4">
-                <div className="p-4 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="p-4 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg shrink-0">
                   <MessageSquareQuote className="h-9 w-9 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -411,7 +411,7 @@ const Store = () => {
                   onClick={handlePurchaseQuestion}
                   disabled={coins < 150 || purchasing === 'question'}
                   size="lg"
-                  className="bg-gradient-to-r from-primary to-accent hover:opacity-90 shrink-0 min-h-[48px] px-6"
+                  className="bg-gradient-to-r from-primary to-accent hover:opacity-90 w-full sm:w-auto min-h-[48px] px-6"
                 >
                   {purchasing === 'question' ? 'Purchasing...' : 'Buy Question'}
                 </Button>
@@ -429,31 +429,33 @@ const Store = () => {
                 Actor Packs
               </h3>
             </div>
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Standard Actor Pack */}
               <Card className="p-5 bg-gradient-to-r from-primary/10 to-accent/10 border-border shadow-md hover:shadow-lg transition-shadow">
-                <div className="flex items-center gap-4">
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
-                    <Sparkles className="h-9 w-9 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold text-lg tracking-tight">Actor Pack</h3>
-                      <Badge variant="outline" className="text-xs">Standard</Badge>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
+                      <Sparkles className="h-7 w-7 text-white" />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Contains a random actor with standard odds
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Coins className="h-4 w-4 text-primary" />
-                      <span className="font-semibold">50 coins</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-lg tracking-tight">Actor Pack</h3>
+                        <Badge variant="outline" className="text-xs">Standard</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Coins className="h-4 w-4 text-primary" />
+                        <span className="font-semibold">50 coins</span>
+                      </div>
                     </div>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    Contains a random actor with standard odds
+                  </p>
                   <Button
                     onClick={() => handlePurchase('actor', 'standard', 50)}
                     disabled={coins < 50 || purchasing === 'actor-standard'}
                     size="lg"
-                    className="bg-gradient-to-r from-primary to-accent hover:opacity-90 shrink-0 min-h-[48px] px-6"
+                    className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 min-h-[48px]"
                   >
                     {purchasing === 'actor-standard' ? 'Purchasing...' : 'Buy Pack'}
                   </Button>
@@ -462,29 +464,31 @@ const Store = () => {
 
               {/* Premium Actor Pack */}
               <Card className="p-5 bg-gradient-to-r from-primary/20 to-accent/20 border-2 border-primary/40 shadow-lg hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-4">
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg relative">
-                    <Sparkles className="h-9 w-9 text-white" />
-                    <Star className="h-5 w-5 text-yellow-400 absolute -top-1 -right-1 fill-yellow-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold text-lg tracking-tight">Actor Pack</h3>
-                      <Badge className="bg-gradient-to-r from-primary to-accent text-white border-0">Premium</Badge>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg relative">
+                      <Sparkles className="h-7 w-7 text-white" />
+                      <Star className="h-4 w-4 text-yellow-400 absolute -top-1 -right-1 fill-yellow-400" />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Better odds for Legendary, A-List, and Established actors
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Coins className="h-4 w-4 text-primary" />
-                      <span className="font-semibold">150 coins</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-lg tracking-tight">Actor Pack</h3>
+                        <Badge className="bg-gradient-to-r from-primary to-accent text-white border-0">Premium</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Coins className="h-4 w-4 text-primary" />
+                        <span className="font-semibold">150 coins</span>
+                      </div>
                     </div>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    Better odds for Legendary, A-List, and Established actors
+                  </p>
                   <Button
                     onClick={() => handlePurchase('actor', 'premium', 150)}
                     disabled={coins < 150 || purchasing === 'actor-premium'}
                     size="lg"
-                    className="bg-gradient-to-r from-primary to-accent hover:opacity-90 shrink-0 min-h-[48px] px-6"
+                    className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 min-h-[48px]"
                   >
                     {purchasing === 'actor-premium' ? 'Purchasing...' : 'Buy Pack'}
                   </Button>
@@ -503,31 +507,33 @@ const Store = () => {
                 Director Packs
               </h3>
             </div>
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Standard Director Pack */}
               <Card className="p-5 bg-gradient-to-r from-amber-700/10 to-amber-900/10 border-border shadow-md hover:shadow-lg transition-shadow">
-                <div className="flex items-center gap-4">
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-700 to-amber-900 shadow-lg">
-                    <Crown className="h-9 w-9 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold text-lg tracking-tight">Director Pack</h3>
-                      <Badge variant="outline" className="text-xs">Standard</Badge>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-amber-700 to-amber-900 shadow-lg">
+                      <Crown className="h-7 w-7 text-white" />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Contains a random director with standard odds
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Coins className="h-4 w-4 text-amber-700" />
-                      <span className="font-semibold">50 coins</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-lg tracking-tight">Director Pack</h3>
+                        <Badge variant="outline" className="text-xs">Standard</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Coins className="h-4 w-4 text-amber-700" />
+                        <span className="font-semibold">50 coins</span>
+                      </div>
                     </div>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    Contains a random director with standard odds
+                  </p>
                   <Button
                     onClick={() => handlePurchase('director', 'standard', 50)}
                     disabled={coins < 50 || purchasing === 'director-standard'}
                     size="lg"
-                    className="bg-gradient-to-r from-amber-700 to-amber-900 hover:opacity-90 shrink-0 min-h-[48px] px-6"
+                    className="w-full bg-gradient-to-r from-amber-700 to-amber-900 hover:opacity-90 min-h-[48px]"
                   >
                     {purchasing === 'director-standard' ? 'Purchasing...' : 'Buy Pack'}
                   </Button>
@@ -536,29 +542,31 @@ const Store = () => {
 
               {/* Premium Director Pack */}
               <Card className="p-5 bg-gradient-to-r from-amber-700/20 to-amber-900/20 border-2 border-amber-700/40 shadow-lg hover:shadow-xl transition-shadow">
-                <div className="flex items-center gap-4">
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-700 to-amber-900 shadow-lg relative">
-                    <Crown className="h-9 w-9 text-white" />
-                    <Star className="h-5 w-5 text-yellow-400 absolute -top-1 -right-1 fill-yellow-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold text-lg tracking-tight">Director Pack</h3>
-                      <Badge className="bg-gradient-to-r from-amber-700 to-amber-900 text-white border-0">Premium</Badge>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-amber-700 to-amber-900 shadow-lg relative">
+                      <Crown className="h-7 w-7 text-white" />
+                      <Star className="h-4 w-4 text-yellow-400 absolute -top-1 -right-1 fill-yellow-400" />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Better odds for Legendary, A-List, and Established directors
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Coins className="h-4 w-4 text-amber-700" />
-                      <span className="font-semibold">150 coins</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-lg tracking-tight">Director Pack</h3>
+                        <Badge className="bg-gradient-to-r from-amber-700 to-amber-900 text-white border-0">Premium</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Coins className="h-4 w-4 text-amber-700" />
+                        <span className="font-semibold">150 coins</span>
+                      </div>
                     </div>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    Better odds for Legendary, A-List, and Established directors
+                  </p>
                   <Button
                     onClick={() => handlePurchase('director', 'premium', 150)}
                     disabled={coins < 150 || purchasing === 'director-premium'}
                     size="lg"
-                    className="bg-gradient-to-r from-amber-700 to-amber-900 hover:opacity-90 shrink-0 min-h-[48px] px-6"
+                    className="w-full bg-gradient-to-r from-amber-700 to-amber-900 hover:opacity-90 min-h-[48px]"
                   >
                     {purchasing === 'director-premium' ? 'Purchasing...' : 'Buy Pack'}
                   </Button>
