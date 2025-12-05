@@ -105,11 +105,12 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
             skipSnaps: false,
             dragFree: false,
             containScroll: "trimSnaps",
-            dragThreshold: 5,
+            dragThreshold: 10,
             watchDrag: true,
             watchResize: true,
             loop: false,
             duration: 25,
+            watchSlides: true,
           }}
           className="w-full"
         >
