@@ -103,10 +103,17 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
           opts={{
             align: "start",
             skipSnaps: false,
+            dragFree: false,
+            containScroll: "trimSnaps",
+            dragThreshold: 5,
+            watchDrag: true,
+            watchResize: true,
+            loop: false,
+            duration: 25,
           }}
           className="w-full"
         >
-          <CarouselContent className="-ml-3">
+          <CarouselContent className="-ml-3 touch-pan-x">
             {items.map((item) => (
               <CarouselItem
                 key={item.id}
