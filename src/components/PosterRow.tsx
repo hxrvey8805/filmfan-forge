@@ -103,13 +103,13 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
           opts={{
             align: "start",
             skipSnaps: false,
-            dragFree: true,
+            dragFree: false,
             containScroll: "trimSnaps",
-            dragThreshold: 0,
+            dragThreshold: 5,
             watchDrag: true,
             watchResize: true,
             loop: false,
-            duration: 25,
+            duration: 20,
             watchSlides: true,
             slidesToScroll: 1,
           }}
