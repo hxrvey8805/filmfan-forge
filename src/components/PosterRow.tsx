@@ -103,16 +103,15 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
           opts={{
             align: "start",
             skipSnaps: false,
-            dragFree: false,
+            dragFree: true,
             containScroll: "trimSnaps",
-            dragThreshold: 3,
+            dragThreshold: 2,
             watchDrag: true,
             watchResize: true,
             loop: false,
-            duration: 15,
+            duration: 20,
             watchSlides: true,
             slidesToScroll: 1,
-            inViewThreshold: 0.7,
           }}
           className="w-full"
         >
@@ -126,7 +125,7 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
                   <button
                     onClick={() => onPosterClick(item)}
                     className="w-full h-full active:scale-95 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-                    style={{ touchAction: 'pan-x pan-y' }}
+                    style={{ touchAction: 'pan-x', WebkitUserSelect: 'none', userSelect: 'none' }}
                   >
                     <img
                       src={item.posterPath}
