@@ -98,14 +98,14 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
         <h2 className="text-xl font-bold tracking-tight">{title}</h2>
       </div>
 
-      <div className="relative overflow-visible">
+      <div className="relative">
         <Carousel
           opts={{
             align: "start",
             skipSnaps: false,
-            dragFree: false,
+            dragFree: true,
             containScroll: "trimSnaps",
-            dragThreshold: 5,
+            dragThreshold: 2,
             watchDrag: true,
             watchResize: true,
             loop: false,
@@ -115,11 +115,11 @@ const PosterRow = ({ title, items, onPosterClick, onAddClick, onDeleteClick, fil
           }}
           className="w-full"
         >
-          <CarouselContent className="touch-pan-x">
-            {items.map((item, index) => (
+          <CarouselContent className="-ml-3 touch-pan-x">
+            {items.map((item) => (
               <CarouselItem
                 key={item.id}
-                className={`${onAddClick ? "basis-[42%] sm:basis-1/3 md:basis-1/6" : "basis-[32%] sm:basis-1/4 md:basis-1/5"}`}
+                className={`pl-3 ${onAddClick ? "basis-[42%] sm:basis-1/3 md:basis-1/6" : "basis-[32%] sm:basis-1/4 md:basis-1/5"}`}
               >
                 <div className="group relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-card shadow-md hover:shadow-xl transition-shadow">
                   <button
