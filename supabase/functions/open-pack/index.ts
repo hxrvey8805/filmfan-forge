@@ -102,6 +102,7 @@ serve(async (req) => {
     const currentTypeCount = collectionByType[pack.pack_type] || 0;
     
     if (currentTypeCount >= COLLECTION_LIMIT) {
+      console.log(`Collection full for ${pack.pack_type}: ${currentTypeCount}/${COLLECTION_LIMIT}`);
       return new Response(JSON.stringify({ 
         error: 'COLLECTION_FULL',
         message: `Your ${pack.pack_type} collection is full (${COLLECTION_LIMIT}/${COLLECTION_LIMIT}). Please sell a card or reject this one.`,

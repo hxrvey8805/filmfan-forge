@@ -265,18 +265,22 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
         body: { packId }
       });
 
-      if (error) {
-        // Check if it's a collection full error - handle multiple error formats
-        const errorMessage = error.message || error.error || JSON.stringify(error);
+      console.log('open-pack response:', { data, error });
+
+      // Check for collection full in both error AND data (edge function may return 409 as successful response)
+      const isCollectionFullInData = data?.error === 'COLLECTION_FULL';
+      
+      if (error || isCollectionFullInData) {
+        const errorData = isCollectionFullInData ? data : (error?.context?.body ? JSON.parse(error.context.body) : error);
+        console.log('Error data parsed:', errorData);
+        
+        // Check if it's a collection full error
         const isCollectionFull = 
-          errorMessage?.includes('COLLECTION_FULL') || 
-          error.error === 'COLLECTION_FULL' ||
-          error.status === 409; // Conflict status code
+          errorData?.error === 'COLLECTION_FULL' ||
+          isCollectionFullInData;
         
         if (isCollectionFull) {
-          // Try to extract pack type from error data
-          const errorData = error.data || error;
-          const packTypeFromError = errorData.packType || errorData.pack_type;
+          const packTypeFromError = errorData?.packType || errorData?.pack_type;
           
           // If we can't get pack type from error, we need to get it from the pack
           let detectedPackType = packTypeFromError;
@@ -299,10 +303,11 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
           return;
         }
         
-        // For other errors, show error toast but don't close modal
+        // For other errors, show error toast
+        const errorMessage = errorData?.message || errorData?.error || error?.message || "Failed to open pack";
         toast({
           title: "Error opening pack",
-          description: errorMessage || "Failed to open pack",
+          description: errorMessage,
           variant: "destructive"
         });
         onClose();
