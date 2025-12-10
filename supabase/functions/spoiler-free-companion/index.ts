@@ -10,7 +10,7 @@ const corsHeaders = {
 // Configurable parameters
 const EPISODE_CONTEXT_WINDOW = 5;  // how many previous episodes to pull for TV shows
 const MAX_SUBTITLE_LINES_PER_EPISODE = 200; // limit lines per episode/movie to manage token count
-const AI_MODEL = 'google/gemini-2.5-flash'; // Lovable AI model - reliable and fast
+const AI_MODEL = 'llama-3.3-70b-versatile'; // Groq model - fast and accurate
 
 // In-memory subtitle cache
 const subtitleCache = new Map<string, string>();
@@ -366,53 +366,16 @@ async function fetchSubtitles({
 }
 
 // Format subtitle entries into readable text
-function formatSubtitles(entries: SubtitleEntry[], label: string, maxLines?: number): string {
+function formatSubtitles(entries: SubtitleEntry[], label: string): string {
   if (entries.length === 0) return '';
   
-  const limit = maxLines || MAX_SUBTITLE_LINES_PER_EPISODE;
   // Sample subtitles evenly if too many to fit token limits
-  const sampled = entries.length > limit
-    ? entries.filter((_, i) => i % Math.ceil(entries.length / limit) === 0)
+  const sampled = entries.length > MAX_SUBTITLE_LINES_PER_EPISODE
+    ? entries.filter((_, i) => i % Math.ceil(entries.length / MAX_SUBTITLE_LINES_PER_EPISODE) === 0)
     : entries;
   
   const text = sampled.map(e => e.text).join(' ');
   return `**${label}:**\n${text}`;
-}
-
-// Fetch TMDB episode summaries for previous seasons
-async function getPreviousSeasonSummaries(
-  tmdbId: number,
-  currentSeason: number,
-  apiKey: string
-): Promise<string[]> {
-  const summaries: string[] = [];
-  
-  try {
-    // Fetch all previous seasons (from currentSeason - 1 down to 1)
-    for (let season = currentSeason - 1; season >= 1; season--) {
-      const seasonUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}?api_key=${apiKey}`;
-      const response = await fetch(seasonUrl);
-      
-      if (response.ok) {
-        const seasonData = await response.json();
-        const episodes = seasonData.episodes || [];
-        
-        // Format each episode summary
-        for (const episode of episodes) {
-          if (episode.overview) {
-            summaries.push(`**S${season}E${episode.episode_number}: ${episode.name || 'Episode ' + episode.episode_number}**\n${episode.overview}`);
-          }
-        }
-        
-        // Small delay to avoid rate limiting
-        await delay(200);
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching previous season summaries:', error);
-  }
-  
-  return summaries;
 }
 
 // Fetch multi-episode context for TV shows
@@ -421,31 +384,20 @@ async function getTVContext(
   currentSeason: number,
   currentEpisode: number,
   currentTimestamp: number,
-  apiKey: string,
-  tmdbApiKey?: string
+  apiKey: string
 ): Promise<{ priorContext: string[], currentContext: string }> {
   const priorContext: string[] = [];
   let currentContext = '';
   
-  // 1. Fetch previous season summaries from TMDB (lightweight, fast)
-  if (tmdbApiKey && currentSeason > 1) {
-    console.log(`Fetching summaries for previous seasons (S1 to S${currentSeason - 1})`);
-    const previousSeasonSummaries = await getPreviousSeasonSummaries(tmdbId, currentSeason, tmdbApiKey);
-    if (previousSeasonSummaries.length > 0) {
-      priorContext.push(`**PREVIOUS SEASONS (S1 to S${currentSeason - 1}) - Episode Summaries:**\n${previousSeasonSummaries.join('\n\n')}`);
-    }
-  }
-  
-  // 2. Fetch all episodes from current season (E1 to current-1) with smart sampling
-  // More recent episodes get full context, older episodes get sampled more aggressively
+  // Fetch previous episodes
   const episodesToFetch: Array<{season: number, episode: number}> = [];
-  for (let ep = 1; ep < currentEpisode; ep++) {
+  for (let ep = currentEpisode - 1; ep >= Math.max(1, currentEpisode - EPISODE_CONTEXT_WINDOW); ep--) {
     episodesToFetch.push({ season: currentSeason, episode: ep });
   }
   
-  console.log(`Fetching ${episodesToFetch.length} episodes from current season (S${currentSeason}E1 to S${currentSeason}E${currentEpisode - 1})`);
+  console.log(`Fetching ${episodesToFetch.length} prior episodes for context`);
   
-  for (const { season, episode } of episodesToFetch) {
+  for (const { season, episode } of episodesToFetch.reverse()) {
     const entries = await fetchSubtitles({
       mediaType: 'tv',
       tmdbId,
@@ -454,12 +406,7 @@ async function getTVContext(
       episodeNumber: episode,
     });
     if (entries && entries.length > 0) {
-      // Smart sampling: recent episodes get more lines, older episodes get fewer
-      // Episodes close to current get 200 lines, episodes far back get 100 lines
-      const distanceFromCurrent = currentEpisode - episode;
-      const maxLines = distanceFromCurrent <= 3 ? MAX_SUBTITLE_LINES_PER_EPISODE : Math.max(100, MAX_SUBTITLE_LINES_PER_EPISODE - (distanceFromCurrent * 20));
-      
-      const formatted = formatSubtitles(entries, `S${season}E${episode}`, maxLines);
+      const formatted = formatSubtitles(entries, `S${season}E${episode}`);
       if (formatted) {
         priorContext.push(formatted);
       }
@@ -468,7 +415,7 @@ async function getTVContext(
     await delay(300);
   }
   
-  // 3. Fetch current episode up to timestamp (full context)
+  // Fetch current episode up to timestamp
   const currentEntries = await fetchSubtitles({
     mediaType: 'tv',
     tmdbId,
@@ -699,12 +646,12 @@ serve(async (req) => {
         .eq('user_id', user.id);
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
     const OPENSUBTITLES_API_KEY = Deno.env.get('OPENSUBTITLES_API_KEY');
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    if (!GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is not configured');
     }
     if (!OPENSUBTITLES_API_KEY) {
       throw new Error('OPENSUBTITLES_API_KEY is not configured');
@@ -727,7 +674,7 @@ serve(async (req) => {
     let priorContext: string[] = [];
     
     if (mediaType === 'tv') {
-      const tvContext = await getTVContext(tmdbId, seasonNumber!, episodeNumber!, currentSeconds, OPENSUBTITLES_API_KEY, TMDB_API_KEY);
+      const tvContext = await getTVContext(tmdbId, seasonNumber!, episodeNumber!, currentSeconds, OPENSUBTITLES_API_KEY);
       priorContext = tvContext.priorContext;
       subtitleContext = tvContext.currentContext;
     } else {
@@ -842,10 +789,10 @@ Synthesize information from all available sources (subtitles, metadata, and your
       model: AI_MODEL,
     });
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -854,14 +801,14 @@ Synthesize information from all available sources (subtitles, metadata, and your
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.6,
-        max_tokens: 800,
+        temperature: 0.6, // Slightly higher for more confident, natural responses while maintaining accuracy
+        max_tokens: 800, // Allow for longer answers when needed for in-depth questions
       }),
     });
 
     if (!response.ok) {
       if (response.status === 429) {
-        console.error('Lovable AI rate limit hit');
+        console.error('AI service rate limit hit');
         return new Response(
           JSON.stringify({ 
             error: 'The AI service is experiencing high demand. Please wait 30 seconds and try again.',
@@ -870,19 +817,10 @@ Synthesize information from all available sources (subtitles, metadata, and your
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      if (response.status === 402) {
-        console.error('Lovable AI payment required');
-        return new Response(
-          JSON.stringify({ 
-            error: 'AI service credits exhausted. Please try again later.'
-          }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
       
       const errorText = await response.text();
-      console.error('Lovable AI error:', response.status, errorText);
-      throw new Error(`AI API error: ${response.status}`);
+      console.error('Groq API error:', response.status, errorText);
+      throw new Error(`Groq API error: ${response.status}`);
     }
 
     const data = await response.json();
