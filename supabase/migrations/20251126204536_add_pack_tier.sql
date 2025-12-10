@@ -9,3 +9,6 @@ UPDATE public.user_packs SET pack_tier = 'standard' WHERE pack_tier IS NULL;
 -- Create index for faster queries
 CREATE INDEX idx_user_packs_tier ON public.user_packs(user_id, pack_type, pack_tier);
 
+
+
+

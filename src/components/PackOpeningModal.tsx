@@ -271,7 +271,41 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
       const isCollectionFullInData = data?.error === 'COLLECTION_FULL';
       
       if (error || isCollectionFullInData) {
-        const errorData = isCollectionFullInData ? data : (error?.context?.body ? JSON.parse(error.context.body) : error);
+        let errorData: any = error || {};
+        
+        if (isCollectionFullInData) {
+          // Error is in the data response
+          errorData = data;
+        } else if (error) {
+          // Try to parse error response safely
+          try {
+            // Check if error.context.body exists and is a string
+            if (error.context?.body) {
+              if (typeof error.context.body === 'string') {
+                errorData = JSON.parse(error.context.body);
+              } else {
+                // Already an object
+                errorData = error.context.body;
+              }
+            } else if (error.message) {
+              // Try to parse error.message if it's a JSON string
+              try {
+                errorData = JSON.parse(error.message);
+              } catch {
+                // Not JSON, use error as-is
+                errorData = error;
+              }
+            } else {
+              // Use error object directly
+              errorData = error;
+            }
+          } catch (parseError) {
+            console.error('Error parsing error response:', parseError);
+            // Fallback to error object
+            errorData = error;
+          }
+        }
+        
         console.log('Error data parsed:', errorData);
         
         // Check if it's a collection full error
@@ -304,10 +338,22 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
         }
         
         // For other errors, show error toast
-        const errorMessage = errorData?.message || errorData?.error || error?.message || "Failed to open pack";
+        const errorMessage = errorData?.message || errorData?.error || error?.message || error?.toString() || "Failed to open pack";
         toast({
           title: "Error opening pack",
-          description: errorMessage,
+          description: typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage),
+          variant: "destructive"
+        });
+        onClose();
+        return;
+      }
+
+      // Validate response structure
+      if (!data || !data.person) {
+        console.error('Invalid response structure:', data);
+        toast({
+          title: "Error opening pack",
+          description: "Received invalid response from server",
           variant: "destructive"
         });
         onClose();

@@ -99,13 +99,19 @@ serve(async (req) => {
 
     // Check collection limit (5 per type) - ENFORCE STRICTLY
     const COLLECTION_LIMIT = 5;
-    const currentTypeCount = collectionByType[pack.pack_type] || 0;
+    const currentTypeCount = Number(collectionByType[pack.pack_type] || 0);
     
-    if (currentTypeCount >= COLLECTION_LIMIT) {
+    console.log(`Checking limit for pack_type: ${pack.pack_type}, currentTypeCount: ${currentTypeCount}, limit: ${COLLECTION_LIMIT}`);
+    
+    // Only prevent if we already have 5 or more cards (should allow exactly 5)
+    // If currentTypeCount is 4, we can add a 5th card (4 >= 5 is false, allow)
+    // If currentTypeCount is 5, we cannot add a 6th card (5 >= 5 is true, prevent)
+    // Ensure we're comparing numbers explicitly
+    if (Number(currentTypeCount) >= Number(COLLECTION_LIMIT)) {
       console.log(`Collection full for ${pack.pack_type}: ${currentTypeCount}/${COLLECTION_LIMIT}`);
       return new Response(JSON.stringify({ 
         error: 'COLLECTION_FULL',
-        message: `Your ${pack.pack_type} collection is full (${COLLECTION_LIMIT}/${COLLECTION_LIMIT}). Please sell a card or reject this one.`,
+        message: `Your ${pack.pack_type} collection is full (${currentTypeCount}/${COLLECTION_LIMIT}). Please sell a card or reject this one.`,
         collectionCount: currentTypeCount,
         limit: COLLECTION_LIMIT,
         packType: pack.pack_type

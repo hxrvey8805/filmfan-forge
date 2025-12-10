@@ -18,6 +18,10 @@ BEGIN
     AND person_type = NEW.person_type;
   
   -- If already at or above limit, prevent insert
+  -- current_count is the count BEFORE this insert
+  -- We want to allow exactly max_limit cards (5), so we prevent if current_count >= max_limit
+  -- This means: if you have 4 cards, you can add a 5th (4 >= 5 is false, allow)
+  --            if you have 5 cards, you cannot add a 6th (5 >= 5 is true, prevent)
   IF current_count >= max_limit THEN
     RAISE EXCEPTION 'Collection limit exceeded: You already have % % cards. Maximum allowed is %. Please sell a card first.', 
       current_count, NEW.person_type, max_limit;

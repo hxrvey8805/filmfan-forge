@@ -64,6 +64,10 @@ BEGIN
   WHERE user_id = NEW.user_id
     AND person_type = NEW.person_type;
   
+  -- Prevent insert if we're already at or over the limit
+  -- current_count is BEFORE this insert, so:
+  -- - If current_count = 4 and max_limit = 5: 4 >= 5 is false, allow insert (you'll have 5 cards) ✓
+  -- - If current_count = 5 and max_limit = 5: 5 >= 5 is true, prevent insert (stay at 5 cards) ✓
   IF current_count >= max_limit THEN
     RAISE EXCEPTION 'Collection limit exceeded: You already have % % cards. Maximum allowed is %. Please sell a card first.',
       current_count, NEW.person_type, max_limit;
