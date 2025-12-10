@@ -366,16 +366,53 @@ async function fetchSubtitles({
 }
 
 // Format subtitle entries into readable text
-function formatSubtitles(entries: SubtitleEntry[], label: string): string {
+function formatSubtitles(entries: SubtitleEntry[], label: string, maxLines?: number): string {
   if (entries.length === 0) return '';
   
+  const limit = maxLines || MAX_SUBTITLE_LINES_PER_EPISODE;
   // Sample subtitles evenly if too many to fit token limits
-  const sampled = entries.length > MAX_SUBTITLE_LINES_PER_EPISODE
-    ? entries.filter((_, i) => i % Math.ceil(entries.length / MAX_SUBTITLE_LINES_PER_EPISODE) === 0)
+  const sampled = entries.length > limit
+    ? entries.filter((_, i) => i % Math.ceil(entries.length / limit) === 0)
     : entries;
   
   const text = sampled.map(e => e.text).join(' ');
   return `**${label}:**\n${text}`;
+}
+
+// Fetch TMDB episode summaries for previous seasons
+async function getPreviousSeasonSummaries(
+  tmdbId: number,
+  currentSeason: number,
+  apiKey: string
+): Promise<string[]> {
+  const summaries: string[] = [];
+  
+  try {
+    // Fetch all previous seasons (from currentSeason - 1 down to 1)
+    for (let season = currentSeason - 1; season >= 1; season--) {
+      const seasonUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}?api_key=${apiKey}`;
+      const response = await fetch(seasonUrl);
+      
+      if (response.ok) {
+        const seasonData = await response.json();
+        const episodes = seasonData.episodes || [];
+        
+        // Format each episode summary
+        for (const episode of episodes) {
+          if (episode.overview) {
+            summaries.push(`**S${season}E${episode.episode_number}: ${episode.name || 'Episode ' + episode.episode_number}**\n${episode.overview}`);
+          }
+        }
+        
+        // Small delay to avoid rate limiting
+        await delay(200);
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching previous season summaries:', error);
+  }
+  
+  return summaries;
 }
 
 // Fetch multi-episode context for TV shows
@@ -384,20 +421,31 @@ async function getTVContext(
   currentSeason: number,
   currentEpisode: number,
   currentTimestamp: number,
-  apiKey: string
+  apiKey: string,
+  tmdbApiKey?: string
 ): Promise<{ priorContext: string[], currentContext: string }> {
   const priorContext: string[] = [];
   let currentContext = '';
   
-  // Fetch previous episodes
+  // 1. Fetch previous season summaries from TMDB (lightweight, fast)
+  if (tmdbApiKey && currentSeason > 1) {
+    console.log(`Fetching summaries for previous seasons (S1 to S${currentSeason - 1})`);
+    const previousSeasonSummaries = await getPreviousSeasonSummaries(tmdbId, currentSeason, tmdbApiKey);
+    if (previousSeasonSummaries.length > 0) {
+      priorContext.push(`**PREVIOUS SEASONS (S1 to S${currentSeason - 1}) - Episode Summaries:**\n${previousSeasonSummaries.join('\n\n')}`);
+    }
+  }
+  
+  // 2. Fetch all episodes from current season (E1 to current-1) with smart sampling
+  // More recent episodes get full context, older episodes get sampled more aggressively
   const episodesToFetch: Array<{season: number, episode: number}> = [];
-  for (let ep = currentEpisode - 1; ep >= Math.max(1, currentEpisode - EPISODE_CONTEXT_WINDOW); ep--) {
+  for (let ep = 1; ep < currentEpisode; ep++) {
     episodesToFetch.push({ season: currentSeason, episode: ep });
   }
   
-  console.log(`Fetching ${episodesToFetch.length} prior episodes for context`);
+  console.log(`Fetching ${episodesToFetch.length} episodes from current season (S${currentSeason}E1 to S${currentSeason}E${currentEpisode - 1})`);
   
-  for (const { season, episode } of episodesToFetch.reverse()) {
+  for (const { season, episode } of episodesToFetch) {
     const entries = await fetchSubtitles({
       mediaType: 'tv',
       tmdbId,
@@ -406,7 +454,12 @@ async function getTVContext(
       episodeNumber: episode,
     });
     if (entries && entries.length > 0) {
-      const formatted = formatSubtitles(entries, `S${season}E${episode}`);
+      // Smart sampling: recent episodes get more lines, older episodes get fewer
+      // Episodes close to current get 200 lines, episodes far back get 100 lines
+      const distanceFromCurrent = currentEpisode - episode;
+      const maxLines = distanceFromCurrent <= 3 ? MAX_SUBTITLE_LINES_PER_EPISODE : Math.max(100, MAX_SUBTITLE_LINES_PER_EPISODE - (distanceFromCurrent * 20));
+      
+      const formatted = formatSubtitles(entries, `S${season}E${episode}`, maxLines);
       if (formatted) {
         priorContext.push(formatted);
       }
@@ -415,7 +468,7 @@ async function getTVContext(
     await delay(300);
   }
   
-  // Fetch current episode up to timestamp
+  // 3. Fetch current episode up to timestamp (full context)
   const currentEntries = await fetchSubtitles({
     mediaType: 'tv',
     tmdbId,
@@ -674,7 +727,7 @@ serve(async (req) => {
     let priorContext: string[] = [];
     
     if (mediaType === 'tv') {
-      const tvContext = await getTVContext(tmdbId, seasonNumber!, episodeNumber!, currentSeconds, OPENSUBTITLES_API_KEY);
+      const tvContext = await getTVContext(tmdbId, seasonNumber!, episodeNumber!, currentSeconds, OPENSUBTITLES_API_KEY, TMDB_API_KEY);
       priorContext = tvContext.priorContext;
       subtitleContext = tvContext.currentContext;
     } else {
