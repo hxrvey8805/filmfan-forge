@@ -225,6 +225,52 @@ interface FetchSubtitlesParams {
   episodeNumber?: number;
 }
 
+// Helper function to delay execution
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Fetch with retry logic for rate limiting
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3,
+  initialDelayMs: number = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const waitTime = retryAfter 
+          ? parseInt(retryAfter) * 1000 
+          : initialDelayMs * Math.pow(2, attempt);
+        
+        console.log(`Rate limited (429). Attempt ${attempt + 1}/${maxRetries + 1}. Waiting ${waitTime}ms...`);
+        
+        if (attempt < maxRetries) {
+          await delay(waitTime);
+          continue;
+        }
+      }
+      
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      console.error(`Fetch attempt ${attempt + 1} failed:`, error);
+      
+      if (attempt < maxRetries) {
+        await delay(initialDelayMs * Math.pow(2, attempt));
+      }
+    }
+  }
+  
+  throw lastError || new Error('Max retries exceeded');
+}
+
 // Fetch and cache subtitles for TV episodes or movies
 async function fetchSubtitles({
   mediaType,
@@ -258,16 +304,16 @@ async function fetchSubtitles({
 
     const searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?${params.toString()}`;
     
-    const searchResponse = await fetch(searchUrl, {
+    const searchResponse = await fetchWithRetry(searchUrl, {
       method: 'GET',
       headers: {
         'Api-Key': apiKey,
         'Content-Type': 'application/json',
       },
-    });
+    }, 3, 2000); // 3 retries, starting at 2 seconds
 
     if (!searchResponse.ok) {
-      console.error('Subtitle search failed:', searchResponse.status);
+      console.error('Subtitle search failed after retries:', searchResponse.status);
       return null;
     }
 
@@ -286,17 +332,20 @@ async function fetchSubtitles({
       return null;
     }
 
-    const downloadResponse = await fetch(`https://api.opensubtitles.com/api/v1/download`, {
+    // Add delay between search and download to avoid rate limiting
+    await delay(500);
+
+    const downloadResponse = await fetchWithRetry(`https://api.opensubtitles.com/api/v1/download`, {
       method: 'POST',
       headers: {
         'Api-Key': apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ file_id: best.attributes.files[0].file_id }),
-    });
+    }, 3, 2000);
 
     if (!downloadResponse.ok) {
-      console.error('Subtitle download failed:', downloadResponse.status);
+      console.error('Subtitle download failed after retries:', downloadResponse.status);
       return null;
     }
 
@@ -362,6 +411,8 @@ async function getTVContext(
         priorContext.push(formatted);
       }
     }
+    // Small delay between episodes to avoid rate limiting
+    await delay(300);
   }
   
   // Fetch current episode up to timestamp
