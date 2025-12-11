@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { GlassesWithLenses } from "@/components/GlassesWithLenses";
+import { ArrowLeft } from "lucide-react";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -120,6 +121,7 @@ const Auth = () => {
                 className="flex-1"
                 onClick={() => navigate("/")}
               >
+                <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
               <Button type="submit" className="flex-1" disabled={loading}>
