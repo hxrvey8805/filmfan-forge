@@ -56,6 +56,81 @@ export type Database = {
         }
         Relationships: []
       }
+      season_summaries: {
+        Row: {
+          created_at: string
+          embedding: string | null
+          episode_summaries: Json | null
+          id: string
+          overview: string | null
+          season_name: string | null
+          season_number: number
+          tmdb_id: number
+        }
+        Insert: {
+          created_at?: string
+          embedding?: string | null
+          episode_summaries?: Json | null
+          id?: string
+          overview?: string | null
+          season_name?: string | null
+          season_number: number
+          tmdb_id: number
+        }
+        Update: {
+          created_at?: string
+          embedding?: string | null
+          episode_summaries?: Json | null
+          id?: string
+          overview?: string | null
+          season_name?: string | null
+          season_number?: number
+          tmdb_id?: number
+        }
+        Relationships: []
+      }
+      subtitle_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          created_at: string
+          embedding: string | null
+          end_seconds: number
+          episode_number: number | null
+          id: string
+          media_type: string
+          season_number: number | null
+          start_seconds: number
+          tmdb_id: number
+        }
+        Insert: {
+          chunk_index: number
+          content: string
+          created_at?: string
+          embedding?: string | null
+          end_seconds: number
+          episode_number?: number | null
+          id?: string
+          media_type: string
+          season_number?: number | null
+          start_seconds: number
+          tmdb_id: number
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          end_seconds?: number
+          episode_number?: number | null
+          id?: string
+          media_type?: string
+          season_number?: number | null
+          start_seconds?: number
+          tmdb_id?: number
+        }
+        Relationships: []
+      }
       user_ai_usage: {
         Row: {
           created_at: string
@@ -223,7 +298,46 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_season_summaries: {
+        Args: {
+          match_count?: number
+          p_max_season: number
+          p_tmdb_id: number
+          query_embedding: string
+        }
+        Returns: {
+          episode_summaries: Json
+          id: string
+          overview: string
+          season_name: string
+          season_number: number
+          similarity: number
+          tmdb_id: number
+        }[]
+      }
+      match_subtitle_chunks: {
+        Args: {
+          match_count?: number
+          p_current_episode: number
+          p_current_season: number
+          p_max_seconds: number
+          p_media_type: string
+          p_tmdb_id: number
+          query_embedding: string
+        }
+        Returns: {
+          chunk_index: number
+          content: string
+          end_seconds: number
+          episode_number: number
+          id: string
+          media_type: string
+          season_number: number
+          similarity: number
+          start_seconds: number
+          tmdb_id: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
