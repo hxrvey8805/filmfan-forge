@@ -8,8 +8,8 @@ const corsHeaders = {
 };
 
 // Configurable parameters
-const EPISODE_CONTEXT_WINDOW = 5;  // how many previous episodes to pull for TV shows
-const MAX_SUBTITLE_LINES_PER_EPISODE = 200; // limit lines per episode/movie to manage token count
+const MAX_SUBTITLE_LINES_RECENT = 150; // lines for recent episodes (last 3)
+const MAX_SUBTITLE_LINES_OLDER = 75;   // lines for older episodes (aggressive sampling)
 const AI_MODEL = 'llama-3.3-70b-versatile'; // Groq model - fast and accurate
 
 // In-memory subtitle cache
@@ -43,6 +43,8 @@ interface TMDbContext {
   genres?: string[];
   tagline?: string;
   characters?: CharacterSummary[];
+  previousSeasons?: { season: number; overview: string }[];
+  currentSeasonEpisodes?: { episode: number; name: string; overview: string }[];
 }
 
 function extractYear(dateString?: string | null): string | undefined {
@@ -365,64 +367,116 @@ async function fetchSubtitles({
   }
 }
 
-// Format subtitle entries into readable text
-function formatSubtitles(entries: SubtitleEntry[], label: string): string {
+// Format subtitle entries into readable text with smart sampling
+function formatSubtitles(entries: SubtitleEntry[], label: string, maxLines: number = MAX_SUBTITLE_LINES_RECENT): string {
   if (entries.length === 0) return '';
   
   // Sample subtitles evenly if too many to fit token limits
-  const sampled = entries.length > MAX_SUBTITLE_LINES_PER_EPISODE
-    ? entries.filter((_, i) => i % Math.ceil(entries.length / MAX_SUBTITLE_LINES_PER_EPISODE) === 0)
+  const sampled = entries.length > maxLines
+    ? entries.filter((_, i) => i % Math.ceil(entries.length / maxLines) === 0)
     : entries;
   
   const text = sampled.map(e => e.text).join(' ');
   return `**${label}:**\n${text}`;
 }
 
-// Fetch multi-episode context for TV shows
+// Enhanced TV context: Full current season + TMDB summaries for previous seasons
 async function getTVContext(
   tmdbId: number,
   currentSeason: number,
   currentEpisode: number,
   currentTimestamp: number,
-  apiKey: string
-): Promise<{ priorContext: string[], currentContext: string }> {
-  const priorContext: string[] = [];
-  let currentContext = '';
+  openSubtitlesApiKey: string,
+  tmdbApiKey?: string
+): Promise<{ priorSeasonsSummary: string, currentSeasonContext: string[], currentEpisodeContext: string }> {
+  const currentSeasonContext: string[] = [];
+  let currentEpisodeContext = '';
+  let priorSeasonsSummary = '';
   
-  // Fetch previous episodes
-  const episodesToFetch: Array<{season: number, episode: number}> = [];
-  for (let ep = currentEpisode - 1; ep >= Math.max(1, currentEpisode - EPISODE_CONTEXT_WINDOW); ep--) {
-    episodesToFetch.push({ season: currentSeason, episode: ep });
+  // 1. Fetch TMDB summaries for ALL previous seasons (fast, no rate limits)
+  if (tmdbApiKey && currentSeason > 1) {
+    const seasonSummaries: string[] = [];
+    
+    for (let s = 1; s < currentSeason; s++) {
+      try {
+        const seasonUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${s}?api_key=${tmdbApiKey}`;
+        const response = await fetch(seasonUrl);
+        if (response.ok) {
+          const seasonData = await response.json();
+          const seasonName = seasonData.name || `Season ${s}`;
+          const seasonOverview = seasonData.overview || '';
+          
+          // Get episode summaries for this season
+          const episodeSummaries: string[] = [];
+          if (seasonData.episodes && Array.isArray(seasonData.episodes)) {
+            for (const ep of seasonData.episodes) {
+              if (ep.overview) {
+                episodeSummaries.push(`E${ep.episode_number}: ${ep.overview.substring(0, 150)}${ep.overview.length > 150 ? '...' : ''}`);
+              }
+            }
+          }
+          
+          let seasonText = `**${seasonName}:**`;
+          if (seasonOverview) {
+            seasonText += ` ${seasonOverview}`;
+          }
+          if (episodeSummaries.length > 0) {
+            seasonText += `\n${episodeSummaries.join('\n')}`;
+          }
+          seasonSummaries.push(seasonText);
+        }
+      } catch (error) {
+        console.error(`Error fetching season ${s} summary:`, error);
+      }
+    }
+    
+    if (seasonSummaries.length > 0) {
+      priorSeasonsSummary = `**PREVIOUS SEASONS (Summary):**\n\n${seasonSummaries.join('\n\n')}`;
+      console.log(`Fetched TMDB summaries for ${seasonSummaries.length} previous seasons`);
+    }
   }
   
-  console.log(`Fetching ${episodesToFetch.length} prior episodes for context`);
+  // 2. Fetch subtitles for ALL prior episodes in CURRENT season (E1 to current-1)
+  const episodesToFetch: number[] = [];
+  for (let ep = 1; ep < currentEpisode; ep++) {
+    episodesToFetch.push(ep);
+  }
   
-  for (const { season, episode } of episodesToFetch.reverse()) {
+  console.log(`Fetching ${episodesToFetch.length} prior episodes from current season ${currentSeason}`);
+  
+  for (const episode of episodesToFetch) {
     const entries = await fetchSubtitles({
       mediaType: 'tv',
       tmdbId,
-      apiKey,
-      seasonNumber: season,
+      apiKey: openSubtitlesApiKey,
+      seasonNumber: currentSeason,
       episodeNumber: episode,
     });
+    
     if (entries && entries.length > 0) {
-      const formatted = formatSubtitles(entries, `S${season}E${episode}`);
+      // Smart sampling: older episodes get more aggressive sampling
+      const episodesFromCurrent = currentEpisode - episode;
+      const maxLines = episodesFromCurrent <= 3 ? MAX_SUBTITLE_LINES_RECENT : MAX_SUBTITLE_LINES_OLDER;
+      
+      const formatted = formatSubtitles(entries, `S${currentSeason}E${episode}`, maxLines);
       if (formatted) {
-        priorContext.push(formatted);
+        currentSeasonContext.push(formatted);
       }
     }
+    
     // Small delay between episodes to avoid rate limiting
     await delay(300);
   }
   
-  // Fetch current episode up to timestamp
+  // 3. Fetch current episode up to timestamp
   const currentEntries = await fetchSubtitles({
     mediaType: 'tv',
     tmdbId,
-    apiKey,
+    apiKey: openSubtitlesApiKey,
     seasonNumber: currentSeason,
     episodeNumber: currentEpisode,
   });
+  
   if (currentEntries && currentEntries.length > 0) {
     const filteredEntries = currentEntries.filter(e => e.end <= currentTimestamp);
     console.log(`Current episode: ${filteredEntries.length} subtitle entries up to timestamp`);
@@ -434,11 +488,13 @@ async function getTVContext(
       const timeStr = hours > 0 
         ? `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
         : `${mins}:${String(secs).padStart(2, '0')}`;
-      currentContext = formatSubtitles(filteredEntries, `S${currentSeason}E${currentEpisode} (up to ${timeStr})`);
+      currentEpisodeContext = formatSubtitles(filteredEntries, `S${currentSeason}E${currentEpisode} (up to ${timeStr})`, MAX_SUBTITLE_LINES_RECENT);
     }
   }
   
-  return { priorContext, currentContext };
+  console.log(`TV context complete: ${priorSeasonsSummary ? 'has prior seasons' : 'no prior seasons'}, ${currentSeasonContext.length} prior episodes in current season`);
+  
+  return { priorSeasonsSummary, currentSeasonContext, currentEpisodeContext };
 }
 
 // Fetch movie context
@@ -670,33 +726,43 @@ serve(async (req) => {
     const tmdbContext = await getTMDbContext(tmdbId, mediaType, seasonNumber, episodeNumber, TMDB_API_KEY);
     
     // Fetch subtitle context
-    let subtitleContext = '';
-    let priorContext: string[] = [];
+    let currentEpisodeContext = '';
+    let currentSeasonContext: string[] = [];
+    let priorSeasonsSummary = '';
     
     if (mediaType === 'tv') {
-      const tvContext = await getTVContext(tmdbId, seasonNumber!, episodeNumber!, currentSeconds, OPENSUBTITLES_API_KEY);
-      priorContext = tvContext.priorContext;
-      subtitleContext = tvContext.currentContext;
+      const tvContext = await getTVContext(tmdbId, seasonNumber!, episodeNumber!, currentSeconds, OPENSUBTITLES_API_KEY, TMDB_API_KEY);
+      priorSeasonsSummary = tvContext.priorSeasonsSummary;
+      currentSeasonContext = tvContext.currentSeasonContext;
+      currentEpisodeContext = tvContext.currentEpisodeContext;
     } else {
-      subtitleContext = await getMovieContext(tmdbId, currentSeconds, OPENSUBTITLES_API_KEY);
+      currentEpisodeContext = await getMovieContext(tmdbId, currentSeconds, OPENSUBTITLES_API_KEY);
     }
 
     // Build context sections for AI
     const tmdbContextText = formatTMDbContext(tmdbContext, mediaType, seasonNumber, episodeNumber);
     
-    const priorContextText = priorContext.length > 0 
-      ? `\n\n**PREVIOUS EPISODES (for context):**\n${priorContext.join('\n\n')}`
+    // Previous seasons from TMDB (summaries only - fast and comprehensive)
+    const priorSeasonsText = priorSeasonsSummary 
+      ? `\n\n${priorSeasonsSummary}`
+      : '';
+    
+    // Current season prior episodes (with subtitles)
+    const currentSeasonText = currentSeasonContext.length > 0 
+      ? `\n\n**CURRENT SEASON - PRIOR EPISODES (Full Dialogue):**\n${currentSeasonContext.join('\n\n')}`
       : '';
 
-    const currentSubtitleText = subtitleContext
-      ? `\n\n**SUBTITLE DIALOGUE (up to ${timestamp}):**\n${subtitleContext}`
+    // Current episode up to timestamp
+    const currentEpisodeText = currentEpisodeContext
+      ? `\n\n**CURRENT EPISODE DIALOGUE (up to ${timestamp}):**\n${currentEpisodeContext}`
       : '';
 
     // Determine if we have enough context
-    const hasSubtitleContext = subtitleContext.length > 0;
+    const hasSubtitleContext = currentEpisodeContext.length > 0 || currentSeasonContext.length > 0;
     const hasTMDbContext = tmdbContext !== null;
+    const hasPriorSeasons = priorSeasonsSummary.length > 0;
     
-    if (!hasSubtitleContext && !hasTMDbContext) {
+    if (!hasSubtitleContext && !hasTMDbContext && !hasPriorSeasons) {
       return new Response(
         JSON.stringify({ 
           answer: "I couldn't find subtitle data or metadata for this content. Please ensure the content exists and has available subtitles." 
@@ -787,14 +853,15 @@ Answer the question with appropriate depth - be direct for simple questions, com
 
     const userPrompt = `Question: "${question}"
 ${previousQAContext}
-${priorContextText}${currentSubtitleText}
+${priorSeasonsText}${currentSeasonText}${currentEpisodeText}
 
 Synthesize information from all available sources (subtitles, metadata, and your knowledge) to provide a direct, accurate, and confident answer. Answer directly without mentioning data availability or limitations. If it's a simple question, be direct and concise. If it's asking for details or explanation, provide comprehensive information. Cover all aspects of what the user is asking about, including specific moments, dialogue, or minor details if relevant. If the user references a previous question, use that context to provide a connected answer.`;
 
     console.log('Sending request to AI with context:', {
       hasSubtitleContext,
       hasTMDbContext,
-      priorEpisodes: priorContext.length,
+      hasPriorSeasons,
+      currentSeasonEpisodes: currentSeasonContext.length,
       model: AI_MODEL,
     });
 
