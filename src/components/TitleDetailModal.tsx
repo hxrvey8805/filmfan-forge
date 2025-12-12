@@ -27,11 +27,12 @@ interface Title {
 }
 
 interface Message {
-  id: number;
+  id: string;
   question: string;
   answer: string;
   context: string;
   timestamp: string;
+  created_at?: string;
 }
 
 interface TitleDetailModalProps {
@@ -141,13 +142,14 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
     fetchRuntime();
   }, [title, selectedSeason, selectedEpisode]);
 
-  // Load AI usage and coins when modal opens
+  // Load AI usage, coins, and conversation history when modal opens
   useEffect(() => {
     if (open) {
       loadAIUsage();
       loadUserStats();
+      loadConversationHistory();
     }
-  }, [open]);
+  }, [open, title.id, title.type]);
 
   // Listen for custom event from Companion page
   useEffect(() => {
@@ -207,6 +209,41 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
     }
   };
 
+  const loadConversationHistory = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: conversations, error } = await supabase
+        .from('ai_conversations')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('title_id', title.id)
+        .eq('media_type', title.type)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error loading conversation history:', error);
+        return;
+      }
+
+      if (conversations && conversations.length > 0) {
+        const loadedMessages: Message[] = conversations.map(conv => ({
+          id: conv.id,
+          question: conv.question,
+          answer: conv.answer,
+          context: conv.context,
+          timestamp: new Date(conv.created_at).toLocaleDateString(),
+          created_at: conv.created_at
+        }));
+        setMessages(loadedMessages);
+      }
+    } catch (error) {
+      console.error('Error loading conversation history:', error);
+    }
+  };
+
   const formatTimestamp = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = Math.floor(minutes % 60);
@@ -233,6 +270,13 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
         ? `S${selectedSeason}E${selectedEpisode} @ ${timestamp}`
         : `@ ${timestamp}`;
 
+      // Include previous Q&A for AI context (last 5 messages)
+      const previousQA = messages.slice(0, 5).map(m => ({
+        question: m.question,
+        answer: m.answer,
+        context: m.context
+      }));
+
       const { data, error } = await supabase.functions.invoke('spoiler-free-companion', {
         body: {
           tmdbId: title.id,
@@ -242,6 +286,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
           title: title.title,
           timestamp,
           question: question.trim(),
+          previousQA,
         }
       });
 
@@ -261,8 +306,36 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
         throw error;
       }
 
+      // Save to database
+      const { data: { user } } = await supabase.auth.getUser();
+      let savedId: string = crypto.randomUUID();
+      
+      if (user) {
+        const { data: savedConv, error: saveError } = await supabase
+          .from('ai_conversations')
+          .insert({
+            user_id: user.id,
+            title_id: title.id,
+            media_type: title.type,
+            question: question.trim(),
+            answer: data.answer,
+            context: contextInfo,
+            season_number: title.type === 'tv' ? parseInt(selectedSeason) : null,
+            episode_number: title.type === 'tv' ? parseInt(selectedEpisode) : null,
+            timestamp: timestamp,
+          })
+          .select('id')
+          .single();
+        
+        if (saveError) {
+          console.error('Error saving conversation:', saveError);
+        } else if (savedConv) {
+          savedId = savedConv.id as string;
+        }
+      }
+
       const newMessage: Message = {
-        id: messages.length + 1,
+        id: savedId,
         question: question,
         answer: data.answer,
         context: contextInfo,

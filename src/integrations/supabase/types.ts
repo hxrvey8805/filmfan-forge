@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_conversations: {
+        Row: {
+          answer: string
+          context: string
+          created_at: string
+          episode_number: number | null
+          id: string
+          media_type: string
+          question: string
+          season_number: number | null
+          timestamp: string | null
+          title_id: number
+          user_id: string
+        }
+        Insert: {
+          answer: string
+          context: string
+          created_at?: string
+          episode_number?: number | null
+          id?: string
+          media_type: string
+          question: string
+          season_number?: number | null
+          timestamp?: string | null
+          title_id: number
+          user_id: string
+        }
+        Update: {
+          answer?: string
+          context?: string
+          created_at?: string
+          episode_number?: number | null
+          id?: string
+          media_type?: string
+          question?: string
+          season_number?: number | null
+          timestamp?: string | null
+          title_id?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_ai_usage: {
         Row: {
           created_at: string
