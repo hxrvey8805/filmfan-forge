@@ -550,9 +550,9 @@ serve(async (req) => {
       );
     }
 
-    const { tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question } = await req.json();
+    const { tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question, previousQA } = await req.json();
     
-    console.log('Spoiler-free request:', { userId: user.id, tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question });
+    console.log('Spoiler-free request:', { userId: user.id, tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question, hasPreviousQA: Boolean(previousQA?.length) });
 
     // Validate required fields
     if (!tmdbId || !mediaType || !timestamp || !question) {
@@ -776,11 +776,20 @@ ${tmdbContextText ? `\n**CONTENT METADATA:**\n${tmdbContextText}` : ''}
 
 Answer the question with appropriate depth - be direct for simple questions, comprehensive for complex ones. Cover everything the user asks about. Synthesize all available information into a confident, cohesive answer.`;
 
-    const userPrompt = `Question: "${question}"
+    // Build previous Q&A context if available
+    let previousQAContext = '';
+    if (previousQA && Array.isArray(previousQA) && previousQA.length > 0) {
+      previousQAContext = '\n\n**PREVIOUS QUESTIONS FROM THIS USER (for context - they may reference these):**\n';
+      previousQA.slice(0, 5).reverse().forEach((qa: { question: string; answer: string; context: string }, index: number) => {
+        previousQAContext += `\n${index + 1}. Q (${qa.context}): "${qa.question}"\n   A: ${qa.answer.substring(0, 300)}${qa.answer.length > 300 ? '...' : ''}\n`;
+      });
+    }
 
+    const userPrompt = `Question: "${question}"
+${previousQAContext}
 ${priorContextText}${currentSubtitleText}
 
-Synthesize information from all available sources (subtitles, metadata, and your knowledge) to provide a direct, accurate, and confident answer. Answer directly without mentioning data availability or limitations. If it's a simple question, be direct and concise. If it's asking for details or explanation, provide comprehensive information. Cover all aspects of what the user is asking about, including specific moments, dialogue, or minor details if relevant.`;
+Synthesize information from all available sources (subtitles, metadata, and your knowledge) to provide a direct, accurate, and confident answer. Answer directly without mentioning data availability or limitations. If it's a simple question, be direct and concise. If it's asking for details or explanation, provide comprehensive information. Cover all aspects of what the user is asking about, including specific moments, dialogue, or minor details if relevant. If the user references a previous question, use that context to provide a connected answer.`;
 
     console.log('Sending request to AI with context:', {
       hasSubtitleContext,
