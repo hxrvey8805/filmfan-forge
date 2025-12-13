@@ -259,18 +259,15 @@ async function retrieveContext(
   maxSeconds: number,
   question: string
 ): Promise<RetrievedChunk[]> {
-  // Use a very high max_seconds to ensure we get all content up to current episode
-  // The actual filtering happens in re-ranking where we prioritize recent content
-  const effectiveMaxSeconds = Math.max(maxSeconds, 99999);
-  
   // Stage 1: Broad vector search (100 candidates)
+  // Use the actual maxSeconds to only get content up to the user's timestamp
   const { data: candidates, error } = await supabase.rpc('match_subtitle_chunks', {
     query_embedding: questionEmbedding,
     p_tmdb_id: tmdbId,
     p_media_type: mediaType,
     p_current_season: currentSeason,
     p_current_episode: currentEpisode,
-    p_max_seconds: effectiveMaxSeconds,
+    p_max_seconds: maxSeconds,
     match_count: 100,
   });
   
@@ -283,60 +280,90 @@ async function retrieveContext(
     return [];
   }
   
-  // Stage 2: Re-rank with multiple signals
+  // Detect if this is a "what's happening now" type question
   const questionLower = question.toLowerCase();
+  const isCurrentSceneQuestion = 
+    questionLower.includes('happening') ||
+    questionLower.includes('going on') ||
+    questionLower.includes('this scene') ||
+    questionLower.includes('right now') ||
+    questionLower.includes('just happened') ||
+    questionLower.includes('what is this');
+  
   const questionWords = questionLower.split(/\s+/).filter(w => w.length > 3);
   
   const reranked: RetrievedChunk[] = candidates.map((chunk: any) => {
     const contentLower = chunk.content.toLowerCase();
+    const chunkEndSeconds = Number(chunk.end_seconds);
+    const chunkStartSeconds = Number(chunk.start_seconds);
     
-    // Recency score: more recent = higher score
-    let recencyScore = 0;
+    // Timestamp proximity score - how close is this chunk to the user's current position
+    let timestampProximityScore = 0;
+    if (chunk.season_number === currentSeason && chunk.episode_number === currentEpisode) {
+      // For current episode, calculate proximity to user's timestamp
+      const distanceFromTimestamp = Math.abs(maxSeconds - chunkEndSeconds);
+      const maxDistance = maxSeconds; // max possible distance
+      timestampProximityScore = 1 - Math.min(distanceFromTimestamp / maxDistance, 1);
+      
+      // Boost chunks that are within 5 minutes of the timestamp
+      if (distanceFromTimestamp <= 300) {
+        timestampProximityScore = Math.min(1, timestampProximityScore + 0.3);
+      }
+    }
+    
+    // Episode recency score
+    let episodeRecencyScore = 0;
     if (mediaType === 'tv') {
       const seasonDiff = currentSeason - (chunk.season_number || 1);
       const episodeDiff = currentEpisode - (chunk.episode_number || 1);
-      // Current episode gets highest recency, previous episodes less
       if (seasonDiff === 0 && episodeDiff === 0) {
-        recencyScore = 1.0;
+        episodeRecencyScore = 1.0;
       } else if (seasonDiff === 0) {
-        recencyScore = 0.8 - (episodeDiff * 0.05);
+        episodeRecencyScore = 0.7 - (episodeDiff * 0.1);
       } else {
-        recencyScore = 0.5 - (seasonDiff * 0.1);
+        episodeRecencyScore = 0.3 - (seasonDiff * 0.1);
       }
-      recencyScore = Math.max(0, recencyScore);
+      episodeRecencyScore = Math.max(0, episodeRecencyScore);
     } else {
-      // For movies, recency based on timestamp proximity
-      recencyScore = 1 - (maxSeconds - chunk.end_seconds) / maxSeconds;
+      episodeRecencyScore = timestampProximityScore;
     }
     
     // Keyword overlap score
     let keywordScore = 0;
     for (const word of questionWords) {
       if (contentLower.includes(word)) {
-        keywordScore += 0.1;
+        keywordScore += 0.15;
       }
     }
-    keywordScore = Math.min(0.3, keywordScore);
+    keywordScore = Math.min(0.4, keywordScore);
     
-    // Dialogue signal: actual dialogue lines tend to have quotation marks or speaker labels
-    const dialogueScore = contentLower.includes('"') || contentLower.includes(':') ? 0.05 : 0;
-    
-    // Combined score: vector similarity + recency + keywords + dialogue
-    const finalScore = 
-      (chunk.similarity * 0.5) + 
-      (recencyScore * 0.25) + 
-      (keywordScore) + 
-      (dialogueScore);
+    // Combined score - weight differently based on question type
+    let finalScore: number;
+    if (isCurrentSceneQuestion) {
+      // For "what's happening now" questions, heavily weight timestamp proximity
+      finalScore = 
+        (chunk.similarity * 0.25) + 
+        (timestampProximityScore * 0.5) + 
+        (episodeRecencyScore * 0.15) + 
+        (keywordScore * 0.1);
+    } else {
+      // For other questions, balance similarity and recency
+      finalScore = 
+        (chunk.similarity * 0.4) + 
+        (timestampProximityScore * 0.2) + 
+        (episodeRecencyScore * 0.25) + 
+        (keywordScore * 0.15);
+    }
     
     return {
       id: chunk.id,
       season_number: chunk.season_number,
       episode_number: chunk.episode_number,
-      start_seconds: Number(chunk.start_seconds),
-      end_seconds: Number(chunk.end_seconds),
+      start_seconds: chunkStartSeconds,
+      end_seconds: chunkEndSeconds,
       content: chunk.content,
       similarity: chunk.similarity,
-      recencyScore,
+      recencyScore: timestampProximityScore,
       finalScore,
     };
   });
