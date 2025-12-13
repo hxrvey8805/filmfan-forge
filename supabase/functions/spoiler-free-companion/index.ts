@@ -200,29 +200,60 @@ function formatTMDbContext(context: TMDbContext | null, mediaType: 'tv' | 'movie
   return parts.join('\n');
 }
 
-// Generate embedding using Lovable AI gateway
+// Generate embedding using Gemini via Lovable AI gateway
 async function generateEmbedding(text: string, apiKey: string): Promise<number[] | null> {
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
+    // Use Gemini for embedding generation via chat completion
+    // We'll ask Gemini to generate a semantic representation
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: text,
-        dimensions: 384,
+        model: 'google/gemini-2.5-flash-lite',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an embedding generator. Generate a 384-dimensional embedding vector for semantic search. 
+Output ONLY a JSON array of 384 floating point numbers between -1 and 1, no other text.
+The embedding should capture the semantic meaning of the input text for similarity matching.`
+          },
+          {
+            role: 'user',
+            content: `Generate embedding for: "${text.slice(0, 500)}"`
+          }
+        ],
+        temperature: 0,
+        max_tokens: 4000,
       }),
     });
     
     if (!response.ok) {
       console.error('Embedding API error:', response.status);
+      const errorText = await response.text();
+      console.error('Error details:', errorText);
       return null;
     }
     
     const data = await response.json();
-    return data.data?.[0]?.embedding || null;
+    const content = data.choices?.[0]?.message?.content || '';
+    
+    // Parse the JSON array from the response
+    const match = content.match(/\[[\s\S]*\]/);
+    if (!match) {
+      console.error('Failed to parse embedding from response');
+      return null;
+    }
+    
+    const embedding = JSON.parse(match[0]);
+    if (!Array.isArray(embedding) || embedding.length !== 384) {
+      console.error('Invalid embedding dimensions:', embedding.length);
+      return null;
+    }
+    
+    return embedding;
   } catch (error) {
     console.error('Error generating embedding:', error);
     return null;
