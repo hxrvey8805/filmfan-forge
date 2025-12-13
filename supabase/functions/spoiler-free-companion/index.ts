@@ -749,12 +749,12 @@ Give a direct, helpful answer based on the dialogue and scene evidence above. Be
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: 1000,
+        max_tokens: 2000,
       }),
     });
 
@@ -778,6 +778,9 @@ Give a direct, helpful answer based on the dialogue and scene evidence above. Be
     }
 
     const data = await response.json();
+    console.log('AI response finish_reason:', data.choices[0]?.finish_reason);
+    console.log('AI response content length:', data.choices[0]?.message?.content?.length);
+    
     const answer = data.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
 
     // Validate response has citations (log warning but don't fail)
