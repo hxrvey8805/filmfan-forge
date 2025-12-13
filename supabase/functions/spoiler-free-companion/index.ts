@@ -228,11 +228,11 @@ async function generateEmbedding(text: string, apiKey: string): Promise<number[]
       console.error('Invalid embedding dimensions:', embedding?.length);
       return null;
     }
-
+    
     return embedding;
   } catch (error) {
     console.error('Error generating embedding:', error);
-      return null;
+    return null;
   }
 }
 
@@ -454,9 +454,9 @@ async function retrieveSeasonSummaries(
   });
   
   if (error || !summaries || summaries.length === 0) {
-  return '';
-}
-
+    return '';
+  }
+  
   // Sort by season number for logical order
   summaries.sort((a: any, b: any) => a.season_number - b.season_number);
   
@@ -785,7 +785,7 @@ serve(async (req) => {
           : `[${formatTime(chunk.start_seconds)}-${formatTime(chunk.end_seconds)}]`;
         return `${location}\n${chunk.content}`;
       });
-      evidenceText = `\n\n**EVIDENCE CHUNKS (dialogue/subtitle text - use ONLY this for your answer):**\n\n${formattedChunks.join('\n\n')}`;
+      evidenceText = `\n\n**EVIDENCE CHUNKS (cite these in your answer):**\n\n${formattedChunks.join('\n\n')}`;
     }
     
     console.log('Evidence text length:', evidenceText.length);
@@ -805,29 +805,31 @@ serve(async (req) => {
     const mediaLabel = mediaType === 'tv' 
       ? `Season ${seasonNumber}, Episode ${episodeNumber}`
       : 'this movie';
-    
+
     const systemPrompt = `You are a script-based companion helping someone watch "${title}" - ${mediaLabel}.
 
-**ABSOLUTE CONSTRAINTS - YOU ARE LOCKED TO EVIDENCE:**
-1. You may ONLY use information that is EXPLICITLY stated word-for-word in the EVIDENCE CHUNKS below
-2. You have NO general knowledge about this show/movie - you ONLY know what's in the evidence chunks
-3. You may NOT infer, deduce, or add ANY information not directly in the evidence
-4. You may NOT use character names, plot points, or details from SHOW INFO or PREVIOUS SEASONS sections
-5. If the evidence chunks don't explicitly contain the answer, you MUST say: "Based on the available dialogue, I don't have enough information to answer that question."
-6. NEVER reveal events after timestamp ${timestamp}
+**CRITICAL - TIMESTAMP-FIRST RULES:**
+1. The EVIDENCE CHUNKS are ordered by relevance - chunks at the TOP are from the user's EXACT timestamp position and should be prioritized
+2. When the user asks "what's happening", focus FIRST on the chunks closest to their timestamp (${timestamp})
+3. Use earlier chunks in the list only for additional context, not as the primary answer
+4. NEVER reveal events after timestamp ${timestamp}
 
-**EVIDENCE SOURCES:**
-- ✅ EVIDENCE CHUNKS = actual dialogue/subtitle text - THIS IS YOUR ONLY SOURCE
-- ❌ SHOW INFO = character metadata - NOT for plot/dialogue answers
-- ❌ PREVIOUS SEASONS = episode summaries - NOT for specific dialogue/actions
+**EVIDENCE-ONLY RULES:**
+1. You may ONLY use information explicitly stated in the EVIDENCE CHUNKS (dialogue/subtitle text) provided below
+2. You may NOT use any general knowledge, inference, or information not explicitly in the evidence chunks
+3. You may NOT fill in gaps, make assumptions, or add details not in the evidence
+4. If the evidence chunks don't contain enough information to answer the question, say: "Based on the available dialogue, I don't have enough information to answer that question."
 
-**ANSWER FORMAT REQUIREMENTS:**
-- Give CLEAN, DIRECT answers without timestamp citations or references
-- Do NOT include [S1E3 12:34] style citations in your answer
-- Write naturally as if you're a friend explaining what's happening
-- Be concise and to the point - answer what was asked, nothing more
-- If multiple things are happening, describe them clearly but concisely
-- The evidence chunks are ordered by relevance - prioritize chunks from the top (current scene)
+**WHAT COUNTS AS EVIDENCE:**
+- ✅ EVIDENCE CHUNKS section contains actual dialogue/subtitle text - USE THIS (prioritize chunks near ${timestamp})
+- ❌ SHOW INFO section contains character lists/metadata - DO NOT use for plot details
+- ❌ PREVIOUS SEASONS section contains summaries - DO NOT use for specific dialogue/actions
+
+**ANSWER STYLE:**
+- Focus your answer on what's happening AT the user's timestamp (${timestamp})
+- The first chunks in the evidence are the most relevant - they're from the current scene
+- Reference the timestamps from evidence chunks when making claims
+- Be honest when evidence is insufficient
 
 ${tmdbContextText ? `\n**SHOW INFO (metadata only, not evidence for plot):**\n${tmdbContextText}` : ''}
 ${seasonSummaries ? `\n\n**PREVIOUS SEASONS (summaries only, not evidence for specific dialogue):**\n${seasonSummaries}` : ''}`;
@@ -844,7 +846,7 @@ ${seasonSummaries ? `\n\n**PREVIOUS SEASONS (summaries only, not evidence for sp
 ${previousQAContext}
 ${evidenceText}
 
-Give a CLEAN, DIRECT answer using ONLY the EVIDENCE CHUNKS above. Do not include timestamp citations like [S1E3 12:34] in your answer - write naturally. Only use information explicitly stated in the evidence chunks. If the evidence doesn't contain enough information, say "Based on the available dialogue, I don't have enough information to answer that question."`;
+Answer the question using ONLY the EVIDENCE CHUNKS above. Do not use general knowledge or inference. If the evidence chunks don't contain enough information, say so honestly. Only state facts that are explicitly in the evidence chunks.`;
     
 
     console.log('Sending request to Lovable AI with RAG context');
@@ -889,9 +891,9 @@ Give a CLEAN, DIRECT answer using ONLY the EVIDENCE CHUNKS above. Do not include
     console.log('AI response finish_reason:', data.choices[0]?.finish_reason);
     console.log('AI response content length:', answer.length);
 
-    // Check if answer contains unwanted citations (we want clean answers without timestamps)
-    if (validateResponse(answer)) {
-      console.warn('Response contains timestamp citations - may need prompt adjustment');
+    // Validate response has citations (log warning but don't fail)
+    if (!validateResponse(answer)) {
+      console.warn('Response may lack proper citations');
     }
 
     console.log('RAG response generated successfully');
