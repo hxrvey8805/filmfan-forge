@@ -394,54 +394,68 @@ serve(async (req) => {
     const chunks = chunkSubtitles(entries);
     console.log(`Created ${chunks.length} chunks`);
     
-    // Generate embeddings and insert chunks
-    const insertData: any[] = [];
+    // Process chunks in small batches to avoid CPU timeout
+    // Insert WITHOUT embeddings first, then we can add embeddings later if needed
+    const BATCH_SIZE = 5;
+    let successCount = 0;
     
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += BATCH_SIZE) {
+      const batch = chunks.slice(batchStart, batchStart + BATCH_SIZE);
+      const insertData: any[] = [];
       
-      // Rate limit embedding calls
-      if (i > 0 && i % 10 === 0) {
-        await delay(500);
+      for (const chunk of batch) {
+        // Generate embedding for this chunk
+        const embedding = await generateEmbedding(chunk.content);
+        
+        insertData.push({
+          tmdb_id: tmdbId,
+          media_type: mediaType,
+          season_number: mediaType === 'tv' ? seasonNumber : null,
+          episode_number: mediaType === 'tv' ? episodeNumber : null,
+          chunk_index: chunk.chunk_index,
+          start_seconds: chunk.start_seconds,
+          end_seconds: chunk.end_seconds,
+          content: chunk.content,
+          embedding: embedding,
+        });
       }
       
-      const embedding = await generateEmbedding(chunk.content);
+      // Insert this batch immediately
+      const { error: insertError } = await supabase
+        .from('subtitle_chunks')
+        .upsert(insertData, { 
+          onConflict: 'tmdb_id,media_type,season_number,episode_number,chunk_index',
+          ignoreDuplicates: true 
+        });
       
-      insertData.push({
-        tmdb_id: tmdbId,
-        media_type: mediaType,
-        season_number: mediaType === 'tv' ? seasonNumber : null,
-        episode_number: mediaType === 'tv' ? episodeNumber : null,
-        chunk_index: chunk.chunk_index,
-        start_seconds: chunk.start_seconds,
-        end_seconds: chunk.end_seconds,
-        content: chunk.content,
-        embedding: embedding,
-      });
+      if (insertError) {
+        console.error(`Batch insert error at ${batchStart}:`, insertError);
+        // Continue with next batch instead of failing completely
+      } else {
+        successCount += batch.length;
+        console.log(`Inserted batch ${Math.floor(batchStart / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)}`);
+      }
+      
+      // Small delay between batches to avoid rate limits
+      if (batchStart + BATCH_SIZE < chunks.length) {
+        await delay(100);
+      }
     }
     
-    // Batch insert
-    const { error: insertError } = await supabase
-      .from('subtitle_chunks')
-      .upsert(insertData, { 
-        onConflict: 'tmdb_id,media_type,season_number,episode_number,chunk_index',
-        ignoreDuplicates: true 
-      });
-    
-    if (insertError) {
-      console.error('Insert error:', insertError);
+    if (successCount === 0) {
       return new Response(
-        JSON.stringify({ error: 'Failed to store chunks', details: insertError.message }),
+        JSON.stringify({ error: 'Failed to store any chunks' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    console.log(`Successfully cached ${chunks.length} chunks for ${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber}` : 'movie'}`);
+    console.log(`Successfully cached ${successCount}/${chunks.length} chunks for ${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber}` : 'movie'}`);
     
     return new Response(
       JSON.stringify({ 
         success: true, 
         cached: false,
+        chunksStored: successCount,
         chunksCreated: chunks.length,
         entriesParsed: entries.length 
       }),
