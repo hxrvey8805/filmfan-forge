@@ -704,9 +704,13 @@ serve(async (req) => {
 
     console.log(`Retrieved ${retrievedChunks.length} chunks, has season summaries: ${seasonSummaries.length > 0}`);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:705',message:'Retrieved chunks count and sample',data:{retrievedChunksCount:retrievedChunks.length,seasonSummariesLength:seasonSummaries.length,sampleChunks:retrievedChunks.slice(0,3).map(c=>({season:c.season_number,episode:c.episode_number,startSeconds:c.start_seconds,endSeconds:c.end_seconds,contentPreview:c.content.substring(0,100)})),question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','B','C']}).catch(()=>{});
-    // #endregion agent log
+    console.log(`Sample chunks:`, retrievedChunks.slice(0, 3).map(c => ({
+      season: c.season_number,
+      episode: c.episode_number,
+      startSeconds: c.start_seconds,
+      endSeconds: c.end_seconds,
+      contentPreview: c.content.substring(0, 100)
+    })));
 
     // Format retrieved chunks as evidence
     let evidenceText = '';
@@ -720,9 +724,7 @@ serve(async (req) => {
       evidenceText = `\n\n**EVIDENCE CHUNKS (cite these in your answer):**\n\n${formattedChunks.join('\n\n')}`;
     }
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:717',message:'Evidence text length and preview',data:{evidenceTextLength:evidenceText.length,evidenceTextPreview:evidenceText.substring(0,500),hasEvidenceChunks:retrievedChunks.length>0,hasSeasonSummaries:seasonSummaries.length>0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','C']}).catch(()=>{});
-    // #endregion agent log
+    console.log('Evidence text length:', evidenceText.length);
 
     const tmdbContextText = formatTMDbContext(tmdbContext, mediaType, seasonNumber, episodeNumber);
 
@@ -778,9 +780,6 @@ ${evidenceText}
 
 Answer the question using ONLY the EVIDENCE CHUNKS above. Do not use general knowledge or inference. If the evidence chunks don't contain enough information, say so honestly. Only state facts that are explicitly in the evidence chunks.`;
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:768',message:'Prompt sent to AI',data:{systemPromptLength:systemPrompt.length,userPromptLength:userPrompt.length,evidenceTextLength:evidenceText.length,question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','D']}).catch(()=>{});
-    // #endregion agent log
 
     console.log('Sending request to Lovable AI with RAG context');
 
@@ -824,11 +823,6 @@ Answer the question using ONLY the EVIDENCE CHUNKS above. Do not use general kno
     console.log('AI response finish_reason:', data.choices[0]?.finish_reason);
     console.log('AI response content length:', answer.length);
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:809',message:'AI response received',data:{answerLength:answer.length,answerPreview:answer.substring(0,300),finishReason:data.choices[0]?.finish_reason,question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','E']}).catch(()=>{});
-    // #endregion agent log
-    
-    const answer = data.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
 
     // Validate response has citations (log warning but don't fail)
     if (!validateResponse(answer)) {
