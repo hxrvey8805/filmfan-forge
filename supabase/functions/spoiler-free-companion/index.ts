@@ -259,6 +259,10 @@ async function retrieveContext(
   maxSeconds: number,
   question: string
 ): Promise<RetrievedChunk[]> {
+  // Use a very high max_seconds to ensure we get all content up to current episode
+  // The actual filtering happens in re-ranking where we prioritize recent content
+  const effectiveMaxSeconds = Math.max(maxSeconds, 99999);
+  
   // Stage 1: Broad vector search (100 candidates)
   const { data: candidates, error } = await supabase.rpc('match_subtitle_chunks', {
     query_embedding: questionEmbedding,
@@ -266,7 +270,7 @@ async function retrieveContext(
     p_media_type: mediaType,
     p_current_season: currentSeason,
     p_current_episode: currentEpisode,
-    p_max_seconds: maxSeconds,
+    p_max_seconds: effectiveMaxSeconds,
     match_count: 100,
   });
   
