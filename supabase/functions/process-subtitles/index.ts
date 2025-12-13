@@ -1,15 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Declare Supabase AI global
-declare const Supabase: {
-  ai: {
-    Session: new (model: string) => {
-      run: (input: string, options?: { mean_pool?: boolean; normalize?: boolean }) => Promise<number[]>;
-    };
-  };
-};
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -217,22 +208,36 @@ async function fetchWithRetry(
   throw lastError || new Error('Max retries exceeded');
 }
 
-// Generate embedding using Supabase's built-in gte-small model
-const embeddingModel = new Supabase.ai.Session('gte-small');
-
-async function generateEmbedding(text: string): Promise<number[] | null> {
+// Generate embedding using OpenAI text-embedding-3-small (1536 dimensions)
+async function generateEmbedding(text: string, apiKey: string): Promise<number[] | null> {
   try {
-    const embedding = await embeddingModel.run(text.slice(0, 2000), {
-      mean_pool: true,
-      normalize: true,
+    const response = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-3-small',
+        input: text.slice(0, 8000), // text-embedding-3-small supports up to 8191 tokens
+      }),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI embedding error:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const embedding = data.data?.[0]?.embedding;
     
-    if (!Array.isArray(embedding) || embedding.length !== 384) {
+    if (!Array.isArray(embedding) || embedding.length !== 1536) {
       console.error('Invalid embedding dimensions:', embedding?.length);
       return null;
     }
     
-    return embedding as number[];
+    return embedding;
   } catch (error) {
     console.error('Error generating embedding:', error);
     return null;
@@ -264,8 +269,14 @@ serve(async (req) => {
     }
     
     const OPENSUBTITLES_API_KEY = Deno.env.get('OPENSUBTITLES_API_KEY');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    
     if (!OPENSUBTITLES_API_KEY) {
       throw new Error('OPENSUBTITLES_API_KEY is not configured');
+    }
+    
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is not configured');
     }
     
     // Create Supabase client with service role for inserts
@@ -394,18 +405,19 @@ serve(async (req) => {
     const chunks = chunkSubtitles(entries);
     console.log(`Created ${chunks.length} chunks`);
     
-    // Process chunks in small batches to avoid CPU timeout
-    // Insert WITHOUT embeddings first, then we can add embeddings later if needed
+    // Process chunks in small batches with OpenAI embeddings
     const BATCH_SIZE = 5;
     let successCount = 0;
+    let embeddingsGenerated = 0;
     
     for (let batchStart = 0; batchStart < chunks.length; batchStart += BATCH_SIZE) {
       const batch = chunks.slice(batchStart, batchStart + BATCH_SIZE);
       const insertData: any[] = [];
       
       for (const chunk of batch) {
-        // Generate embedding for this chunk
-        const embedding = await generateEmbedding(chunk.content);
+        // Generate embedding using OpenAI
+        const embedding = await generateEmbedding(chunk.content, OPENAI_API_KEY);
+        if (embedding) embeddingsGenerated++;
         
         insertData.push({
           tmdb_id: tmdbId,
@@ -420,7 +432,7 @@ serve(async (req) => {
         });
       }
       
-      // Insert this batch immediately
+      // Insert this batch
       const { error: insertError } = await supabase
         .from('subtitle_chunks')
         .upsert(insertData, { 
@@ -430,15 +442,14 @@ serve(async (req) => {
       
       if (insertError) {
         console.error(`Batch insert error at ${batchStart}:`, insertError);
-        // Continue with next batch instead of failing completely
       } else {
         successCount += batch.length;
         console.log(`Inserted batch ${Math.floor(batchStart / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)}`);
       }
       
-      // Small delay between batches to avoid rate limits
+      // Small delay between batches to respect OpenAI rate limits
       if (batchStart + BATCH_SIZE < chunks.length) {
-        await delay(100);
+        await delay(200);
       }
     }
     
@@ -449,13 +460,14 @@ serve(async (req) => {
       );
     }
     
-    console.log(`Successfully cached ${successCount}/${chunks.length} chunks for ${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber}` : 'movie'}`);
+    console.log(`Successfully cached ${successCount}/${chunks.length} chunks with ${embeddingsGenerated} embeddings for ${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber}` : 'movie'}`);
     
     return new Response(
       JSON.stringify({ 
         success: true, 
         cached: false,
         chunksStored: successCount,
+        embeddingsGenerated,
         chunksCreated: chunks.length,
         entriesParsed: entries.length 
       }),

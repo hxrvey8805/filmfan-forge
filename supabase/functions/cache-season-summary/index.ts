@@ -1,36 +1,41 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Declare Supabase AI global
-declare const Supabase: {
-  ai: {
-    Session: new (model: string) => {
-      run: (input: string, options?: { mean_pool?: boolean; normalize?: boolean }) => Promise<number[]>;
-    };
-  };
-};
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Generate embedding using Supabase's built-in gte-small model
-const embeddingModel = new Supabase.ai.Session('gte-small');
-
-async function generateEmbedding(text: string): Promise<number[] | null> {
+// Generate embedding using OpenAI text-embedding-3-small (1536 dimensions)
+async function generateEmbedding(text: string, apiKey: string): Promise<number[] | null> {
   try {
-    const embedding = await embeddingModel.run(text.slice(0, 2000), {
-      mean_pool: true,
-      normalize: true,
+    const response = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-3-small',
+        input: text.slice(0, 8000),
+      }),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI embedding error:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const embedding = data.data?.[0]?.embedding;
     
-    if (!Array.isArray(embedding) || embedding.length !== 384) {
+    if (!Array.isArray(embedding) || embedding.length !== 1536) {
       console.error('Invalid embedding dimensions:', embedding?.length);
       return null;
     }
     
-    return embedding as number[];
+    return embedding;
   } catch (error) {
     console.error('Error generating embedding:', error);
     return null;
@@ -55,9 +60,14 @@ serve(async (req) => {
     }
     
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
     if (!TMDB_API_KEY) {
       throw new Error('TMDB_API_KEY is not configured');
+    }
+    
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is not configured');
     }
     
     // Create Supabase client with service role for inserts
@@ -118,8 +128,8 @@ serve(async (req) => {
       ...episodeSummaries.map(ep => `Episode ${ep.episode}: ${ep.name} - ${ep.overview}`),
     ].join('\n');
     
-    // Generate embedding
-    const embedding = await generateEmbedding(embeddingText);
+    // Generate embedding using OpenAI
+    const embedding = await generateEmbedding(embeddingText, OPENAI_API_KEY);
     
     // Insert into database
     const { error: insertError } = await supabase
@@ -144,14 +154,15 @@ serve(async (req) => {
       );
     }
     
-    console.log(`Successfully cached season ${seasonNumber} summary with ${episodeSummaries.length} episodes`);
+    console.log(`Successfully cached season ${seasonNumber} summary with ${episodeSummaries.length} episodes, embedding: ${embedding ? 'yes' : 'no'}`);
     
     return new Response(
       JSON.stringify({ 
         success: true, 
         cached: false,
         seasonName,
-        episodeCount: episodeSummaries.length 
+        episodeCount: episodeSummaries.length,
+        hasEmbedding: !!embedding
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
