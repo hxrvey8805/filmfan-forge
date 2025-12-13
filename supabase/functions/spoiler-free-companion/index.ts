@@ -248,6 +248,53 @@ interface RetrievedChunk {
   finalScore: number;
 }
 
+// Get chunks directly at/near the user's timestamp (no vector search - direct fetch)
+async function getTimestampChunks(
+  supabase: any,
+  tmdbId: number,
+  mediaType: 'tv' | 'movie',
+  currentSeason: number,
+  currentEpisode: number,
+  targetSeconds: number,
+  windowMinutes: number = 5
+): Promise<RetrievedChunk[]> {
+  const windowSeconds = windowMinutes * 60;
+  const minSeconds = Math.max(0, targetSeconds - windowSeconds);
+  
+  let query = supabase
+    .from('subtitle_chunks')
+    .select('id, season_number, episode_number, start_seconds, end_seconds, content')
+    .eq('tmdb_id', tmdbId)
+    .eq('media_type', mediaType)
+    .lte('start_seconds', targetSeconds)
+    .gte('end_seconds', minSeconds)
+    .order('start_seconds', { ascending: false })
+    .limit(15);
+  
+  if (mediaType === 'tv') {
+    query = query.eq('season_number', currentSeason).eq('episode_number', currentEpisode);
+  }
+  
+  const { data: chunks, error } = await query;
+  
+  if (error || !chunks) {
+    console.error('Timestamp chunks error:', error);
+    return [];
+  }
+  
+  return chunks.map((chunk: any) => ({
+    id: chunk.id,
+    season_number: chunk.season_number,
+    episode_number: chunk.episode_number,
+    start_seconds: Number(chunk.start_seconds),
+    end_seconds: Number(chunk.end_seconds),
+    content: chunk.content,
+    similarity: 1.0, // Direct timestamp match = highest relevance
+    recencyScore: 1.0,
+    finalScore: 1.0,
+  }));
+}
+
 // Two-stage retrieval with re-ranking
 async function retrieveContext(
   supabase: any,
@@ -259,8 +306,13 @@ async function retrieveContext(
   maxSeconds: number,
   question: string
 ): Promise<RetrievedChunk[]> {
-  // Stage 1: Broad vector search (100 candidates)
-  // Use the actual maxSeconds to only get content up to the user's timestamp
+  // STAGE 1: Get chunks directly at the user's timestamp (most important!)
+  const timestampChunks = await getTimestampChunks(
+    supabase, tmdbId, mediaType, currentSeason, currentEpisode, maxSeconds, 5
+  );
+  console.log(`Direct timestamp chunks (within 5 min): ${timestampChunks.length}`);
+  
+  // STAGE 2: Vector search for semantically relevant content
   const { data: candidates, error } = await supabase.rpc('match_subtitle_chunks', {
     query_embedding: questionEmbedding,
     p_tmdb_id: tmdbId,
@@ -268,17 +320,20 @@ async function retrieveContext(
     p_current_season: currentSeason,
     p_current_episode: currentEpisode,
     p_max_seconds: maxSeconds,
-    match_count: 100,
+    match_count: 80,
   });
   
   if (error) {
     console.error('Vector search error:', error);
-    return [];
+    // Even if vector search fails, return timestamp chunks
+    return timestampChunks;
   }
   
-  if (!candidates || candidates.length === 0) {
-    return [];
-  }
+  // Get IDs of timestamp chunks to avoid duplicates
+  const timestampChunkIds = new Set(timestampChunks.map(c => c.id));
+  
+  // Filter out duplicates from vector results
+  const vectorCandidates = (candidates || []).filter((c: any) => !timestampChunkIds.has(c.id));
   
   // Detect if this is a "what's happening now" type question
   const questionLower = question.toLowerCase();
@@ -288,24 +343,25 @@ async function retrieveContext(
     questionLower.includes('this scene') ||
     questionLower.includes('right now') ||
     questionLower.includes('just happened') ||
-    questionLower.includes('what is this');
+    questionLower.includes('what is this') ||
+    questionLower.includes('who is') ||
+    questionLower.includes('what are they');
   
   const questionWords = questionLower.split(/\s+/).filter(w => w.length > 3);
   
-  const reranked: RetrievedChunk[] = candidates.map((chunk: any) => {
+  // Re-rank vector results
+  const rerankedVector: RetrievedChunk[] = vectorCandidates.map((chunk: any) => {
     const contentLower = chunk.content.toLowerCase();
     const chunkEndSeconds = Number(chunk.end_seconds);
     const chunkStartSeconds = Number(chunk.start_seconds);
     
-    // Timestamp proximity score - how close is this chunk to the user's current position
+    // Timestamp proximity score
     let timestampProximityScore = 0;
     if (chunk.season_number === currentSeason && chunk.episode_number === currentEpisode) {
-      // For current episode, calculate proximity to user's timestamp
       const distanceFromTimestamp = Math.abs(maxSeconds - chunkEndSeconds);
-      const maxDistance = maxSeconds; // max possible distance
+      const maxDistance = maxSeconds;
       timestampProximityScore = 1 - Math.min(distanceFromTimestamp / maxDistance, 1);
       
-      // Boost chunks that are within 5 minutes of the timestamp
       if (distanceFromTimestamp <= 300) {
         timestampProximityScore = Math.min(1, timestampProximityScore + 0.3);
       }
@@ -337,20 +393,18 @@ async function retrieveContext(
     }
     keywordScore = Math.min(0.4, keywordScore);
     
-    // Combined score - weight differently based on question type
+    // Combined score
     let finalScore: number;
     if (isCurrentSceneQuestion) {
-      // For "what's happening now" questions, heavily weight timestamp proximity
       finalScore = 
-        (chunk.similarity * 0.25) + 
+        (chunk.similarity * 0.2) + 
         (timestampProximityScore * 0.5) + 
-        (episodeRecencyScore * 0.15) + 
+        (episodeRecencyScore * 0.2) + 
         (keywordScore * 0.1);
     } else {
-      // For other questions, balance similarity and recency
       finalScore = 
-        (chunk.similarity * 0.4) + 
-        (timestampProximityScore * 0.2) + 
+        (chunk.similarity * 0.35) + 
+        (timestampProximityScore * 0.25) + 
         (episodeRecencyScore * 0.25) + 
         (keywordScore * 0.15);
     }
@@ -368,9 +422,19 @@ async function retrieveContext(
     };
   });
   
-  // Sort by final score and take top 30
-  reranked.sort((a, b) => b.finalScore - a.finalScore);
-  return reranked.slice(0, 30);
+  // Sort vector results by final score
+  rerankedVector.sort((a, b) => b.finalScore - a.finalScore);
+  
+  // COMBINE: Timestamp chunks FIRST (priority), then top vector results
+  // Timestamp chunks are what's happening RIGHT NOW at the user's position
+  const combined = [
+    ...timestampChunks,  // These come first - direct timestamp match
+    ...rerankedVector.slice(0, 20),  // Then semantic matches for context
+  ];
+  
+  console.log(`Combined: ${timestampChunks.length} timestamp + ${Math.min(20, rerankedVector.length)} vector = ${combined.length} total`);
+  
+  return combined;
 }
 
 // Retrieve season summaries for previous seasons
@@ -704,9 +768,13 @@ serve(async (req) => {
 
     console.log(`Retrieved ${retrievedChunks.length} chunks, has season summaries: ${seasonSummaries.length > 0}`);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:705',message:'Retrieved chunks count and sample',data:{retrievedChunksCount:retrievedChunks.length,seasonSummariesLength:seasonSummaries.length,sampleChunks:retrievedChunks.slice(0,3).map(c=>({season:c.season_number,episode:c.episode_number,startSeconds:c.start_seconds,endSeconds:c.end_seconds,contentPreview:c.content.substring(0,100)})),question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','B','C']}).catch(()=>{});
-    // #endregion agent log
+    console.log(`Sample chunks:`, retrievedChunks.slice(0, 3).map(c => ({
+      season: c.season_number,
+      episode: c.episode_number,
+      startSeconds: c.start_seconds,
+      endSeconds: c.end_seconds,
+      contentPreview: c.content.substring(0, 100)
+    })));
 
     // Format retrieved chunks as evidence
     let evidenceText = '';
@@ -720,9 +788,7 @@ serve(async (req) => {
       evidenceText = `\n\n**EVIDENCE CHUNKS (cite these in your answer):**\n\n${formattedChunks.join('\n\n')}`;
     }
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:717',message:'Evidence text length and preview',data:{evidenceTextLength:evidenceText.length,evidenceTextPreview:evidenceText.substring(0,500),hasEvidenceChunks:retrievedChunks.length>0,hasSeasonSummaries:seasonSummaries.length>0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','C']}).catch(()=>{});
-    // #endregion agent log
+    console.log('Evidence text length:', evidenceText.length);
 
     const tmdbContextText = formatTMDbContext(tmdbContext, mediaType, seasonNumber, episodeNumber);
 
@@ -742,24 +808,28 @@ serve(async (req) => {
 
     const systemPrompt = `You are a script-based companion helping someone watch "${title}" - ${mediaLabel}.
 
-**CRITICAL - EVIDENCE-ONLY RULES:**
+**CRITICAL - TIMESTAMP-FIRST RULES:**
+1. The EVIDENCE CHUNKS are ordered by relevance - chunks at the TOP are from the user's EXACT timestamp position and should be prioritized
+2. When the user asks "what's happening", focus FIRST on the chunks closest to their timestamp (${timestamp})
+3. Use earlier chunks in the list only for additional context, not as the primary answer
+4. NEVER reveal events after timestamp ${timestamp}
+
+**EVIDENCE-ONLY RULES:**
 1. You may ONLY use information explicitly stated in the EVIDENCE CHUNKS (dialogue/subtitle text) provided below
 2. You may NOT use any general knowledge, inference, or information not explicitly in the evidence chunks
 3. You may NOT fill in gaps, make assumptions, or add details not in the evidence
 4. If the evidence chunks don't contain enough information to answer the question, say: "Based on the available dialogue, I don't have enough information to answer that question."
-5. NEVER reveal events after timestamp ${timestamp}
-6. For character/plot questions: Only use evidence from dialogue BEFORE ${timestamp}
 
 **WHAT COUNTS AS EVIDENCE:**
-- ✅ EVIDENCE CHUNKS section contains actual dialogue/subtitle text - USE THIS
+- ✅ EVIDENCE CHUNKS section contains actual dialogue/subtitle text - USE THIS (prioritize chunks near ${timestamp})
 - ❌ SHOW INFO section contains character lists/metadata - DO NOT use for plot details
 - ❌ PREVIOUS SEASONS section contains summaries - DO NOT use for specific dialogue/actions
 
 **ANSWER STYLE:**
-- Base your answer ONLY on what's explicitly stated in the EVIDENCE CHUNKS
+- Focus your answer on what's happening AT the user's timestamp (${timestamp})
+- The first chunks in the evidence are the most relevant - they're from the current scene
 - Reference the timestamps from evidence chunks when making claims
 - Be honest when evidence is insufficient
-- Do NOT infer or add details not in the evidence
 
 ${tmdbContextText ? `\n**SHOW INFO (metadata only, not evidence for plot):**\n${tmdbContextText}` : ''}
 ${seasonSummaries ? `\n\n**PREVIOUS SEASONS (summaries only, not evidence for specific dialogue):**\n${seasonSummaries}` : ''}`;
@@ -778,9 +848,6 @@ ${evidenceText}
 
 Answer the question using ONLY the EVIDENCE CHUNKS above. Do not use general knowledge or inference. If the evidence chunks don't contain enough information, say so honestly. Only state facts that are explicitly in the evidence chunks.`;
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:768',message:'Prompt sent to AI',data:{systemPromptLength:systemPrompt.length,userPromptLength:userPrompt.length,evidenceTextLength:evidenceText.length,question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','D']}).catch(()=>{});
-    // #endregion agent log
 
     console.log('Sending request to Lovable AI with RAG context');
 
@@ -823,12 +890,6 @@ Answer the question using ONLY the EVIDENCE CHUNKS above. Do not use general kno
     const answer = data.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
     console.log('AI response finish_reason:', data.choices[0]?.finish_reason);
     console.log('AI response content length:', answer.length);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:809',message:'AI response received',data:{answerLength:answer.length,answerPreview:answer.substring(0,300),finishReason:data.choices[0]?.finish_reason,question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','E']}).catch(()=>{});
-    // #endregion agent log
-    
-    const answer = data.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
 
     // Validate response has citations (log warning but don't fail)
     if (!validateResponse(answer)) {
