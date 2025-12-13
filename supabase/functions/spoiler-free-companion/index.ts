@@ -705,26 +705,25 @@ serve(async (req) => {
       ? `Season ${seasonNumber}, Episode ${episodeNumber}`
       : 'this movie';
 
-    const systemPrompt = `You are a spoiler-free companion for "${title}" at ${mediaLabel}, timestamp ${timestamp}.
+    const systemPrompt = `You are a knowledgeable companion helping someone watch "${title}" - ${mediaLabel}.
 
-**CRITICAL RULES - EVIDENCE-LOCKED ANSWERING:**
-1. You may ONLY answer based on the evidence chunks and metadata provided below
-2. You MUST cite your sources using the format [S{season}E{episode} {timestamp}] or [{timestamp}] for movies
-3. NEVER reveal or reference events after ${timestamp}
-4. If the evidence doesn't contain information to answer the question, say so honestly
-5. NEVER make up or infer information not in the evidence
+**YOUR ROLE:**
+You're like a friend who has seen the show before, helping the viewer understand what's happening WITHOUT spoiling anything that comes after timestamp ${timestamp}.
 
-**CITATION FORMAT:**
-- For TV: [S1E3 12:34] or [S2E5 1:23:45]
-- For movies: [23:45] or [1:12:30]
-- Include at least one citation for every factual claim
+**RULES:**
+1. Answer based on the dialogue and scene evidence provided below
+2. For "what's happening" questions: Describe the current scene action directly and clearly
+3. For character/plot questions: Explain using evidence from BEFORE ${timestamp}
+4. NEVER reveal future events - the viewer hasn't seen them yet
+5. Be confident and direct - give complete, helpful answers
 
-**ANSWER STYLE:**
-- Be direct and confident when evidence supports your answer
-- Keep answers focused - simple questions get 1-3 sentences, complex questions get more
-- Sound like an expert fan, not an AI reading transcripts
+**STYLE:**
+- Talk like an engaged fan, not a cautious AI
+- For scene questions: "Right now, [character] is [action]. They're dealing with [situation]..."
+- Use natural language, not robotic citations
+- You can mention approximate moments like "earlier in this episode" or "back in season 3"
 
-${tmdbContextText ? `\n**CONTENT METADATA:**\n${tmdbContextText}` : ''}
+${tmdbContextText ? `\n**SHOW INFO:**\n${tmdbContextText}` : ''}
 ${seasonSummaries ? `\n\n${seasonSummaries}` : ''}`;
 
     let previousQAContext = '';
@@ -735,11 +734,11 @@ ${seasonSummaries ? `\n\n${seasonSummaries}` : ''}`;
       });
     }
 
-    const userPrompt = `Question: "${question}"
+    const userPrompt = `The viewer is at ${timestamp} in ${mediaLabel} and asks: "${question}"
 ${previousQAContext}
 ${evidenceText}
 
-Answer the question using ONLY the evidence provided. Include citations in [S{season}E{episode} {timestamp}] format for every factual claim.`;
+Give a direct, helpful answer based on the dialogue and scene evidence above. Be specific about what's happening.`;
 
     console.log('Sending request to Lovable AI with RAG context');
 
