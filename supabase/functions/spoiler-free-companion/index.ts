@@ -704,6 +704,10 @@ serve(async (req) => {
 
     console.log(`Retrieved ${retrievedChunks.length} chunks, has season summaries: ${seasonSummaries.length > 0}`);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:705',message:'Retrieved chunks count and sample',data:{retrievedChunksCount:retrievedChunks.length,seasonSummariesLength:seasonSummaries.length,sampleChunks:retrievedChunks.slice(0,3).map(c=>({season:c.season_number,episode:c.episode_number,startSeconds:c.start_seconds,endSeconds:c.end_seconds,contentPreview:c.content.substring(0,100)})),question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','B','C']}).catch(()=>{});
+    // #endregion agent log
+
     // Format retrieved chunks as evidence
     let evidenceText = '';
     if (retrievedChunks.length > 0) {
@@ -715,6 +719,10 @@ serve(async (req) => {
       });
       evidenceText = `\n\n**EVIDENCE CHUNKS (cite these in your answer):**\n\n${formattedChunks.join('\n\n')}`;
     }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:717',message:'Evidence text length and preview',data:{evidenceTextLength:evidenceText.length,evidenceTextPreview:evidenceText.substring(0,500),hasEvidenceChunks:retrievedChunks.length>0,hasSeasonSummaries:seasonSummaries.length>0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','C']}).catch(()=>{});
+    // #endregion agent log
 
     const tmdbContextText = formatTMDbContext(tmdbContext, mediaType, seasonNumber, episodeNumber);
 
@@ -732,26 +740,29 @@ serve(async (req) => {
       ? `Season ${seasonNumber}, Episode ${episodeNumber}`
       : 'this movie';
 
-    const systemPrompt = `You are a knowledgeable companion helping someone watch "${title}" - ${mediaLabel}.
+    const systemPrompt = `You are a script-based companion helping someone watch "${title}" - ${mediaLabel}.
 
-**YOUR ROLE:**
-You're like a friend who has seen the show before, helping the viewer understand what's happening WITHOUT spoiling anything that comes after timestamp ${timestamp}.
+**CRITICAL - EVIDENCE-ONLY RULES:**
+1. You may ONLY use information explicitly stated in the EVIDENCE CHUNKS (dialogue/subtitle text) provided below
+2. You may NOT use any general knowledge, inference, or information not explicitly in the evidence chunks
+3. You may NOT fill in gaps, make assumptions, or add details not in the evidence
+4. If the evidence chunks don't contain enough information to answer the question, say: "Based on the available dialogue, I don't have enough information to answer that question."
+5. NEVER reveal events after timestamp ${timestamp}
+6. For character/plot questions: Only use evidence from dialogue BEFORE ${timestamp}
 
-**RULES:**
-1. Answer based on the dialogue and scene evidence provided below
-2. For "what's happening" questions: Describe the current scene action directly and clearly
-3. For character/plot questions: Explain using evidence from BEFORE ${timestamp}
-4. NEVER reveal future events - the viewer hasn't seen them yet
-5. Be confident and direct - give complete, helpful answers
+**WHAT COUNTS AS EVIDENCE:**
+- ✅ EVIDENCE CHUNKS section contains actual dialogue/subtitle text - USE THIS
+- ❌ SHOW INFO section contains character lists/metadata - DO NOT use for plot details
+- ❌ PREVIOUS SEASONS section contains summaries - DO NOT use for specific dialogue/actions
 
-**STYLE:**
-- Talk like an engaged fan, not a cautious AI
-- For scene questions: "Right now, [character] is [action]. They're dealing with [situation]..."
-- Use natural language, not robotic citations
-- You can mention approximate moments like "earlier in this episode" or "back in season 3"
+**ANSWER STYLE:**
+- Base your answer ONLY on what's explicitly stated in the EVIDENCE CHUNKS
+- Reference the timestamps from evidence chunks when making claims
+- Be honest when evidence is insufficient
+- Do NOT infer or add details not in the evidence
 
-${tmdbContextText ? `\n**SHOW INFO:**\n${tmdbContextText}` : ''}
-${seasonSummaries ? `\n\n${seasonSummaries}` : ''}`;
+${tmdbContextText ? `\n**SHOW INFO (metadata only, not evidence for plot):**\n${tmdbContextText}` : ''}
+${seasonSummaries ? `\n\n**PREVIOUS SEASONS (summaries only, not evidence for specific dialogue):**\n${seasonSummaries}` : ''}`;
 
     let previousQAContext = '';
     if (previousQA && Array.isArray(previousQA) && previousQA.length > 0) {
@@ -765,7 +776,11 @@ ${seasonSummaries ? `\n\n${seasonSummaries}` : ''}`;
 ${previousQAContext}
 ${evidenceText}
 
-Give a direct, helpful answer based on the dialogue and scene evidence above. Be specific about what's happening.`;
+Answer the question using ONLY the EVIDENCE CHUNKS above. Do not use general knowledge or inference. If the evidence chunks don't contain enough information, say so honestly. Only state facts that are explicitly in the evidence chunks.`;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:768',message:'Prompt sent to AI',data:{systemPromptLength:systemPrompt.length,userPromptLength:userPrompt.length,evidenceTextLength:evidenceText.length,question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','D']}).catch(()=>{});
+    // #endregion agent log
 
     console.log('Sending request to Lovable AI with RAG context');
 
@@ -805,8 +820,13 @@ Give a direct, helpful answer based on the dialogue and scene evidence above. Be
     }
 
     const data = await response.json();
+    const answer = data.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
     console.log('AI response finish_reason:', data.choices[0]?.finish_reason);
-    console.log('AI response content length:', data.choices[0]?.message?.content?.length);
+    console.log('AI response content length:', answer.length);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/21ff5728-9018-442b-bb79-1616a89d0eef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'spoiler-free-companion/index.ts:809',message:'AI response received',data:{answerLength:answer.length,answerPreview:answer.substring(0,300),finishReason:data.choices[0]?.finish_reason,question},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:['A','E']}).catch(()=>{});
+    // #endregion agent log
     
     const answer = data.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
 
