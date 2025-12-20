@@ -54,6 +54,14 @@ interface TMDbContext {
   characters?: CharacterSummary[];
 }
 
+interface SubtitleCoverage {
+  maxAvailableSeconds: number;
+  minAvailableSeconds: number;
+  hasData: boolean;
+  coverageComplete: boolean;
+  adjustedTimestamp: number;
+}
+
 function extractYear(dateString?: string | null): string | undefined {
   if (!dateString) return undefined;
   return dateString.split('-')[0];
@@ -248,7 +256,57 @@ interface RetrievedChunk {
   finalScore: number;
 }
 
-// Get chunks directly at/near the user's timestamp (no vector search - direct fetch)
+// Check subtitle coverage for the episode
+async function getSubtitleCoverage(
+  supabase: any,
+  tmdbId: number,
+  mediaType: 'tv' | 'movie',
+  seasonNumber: number,
+  episodeNumber: number,
+  requestedSeconds: number
+): Promise<SubtitleCoverage> {
+  let query = supabase
+    .from('subtitle_chunks')
+    .select('start_seconds, end_seconds')
+    .eq('tmdb_id', tmdbId)
+    .eq('media_type', mediaType);
+  
+  if (mediaType === 'tv') {
+    query = query.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
+  }
+  
+  const { data: chunks, error } = await query;
+  
+  if (error || !chunks || chunks.length === 0) {
+    console.log('No subtitle chunks found for coverage check');
+    return {
+      maxAvailableSeconds: 0,
+      minAvailableSeconds: 0,
+      hasData: false,
+      coverageComplete: false,
+      adjustedTimestamp: requestedSeconds,
+    };
+  }
+  
+  const maxAvailable = Math.max(...chunks.map((c: any) => Number(c.end_seconds)));
+  const minAvailable = Math.min(...chunks.map((c: any) => Number(c.start_seconds)));
+  const coverageComplete = requestedSeconds <= maxAvailable;
+  
+  // If user's timestamp exceeds available data, use the latest available
+  const adjustedTimestamp = coverageComplete ? requestedSeconds : maxAvailable;
+  
+  console.log(`Subtitle coverage: min=${formatTime(minAvailable)}, max=${formatTime(maxAvailable)}, requested=${formatTime(requestedSeconds)}, adjusted=${formatTime(adjustedTimestamp)}, complete=${coverageComplete}`);
+  
+  return {
+    maxAvailableSeconds: maxAvailable,
+    minAvailableSeconds: minAvailable,
+    hasData: true,
+    coverageComplete,
+    adjustedTimestamp,
+  };
+}
+
+// Get chunks directly at/near the user's timestamp with fallback
 async function getTimestampChunks(
   supabase: any,
   tmdbId: number,
@@ -267,8 +325,8 @@ async function getTimestampChunks(
     .eq('tmdb_id', tmdbId)
     .eq('media_type', mediaType)
     .lte('start_seconds', targetSeconds)
-    .gte('end_seconds', minSeconds)
-    .order('start_seconds', { ascending: false })
+    .gte('start_seconds', minSeconds)
+    .order('start_seconds', { ascending: true }) // Chronological order!
     .limit(15);
   
   if (mediaType === 'tv') {
@@ -277,10 +335,46 @@ async function getTimestampChunks(
   
   const { data: chunks, error } = await query;
   
-  if (error || !chunks) {
-    console.error('Timestamp chunks error:', error);
-    return [];
+  // FALLBACK: If no chunks found in the window, get the latest available chunks
+  if (error || !chunks || chunks.length === 0) {
+    console.log('No chunks in timestamp window, trying fallback to latest chunks');
+    
+    let fallbackQuery = supabase
+      .from('subtitle_chunks')
+      .select('id, season_number, episode_number, start_seconds, end_seconds, content')
+      .eq('tmdb_id', tmdbId)
+      .eq('media_type', mediaType)
+      .order('end_seconds', { ascending: false })
+      .limit(10);
+    
+    if (mediaType === 'tv') {
+      fallbackQuery = fallbackQuery.eq('season_number', currentSeason).eq('episode_number', currentEpisode);
+    }
+    
+    const { data: fallbackChunks, error: fallbackError } = await fallbackQuery;
+    
+    if (fallbackError || !fallbackChunks || fallbackChunks.length === 0) {
+      console.error('Fallback chunks also failed:', fallbackError);
+      return [];
+    }
+    
+    console.log(`Fallback: Found ${fallbackChunks.length} latest chunks`);
+    
+    // Reverse to get chronological order
+    return fallbackChunks.reverse().map((chunk: any) => ({
+      id: chunk.id,
+      season_number: chunk.season_number,
+      episode_number: chunk.episode_number,
+      start_seconds: Number(chunk.start_seconds),
+      end_seconds: Number(chunk.end_seconds),
+      content: chunk.content,
+      similarity: 1.0,
+      recencyScore: 1.0,
+      finalScore: 1.0,
+    }));
   }
+  
+  console.log(`Found ${chunks.length} timestamp chunks (${formatTime(minSeconds)} to ${formatTime(targetSeconds)})`);
   
   return chunks.map((chunk: any) => ({
     id: chunk.id,
@@ -289,10 +383,37 @@ async function getTimestampChunks(
     start_seconds: Number(chunk.start_seconds),
     end_seconds: Number(chunk.end_seconds),
     content: chunk.content,
-    similarity: 1.0, // Direct timestamp match = highest relevance
+    similarity: 1.0,
     recencyScore: 1.0,
     finalScore: 1.0,
   }));
+}
+
+// Detect if question references previous seasons/episodes
+function detectCrossSeasonReference(question: string): { mentionsPrevious: boolean; specificSeason?: number; specificEpisode?: number } {
+  const questionLower = question.toLowerCase();
+  
+  // Check for season/episode references
+  const seasonMatch = questionLower.match(/season\s*(\d+)/i);
+  const episodeMatch = questionLower.match(/episode\s*(\d+)/i);
+  
+  // Check for temporal references to past
+  const mentionsPast = 
+    questionLower.includes('before') ||
+    questionLower.includes('earlier') ||
+    questionLower.includes('previously') ||
+    questionLower.includes('remember when') ||
+    questionLower.includes('last season') ||
+    questionLower.includes('last episode') ||
+    questionLower.includes('in the past') ||
+    questionLower.includes('happened to') ||
+    questionLower.includes('what happened with');
+  
+  return {
+    mentionsPrevious: mentionsPast || !!seasonMatch,
+    specificSeason: seasonMatch ? parseInt(seasonMatch[1]) : undefined,
+    specificEpisode: episodeMatch ? parseInt(episodeMatch[1]) : undefined,
+  };
 }
 
 // Two-stage retrieval with re-ranking
@@ -310,7 +431,13 @@ async function retrieveContext(
   const timestampChunks = await getTimestampChunks(
     supabase, tmdbId, mediaType, currentSeason, currentEpisode, maxSeconds, 5
   );
-  console.log(`Direct timestamp chunks (within 5 min): ${timestampChunks.length}`);
+  console.log(`Direct timestamp chunks: ${timestampChunks.length}`);
+  
+  // Check for cross-season references
+  const crossSeasonRef = detectCrossSeasonReference(question);
+  if (crossSeasonRef.mentionsPrevious) {
+    console.log('Question references previous content:', crossSeasonRef);
+  }
   
   // STAGE 2: Vector search for semantically relevant content
   const { data: candidates, error } = await supabase.rpc('match_subtitle_chunks', {
@@ -320,12 +447,11 @@ async function retrieveContext(
     p_current_season: currentSeason,
     p_current_episode: currentEpisode,
     p_max_seconds: maxSeconds,
-    match_count: 80,
+    match_count: 60,
   });
   
   if (error) {
     console.error('Vector search error:', error);
-    // Even if vector search fails, return timestamp chunks
     return timestampChunks;
   }
   
@@ -335,33 +461,22 @@ async function retrieveContext(
   // Filter out duplicates from vector results
   const vectorCandidates = (candidates || []).filter((c: any) => !timestampChunkIds.has(c.id));
   
-  // Detect if this is a "what's happening now" type question
-  const questionLower = question.toLowerCase();
-  const isCurrentSceneQuestion = 
-    questionLower.includes('happening') ||
-    questionLower.includes('going on') ||
-    questionLower.includes('this scene') ||
-    questionLower.includes('right now') ||
-    questionLower.includes('just happened') ||
-    questionLower.includes('what is this') ||
-    questionLower.includes('who is') ||
-    questionLower.includes('what are they');
+  const questionWords = question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
   
-  const questionWords = questionLower.split(/\s+/).filter(w => w.length > 3);
-  
-  // Re-rank vector results
+  // Re-rank vector results with ALWAYS high timestamp priority
   const rerankedVector: RetrievedChunk[] = vectorCandidates.map((chunk: any) => {
     const contentLower = chunk.content.toLowerCase();
     const chunkEndSeconds = Number(chunk.end_seconds);
     const chunkStartSeconds = Number(chunk.start_seconds);
     
-    // Timestamp proximity score
+    // Timestamp proximity score - ALWAYS prioritize this highly
     let timestampProximityScore = 0;
     if (chunk.season_number === currentSeason && chunk.episode_number === currentEpisode) {
       const distanceFromTimestamp = Math.abs(maxSeconds - chunkEndSeconds);
       const maxDistance = maxSeconds;
       timestampProximityScore = 1 - Math.min(distanceFromTimestamp / maxDistance, 1);
       
+      // Extra boost for very close chunks
       if (distanceFromTimestamp <= 300) {
         timestampProximityScore = Math.min(1, timestampProximityScore + 0.3);
       }
@@ -377,7 +492,8 @@ async function retrieveContext(
       } else if (seasonDiff === 0) {
         episodeRecencyScore = 0.7 - (episodeDiff * 0.1);
       } else {
-        episodeRecencyScore = 0.3 - (seasonDiff * 0.1);
+        // Boost previous season content if question references past
+        episodeRecencyScore = crossSeasonRef.mentionsPrevious ? 0.5 : 0.3 - (seasonDiff * 0.1);
       }
       episodeRecencyScore = Math.max(0, episodeRecencyScore);
     } else {
@@ -393,21 +509,12 @@ async function retrieveContext(
     }
     keywordScore = Math.min(0.4, keywordScore);
     
-    // Combined score
-    let finalScore: number;
-    if (isCurrentSceneQuestion) {
-      finalScore = 
-        (chunk.similarity * 0.2) + 
-        (timestampProximityScore * 0.5) + 
-        (episodeRecencyScore * 0.2) + 
-        (keywordScore * 0.1);
-    } else {
-      finalScore = 
-        (chunk.similarity * 0.35) + 
-        (timestampProximityScore * 0.25) + 
-        (episodeRecencyScore * 0.25) + 
-        (keywordScore * 0.15);
-    }
+    // Combined score - ALWAYS prioritize timestamp highly (45%)
+    const finalScore = 
+      (chunk.similarity * 0.25) + 
+      (timestampProximityScore * 0.45) + 
+      (episodeRecencyScore * 0.2) + 
+      (keywordScore * 0.1);
     
     return {
       id: chunk.id,
@@ -425,32 +532,35 @@ async function retrieveContext(
   // Sort vector results by final score
   rerankedVector.sort((a, b) => b.finalScore - a.finalScore);
   
-  // COMBINE: Timestamp chunks FIRST (priority), then top vector results
-  // Timestamp chunks are what's happening RIGHT NOW at the user's position
+  // COMBINE: Timestamp chunks FIRST (sorted chronologically), then top vector results
+  // Limit to 10 timestamp + 10 vector for more focused context
   const combined = [
-    ...timestampChunks,  // These come first - direct timestamp match
-    ...rerankedVector.slice(0, 20),  // Then semantic matches for context
+    ...timestampChunks.slice(0, 10),
+    ...rerankedVector.slice(0, 10),
   ];
   
-  console.log(`Combined: ${timestampChunks.length} timestamp + ${Math.min(20, rerankedVector.length)} vector = ${combined.length} total`);
+  console.log(`Combined: ${Math.min(10, timestampChunks.length)} timestamp + ${Math.min(10, rerankedVector.length)} vector = ${combined.length} total`);
   
   return combined;
 }
 
-// Retrieve season summaries for previous seasons
+// Retrieve season summaries for previous seasons - more focused
 async function retrieveSeasonSummaries(
   supabase: any,
   questionEmbedding: number[],
   tmdbId: number,
-  currentSeason: number
+  currentSeason: number,
+  crossSeasonRef: { mentionsPrevious: boolean; specificSeason?: number }
 ): Promise<string> {
   if (currentSeason <= 1) return '';
+  
+  const matchCount = crossSeasonRef.mentionsPrevious ? 5 : 3; // More if question references past
   
   const { data: summaries, error } = await supabase.rpc('match_season_summaries', {
     query_embedding: questionEmbedding,
     p_tmdb_id: tmdbId,
     p_max_season: currentSeason,
-    match_count: 5,
+    match_count: matchCount,
   });
   
   if (error || !summaries || summaries.length === 0) {
@@ -460,19 +570,22 @@ async function retrieveSeasonSummaries(
   // Sort by season number for logical order
   summaries.sort((a: any, b: any) => a.season_number - b.season_number);
   
-  const parts: string[] = ['**PREVIOUS SEASONS (Summaries):**\n'];
+  const parts: string[] = ['**PREVIOUS SEASONS (Summaries - use for context about past events):**\n'];
   
-  for (const summary of summaries) {
+  // Limit to 2 most relevant seasons to reduce context bloat
+  const limitedSummaries = summaries.slice(0, 2);
+  
+  for (const summary of limitedSummaries) {
     parts.push(`\n**${summary.season_name || `Season ${summary.season_number}`}:**`);
     if (summary.overview) {
-      parts.push(summary.overview);
+      parts.push(summary.overview.substring(0, 300) + (summary.overview.length > 300 ? '...' : ''));
     }
     
     const episodes = summary.episode_summaries as { episode: number; name: string; overview: string }[];
     if (episodes && episodes.length > 0) {
-      for (const ep of episodes.slice(0, 5)) { // Limit to first 5 episodes per season
+      for (const ep of episodes.slice(0, 3)) { // Limit to first 3 episodes per season
         if (ep.overview) {
-          parts.push(`- E${ep.episode}: ${ep.name} - ${ep.overview.substring(0, 150)}${ep.overview.length > 150 ? '...' : ''}`);
+          parts.push(`- E${ep.episode}: ${ep.name} - ${ep.overview.substring(0, 100)}${ep.overview.length > 100 ? '...' : ''}`);
         }
       }
     }
@@ -492,7 +605,6 @@ async function ensureSubtitlesCached(
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   
   if (mediaType === 'tv') {
-    // Check which episodes need caching
     for (let ep = 1; ep <= currentEpisode; ep++) {
       const { data: existing } = await supabase
         .from('subtitle_chunks')
@@ -505,7 +617,6 @@ async function ensureSubtitlesCached(
       
       if (!existing || existing.length === 0) {
         console.log(`Triggering subtitle cache for S${currentSeason}E${ep}`);
-        // Call process-subtitles function
         try {
           await fetch(`${SUPABASE_URL}/functions/v1/process-subtitles`, {
             method: 'POST',
@@ -517,14 +628,13 @@ async function ensureSubtitlesCached(
               episodeNumber: ep,
             }),
           });
-          await delay(500); // Rate limit between calls
+          await delay(500);
         } catch (error) {
           console.error(`Failed to cache S${currentSeason}E${ep}:`, error);
         }
       }
     }
   } else {
-    // For movies, just check if cached
     const { data: existing } = await supabase
       .from('subtitle_chunks')
       .select('id')
@@ -583,7 +693,6 @@ async function ensureSeasonSummariesCached(
 
 // Validate response contains citations
 function validateResponse(response: string): boolean {
-  // Check for citation patterns like [S1E3 12:34] or [23:45]
   const citationPattern = /\[S?\d+E?\d*\s+\d+:\d+(?::\d+)?\]/i;
   return citationPattern.test(response);
 }
@@ -725,21 +834,32 @@ serve(async (req) => {
       throw new Error('OPENAI_API_KEY is not configured');
     }
 
-    const currentSeconds = timestampToSeconds(timestamp);
-    if (currentSeconds === 0) {
+    let requestedSeconds = timestampToSeconds(timestamp);
+    if (requestedSeconds === 0) {
       return new Response(
         JSON.stringify({ error: 'Invalid timestamp format. Use HH:MM:SS or MM:SS' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Ensure caches are populated (runs in background, non-blocking for subsequent requests)
+    // Ensure caches are populated
     await Promise.all([
       ensureSubtitlesCached(supabaseService, tmdbId, mediaType, seasonNumber || 1, episodeNumber || 1),
       mediaType === 'tv' ? ensureSeasonSummariesCached(supabaseService, tmdbId, seasonNumber || 1) : Promise.resolve(),
     ]);
 
-    // Generate embedding for the question using OpenAI
+    // CHECK SUBTITLE COVERAGE - Critical fix!
+    const coverage = await getSubtitleCoverage(
+      supabaseService, tmdbId, mediaType, seasonNumber || 1, episodeNumber || 1, requestedSeconds
+    );
+    
+    // Use adjusted timestamp if user's exceeds available data
+    const currentSeconds = coverage.adjustedTimestamp;
+    const coverageWarning = !coverage.coverageComplete 
+      ? `Note: Subtitle data for this episode ends at ${formatTime(coverage.maxAvailableSeconds)}. Your timestamp (${timestamp}) exceeds this, so I'm using the latest available content.`
+      : '';
+
+    // Generate embedding for the question
     const questionEmbedding = await generateEmbedding(question, OPENAI_API_KEY);
     
     if (!questionEmbedding) {
@@ -749,6 +869,9 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Detect cross-season references
+    const crossSeasonRef = detectCrossSeasonReference(question);
 
     // Retrieve relevant context using two-stage RAG
     const [retrievedChunks, seasonSummaries, tmdbContext] = await Promise.all([
@@ -762,7 +885,7 @@ serve(async (req) => {
         currentSeconds,
         question
       ),
-      mediaType === 'tv' ? retrieveSeasonSummaries(supabaseService, questionEmbedding, tmdbId, seasonNumber || 1) : Promise.resolve(''),
+      mediaType === 'tv' ? retrieveSeasonSummaries(supabaseService, questionEmbedding, tmdbId, seasonNumber || 1, crossSeasonRef) : Promise.resolve(''),
       getTMDbContext(tmdbId, mediaType, seasonNumber, episodeNumber, TMDB_API_KEY),
     ]);
 
@@ -776,7 +899,7 @@ serve(async (req) => {
       contentPreview: c.content.substring(0, 100)
     })));
 
-    // Format retrieved chunks as evidence
+    // Format retrieved chunks as evidence - now in chronological order
     let evidenceText = '';
     if (retrievedChunks.length > 0) {
       const formattedChunks = retrievedChunks.map(chunk => {
@@ -785,7 +908,7 @@ serve(async (req) => {
           : `[${formatTime(chunk.start_seconds)}-${formatTime(chunk.end_seconds)}]`;
         return `${location}\n${chunk.content}`;
       });
-      evidenceText = `\n\n**EVIDENCE CHUNKS (cite these in your answer):**\n\n${formattedChunks.join('\n\n')}`;
+      evidenceText = `\n\n**EVIDENCE CHUNKS (in chronological order - cite these in your answer):**\n\n${formattedChunks.join('\n\n')}`;
     }
     
     console.log('Evidence text length:', evidenceText.length);
@@ -795,7 +918,8 @@ serve(async (req) => {
     if (!evidenceText && !seasonSummaries && !tmdbContextText) {
       return new Response(
         JSON.stringify({ 
-          answer: "I couldn't find enough context for this content yet. The subtitles may still be loading. Please try again in a moment." 
+          answer: "I couldn't find enough context for this content yet. The subtitles may still be loading. Please try again in a moment.",
+          maxAvailableTimestamp: coverage.hasData ? formatTime(coverage.maxAvailableSeconds) : null,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -808,31 +932,36 @@ serve(async (req) => {
 
     const systemPrompt = `You are a script-based companion helping someone watch "${title}" - ${mediaLabel}.
 
-**CRITICAL - TIMESTAMP-FIRST RULES:**
-1. The EVIDENCE CHUNKS are ordered by relevance - chunks at the TOP are from the user's EXACT timestamp position and should be prioritized
-2. When the user asks "what's happening", focus FIRST on the chunks closest to their timestamp (${timestamp})
-3. Use earlier chunks in the list only for additional context, not as the primary answer
-4. NEVER reveal events after timestamp ${timestamp}
+**CRITICAL - TIMESTAMP AND ACCURACY RULES:**
+1. The viewer is at ${timestamp} (adjusted to ${formatTime(currentSeconds)} based on available data)
+2. The EVIDENCE CHUNKS are in CHRONOLOGICAL ORDER - the LAST chunks are closest to the user's current position
+3. When answering about "what's happening now" or "how did this end", focus on the LATEST chunks in the evidence
+4. For questions about previous seasons/episodes, explicitly reference the PREVIOUS SEASONS summaries
+5. NEVER reveal events after timestamp ${formatTime(currentSeconds)}
+6. NEVER hallucinate or invent timestamps - only cite timestamps that appear in the evidence
+
+${coverageWarning ? `**IMPORTANT:** ${coverageWarning}` : ''}
 
 **EVIDENCE-ONLY RULES:**
-1. You may ONLY use information explicitly stated in the EVIDENCE CHUNKS (dialogue/subtitle text) provided below
-2. You may NOT use any general knowledge, inference, or information not explicitly in the evidence chunks
+1. You may ONLY use information explicitly stated in the EVIDENCE CHUNKS (dialogue/subtitle text)
+2. For questions about past events, you MAY use PREVIOUS SEASONS summaries to provide context
 3. You may NOT fill in gaps, make assumptions, or add details not in the evidence
-4. If the evidence chunks don't contain enough information to answer the question, say: "Based on the available dialogue, I don't have enough information to answer that question."
+4. If the evidence chunks don't contain enough information, say: "Based on the available dialogue up to ${formatTime(currentSeconds)}, I don't have specific details about that."
 
 **WHAT COUNTS AS EVIDENCE:**
-- ✅ EVIDENCE CHUNKS section contains actual dialogue/subtitle text - USE THIS (prioritize chunks near ${timestamp})
-- ❌ SHOW INFO section contains character lists/metadata - DO NOT use for plot details
-- ❌ PREVIOUS SEASONS section contains summaries - DO NOT use for specific dialogue/actions
+- ✅ EVIDENCE CHUNKS section - actual dialogue/subtitle text (prioritize chunks near ${formatTime(currentSeconds)})
+- ✅ PREVIOUS SEASONS section - use for questions about past events/characters
+- ❌ SHOW INFO section - metadata only, not for plot details
 
 **ANSWER STYLE:**
-- Focus your answer on what's happening AT the user's timestamp (${timestamp})
-- The first chunks in the evidence are the most relevant - they're from the current scene
-- Reference the timestamps from evidence chunks when making claims
-- Be honest when evidence is insufficient
+- For "what's happening" questions: Focus on the LATEST chunks (closest to ${formatTime(currentSeconds)})
+- For "how did this end" questions: Use the LAST few chunks in the evidence list
+- For past event questions: Reference season summaries AND relevant earlier chunks
+- Always cite timestamps when making claims: e.g., "At [S5E4 1:15:30], we see..."
+- Be specific and detailed when evidence supports it
 
 ${tmdbContextText ? `\n**SHOW INFO (metadata only, not evidence for plot):**\n${tmdbContextText}` : ''}
-${seasonSummaries ? `\n\n**PREVIOUS SEASONS (summaries only, not evidence for specific dialogue):**\n${seasonSummaries}` : ''}`;
+${seasonSummaries ? `\n\n${seasonSummaries}` : ''}`;
 
     let previousQAContext = '';
     if (previousQA && Array.isArray(previousQA) && previousQA.length > 0) {
@@ -846,7 +975,7 @@ ${seasonSummaries ? `\n\n**PREVIOUS SEASONS (summaries only, not evidence for sp
 ${previousQAContext}
 ${evidenceText}
 
-Answer the question using ONLY the EVIDENCE CHUNKS above. Do not use general knowledge or inference. If the evidence chunks don't contain enough information, say so honestly. Only state facts that are explicitly in the evidence chunks.`;
+Answer the question using the EVIDENCE CHUNKS above. For current scene questions, focus on the LAST chunks (they're closest to the user's position). For past events, use the season summaries. Always cite specific timestamps. If the evidence doesn't contain enough information, say so honestly.`;
     
 
     console.log('Sending request to Lovable AI with RAG context');
@@ -915,6 +1044,8 @@ Answer the question using ONLY the EVIDENCE CHUNKS above. Do not use general kno
         remainingFreeQuestions: remainingFree,
         usedCoins: hasFreeQuestions ? 0 : COINS_PER_QUESTION,
         chunksRetrieved: retrievedChunks.length,
+        maxAvailableTimestamp: coverage.hasData ? formatTime(coverage.maxAvailableSeconds) : null,
+        subtitleCoverageComplete: coverage.coverageComplete,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
