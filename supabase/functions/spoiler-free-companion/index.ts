@@ -595,13 +595,14 @@ async function retrieveSeasonSummaries(
   return parts.join('\n');
 }
 
-// Ensure subtitles are cached for required episodes
+// Ensure subtitles are cached and trigger speaker annotation if needed
 async function ensureSubtitlesCached(
   supabase: any,
   tmdbId: number,
   mediaType: 'tv' | 'movie',
   currentSeason: number,
-  currentEpisode: number
+  currentEpisode: number,
+  title?: string
 ): Promise<void> {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   
@@ -609,7 +610,7 @@ async function ensureSubtitlesCached(
     for (let ep = 1; ep <= currentEpisode; ep++) {
       const { data: existing } = await supabase
         .from('subtitle_chunks')
-        .select('id')
+        .select('id, content')
         .eq('tmdb_id', tmdbId)
         .eq('media_type', 'tv')
         .eq('season_number', currentSeason)
@@ -633,12 +634,28 @@ async function ensureSubtitlesCached(
         } catch (error) {
           console.error(`Failed to cache S${currentSeason}E${ep}:`, error);
         }
+      } else if (ep === currentEpisode) {
+        // Check if speaker annotations exist for current episode
+        const hasAnnotations = /\*\*[A-Z][A-Za-z\s]+:\*\*/.test(existing[0].content);
+        if (!hasAnnotations && title) {
+          console.log(`Triggering speaker annotation for S${currentSeason}E${ep}`);
+          try {
+            // Fire and forget - don't block the response
+            fetch(`${SUPABASE_URL}/functions/v1/annotate-speakers`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tmdbId, mediaType: 'tv', seasonNumber: currentSeason, episodeNumber: ep, title }),
+            }).catch(err => console.error('Annotation trigger failed:', err));
+          } catch (error) {
+            console.error('Failed to trigger annotation:', error);
+          }
+        }
       }
     }
   } else {
     const { data: existing } = await supabase
       .from('subtitle_chunks')
-      .select('id')
+      .select('id, content')
       .eq('tmdb_id', tmdbId)
       .eq('media_type', 'movie')
       .limit(1);
@@ -653,6 +670,20 @@ async function ensureSubtitlesCached(
         });
       } catch (error) {
         console.error('Failed to cache movie subtitles:', error);
+      }
+    } else {
+      const hasAnnotations = /\*\*[A-Z][A-Za-z\s]+:\*\*/.test(existing[0].content);
+      if (!hasAnnotations && title) {
+        console.log('Triggering speaker annotation for movie');
+        try {
+          fetch(`${SUPABASE_URL}/functions/v1/annotate-speakers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tmdbId, mediaType: 'movie', title }),
+          }).catch(err => console.error('Annotation trigger failed:', err));
+        } catch (error) {
+          console.error('Failed to trigger annotation:', error);
+        }
       }
     }
   }
@@ -843,9 +874,9 @@ serve(async (req) => {
       );
     }
 
-    // Ensure caches are populated
+    // Ensure caches are populated (now also triggers speaker annotation)
     await Promise.all([
-      ensureSubtitlesCached(supabaseService, tmdbId, mediaType, seasonNumber || 1, episodeNumber || 1),
+      ensureSubtitlesCached(supabaseService, tmdbId, mediaType, seasonNumber || 1, episodeNumber || 1, title),
       mediaType === 'tv' ? ensureSeasonSummariesCached(supabaseService, tmdbId, seasonNumber || 1) : Promise.resolve(),
     ]);
 
@@ -983,12 +1014,12 @@ Answer the question using the EVIDENCE CHUNKS above. For current scene questions
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro', // Using Pro for better script understanding
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: 2000,
+        max_tokens: 2500,
       }),
     });
 
