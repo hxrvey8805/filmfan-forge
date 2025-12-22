@@ -77,7 +77,7 @@ async function getTMDbCast(
   }
 }
 
-// Use Claude to annotate speakers in subtitle chunks
+// Use AI to annotate speakers in subtitle chunks
 async function annotateChunkWithSpeakers(
   chunkContent: string,
   characterList: string[],
@@ -86,36 +86,21 @@ async function annotateChunkWithSpeakers(
   lovableApiKey: string
 ): Promise<string> {
   const characterContext = characterList.length > 0
-    ? `**MAIN CHARACTERS:**\n${characterList.join('\n')}`
-    : 'Character list not available - use context clues from dialogue.';
+    ? `CHARACTERS: ${characterList.slice(0, 15).join(', ')}`
+    : '';
   
-  const systemPrompt = `You are a script editor annotating a subtitle transcript from "${showTitle}" (${seasonEp}).
-
-Your job: Add speaker names to each line of dialogue where you can identify the speaker.
+  const systemPrompt = `You annotate TV subtitles with speaker names. Add **SPEAKER:** before each line of dialogue.
 
 ${characterContext}
 
-**RULES:**
-1. Only identify speakers you are CONFIDENT about based on:
-   - Names mentioned in dialogue (e.g., "Will, come on" → next line is likely from someone calling Will)
-   - Context clues (e.g., "Mom does it when she's out of Valium" suggests a child speaking about their mother)
-   - Characteristic speech patterns or catchphrases
-   - Dialogue exchanges that clearly indicate speakers
+Rules:
+1. Format: [timestamp] **SPEAKER:** dialogue
+2. If unsure of speaker, use **UNKNOWN:**
+3. Split multi-speaker lines: "-Come on. -Wait!" → **PERSON_A:** Come on. **PERSON_B:** Wait!
+4. Keep ALL timestamps and dialogue exactly as given
+5. Return the COMPLETE annotated text - do not summarize or shorten`;
 
-2. If uncertain, mark as [UNKNOWN] or leave the speaker blank
-
-3. Format: Change "[timestamp] dialogue" to "[timestamp] **SPEAKER:** dialogue"
-
-4. Preserve ALL original timestamps and dialogue exactly - only add speaker attributions
-
-5. For action/narration lines without clear speakers, you may mark as [NARRATOR] or [ACTION]
-
-6. When multiple people speak in rapid succession with "-" markers like "-Come on. -Wait for me!", split them properly:
-   "[timestamp] **PERSON_A:** Come on. **PERSON_B:** Wait for me!"
-
-Return the fully annotated chunk. Keep it clean and readable.`;
-
-  const userPrompt = `Annotate speakers in this subtitle chunk:\n\n${chunkContent}`;
+  const userPrompt = `Annotate this ${showTitle} (${seasonEp}) subtitle chunk with speaker names:\n\n${chunkContent}`;
 
   try {
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -125,7 +110,7 @@ Return the fully annotated chunk. Keep it clean and readable.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro', // Using Pro for better understanding
+        model: 'google/gemini-2.5-flash', // Flash is faster and sufficient for this task
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -135,16 +120,21 @@ Return the fully annotated chunk. Keep it clean and readable.`;
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Lovable AI annotation error:', response.status, errorText);
-      return chunkContent; // Return original if annotation fails
+      console.error('Lovable AI annotation error:', response.status);
+      return chunkContent;
     }
 
     const data = await response.json();
-    const annotated = data.choices[0]?.message?.content;
+    const annotated = data.choices?.[0]?.message?.content;
     
-    if (!annotated || annotated.length < chunkContent.length * 0.5) {
-      console.warn('Annotation seems incomplete, using original');
+    if (!annotated) {
+      console.warn('No annotation content returned');
+      return chunkContent;
+    }
+    
+    // Check if annotation contains speaker markers
+    if (!/\*\*[A-Z]/.test(annotated)) {
+      console.warn('Annotation lacks speaker markers, using original');
       return chunkContent;
     }
     
@@ -226,50 +216,38 @@ serve(async (req) => {
       ? `Season ${seasonNumber}, Episode ${episodeNumber}`
       : 'Movie';
 
-    // Process chunks in batches to avoid rate limits
+    // Process chunks sequentially to avoid rate limits and timeouts
     let updatedCount = 0;
-    const BATCH_SIZE = 3; // Small batches to avoid rate limits
     
-    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-      const batch = chunks.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
       
-      // Process batch in parallel
-      const annotationPromises = batch.map(chunk => 
-        annotateChunkWithSpeakers(
-          chunk.content,
-          characterList,
-          title || 'Unknown Show',
-          seasonEp,
-          LOVABLE_API_KEY
-        )
+      const annotatedContent = await annotateChunkWithSpeakers(
+        chunk.content,
+        characterList,
+        title || 'Unknown Show',
+        seasonEp,
+        LOVABLE_API_KEY
       );
       
-      const annotatedContents = await Promise.all(annotationPromises);
-      
-      // Update each chunk
-      for (let j = 0; j < batch.length; j++) {
-        const chunk = batch[j];
-        const annotatedContent = annotatedContents[j];
+      if (annotatedContent !== chunk.content && /\*\*[A-Z]/.test(annotatedContent)) {
+        const { error: updateError } = await supabase
+          .from('subtitle_chunks')
+          .update({ content: annotatedContent })
+          .eq('id', chunk.id);
         
-        if (annotatedContent !== chunk.content) {
-          const { error: updateError } = await supabase
-            .from('subtitle_chunks')
-            .update({ content: annotatedContent })
-            .eq('id', chunk.id);
-          
-          if (updateError) {
-            console.error(`Error updating chunk ${chunk.id}:`, updateError);
-          } else {
-            updatedCount++;
-          }
+        if (updateError) {
+          console.error(`Error updating chunk ${chunk.id}:`, updateError);
+        } else {
+          updatedCount++;
         }
       }
       
-      console.log(`Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)}`);
+      console.log(`Processed chunk ${i + 1}/${chunks.length}`);
       
-      // Delay between batches
-      if (i + BATCH_SIZE < chunks.length) {
-        await delay(1500); // 1.5s delay to respect rate limits
+      // Small delay between chunks
+      if (i < chunks.length - 1) {
+        await delay(500);
       }
     }
 
