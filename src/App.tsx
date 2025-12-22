@@ -7,6 +7,7 @@ import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Install from "./pages/Install";
 import Auth from "./pages/Auth";
+import Companion from "./pages/Companion";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/install" element={<Install />} />
+          <Route path="/companion" element={<Companion />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
