@@ -992,9 +992,10 @@ serve(async (req) => {
     
     // Use adjusted timestamp if user's exceeds available data
     const currentSeconds = coverage.adjustedTimestamp;
-    const coverageWarning = !coverage.coverageComplete 
-      ? `Note: Subtitle data for this episode ends at ${formatTime(coverage.maxAvailableSeconds)}. Your timestamp (${timestamp}) exceeds this, so I'm using the latest available content.`
-      : '';
+    
+    // If timestamp exceeds subtitle data, the episode has finished - no warning needed
+    // The AI has full access to the episode content
+    const coverageWarning = '';
 
     // Generate embedding for the question
     const questionEmbedding = await generateEmbedding(question, OPENAI_API_KEY);
@@ -1078,26 +1079,34 @@ serve(async (req) => {
       ? `Season ${seasonNumber}, Episode ${episodeNumber}`
       : 'this movie';
 
+    // Determine if user has finished the episode (timestamp at/past end of subtitles)
+    const isEpisodeFinished = !coverage.coverageComplete;
+
     const systemPrompt = `You are the viewer's spoiler-free companion for "${title}" — ${mediaLabel}.
-Your vibe: a supportive friend on the couch (warm, casual, human). Never say “as an AI”.
+Your vibe: a supportive friend on the couch (warm, casual, human). Never say "as an AI".
 
 **CRITICAL - SPOILER & TIMESTAMP RULES:**
-1. The viewer asked at ${timestamp}. The latest safe point is ${formatTime(currentSeconds)} (based on available subtitles).
+${isEpisodeFinished 
+  ? `1. The viewer has FINISHED this episode (their timestamp ${timestamp} is at/past the end). You can discuss the ENTIRE episode including the ending.
+2. NEVER reveal events from FUTURE episodes or seasons.
+3. NEVER invent plot details.` 
+  : `1. The viewer asked at ${timestamp}. The latest safe point is ${formatTime(currentSeconds)} (based on available subtitles).
 2. NEVER reveal events after ${formatTime(currentSeconds)}.
-3. NEVER invent plot details or timestamps.
-
-${coverageWarning ? `**SUBTITLE COVERAGE NOTE:** ${coverageWarning}` : ''}
+3. NEVER invent plot details or timestamps.`}
 
 **HOW TO USE EVIDENCE:**
 - The EVIDENCE CHUNKS are in chronological order; the LAST chunks are closest to where the viewer is.
-- For “what’s happening now / how did this end / what just happened”: rely heavily on the LAST few chunks.
-- For “before / earlier / last season / previous episodes”: you may use PREVIOUS SEASONS summaries + earlier chunks.
+${isEpisodeFinished 
+  ? `- For ending questions: The LAST chunks contain the episode's conclusion. Summarize the ending confidently.`
+  : `- For "what's happening now / how did this end / what just happened": rely heavily on the LAST few chunks.`}
+- For "before / earlier / last season / previous episodes": you may use PREVIOUS SEASONS summaries + earlier chunks.
 
 **EVIDENCE-ONLY RULES (non‑negotiable):**
 1. Only state facts that appear in EVIDENCE CHUNKS (and PREVIOUS SEASONS summaries when the user asks about earlier seasons).
-2. If the requested moment/ending is beyond what the subtitles cover, say plainly:
-   "I can only see subtitles up to ${formatTime(currentSeconds)} right now, so I can’t confirm the true ending yet — here’s the last thing we *do* see."
-3. Every claim needs a bracket citation from the evidence, e.g. [S5E4 1:07:40-1:08:05].
+2. Every claim needs a bracket citation from the evidence, e.g. [S5E4 1:07:40-1:08:05].
+${isEpisodeFinished 
+  ? `3. The user has finished watching - answer ending questions directly and confidently. Do NOT mention subtitle coverage or limitations.`
+  : `3. Do not reveal anything beyond the user's current timestamp.`}
 
 **STYLE:**
 - 2–6 short paragraphs, conversational.
