@@ -502,23 +502,16 @@ async function retrieveContext(
     );
     
     if (fullEpisodeChunks.length > 0) {
-      // For endings, we want to sample chunks throughout the episode
-      // Take beginning (setup), middle (development), and end (conclusion)
+      // For endings, focus on the ending with minimal context
+      // Groq has limited context, so we need to be efficient
       const total = fullEpisodeChunks.length;
       const selectedChunks: RetrievedChunk[] = [];
       
-      // First 3 chunks (beginning/setup)
-      selectedChunks.push(...fullEpisodeChunks.slice(0, 3));
+      // Just first chunk (brief setup)
+      selectedChunks.push(fullEpisodeChunks[0]);
       
-      // Some middle chunks (every 5th chunk from middle third)
-      const middleStart = Math.floor(total * 0.33);
-      const middleEnd = Math.floor(total * 0.66);
-      for (let i = middleStart; i < middleEnd; i += 5) {
-        selectedChunks.push(fullEpisodeChunks[i]);
-      }
-      
-      // Last 10 chunks (ending/conclusion) - most important!
-      selectedChunks.push(...fullEpisodeChunks.slice(-10));
+      // Last 3 chunks (ending/conclusion) - most important!
+      selectedChunks.push(...fullEpisodeChunks.slice(-3));
       
       // Remove duplicates
       const seen = new Set<string>();
@@ -528,7 +521,7 @@ async function retrieveContext(
         return true;
       });
       
-      console.log(`Ending context: ${uniqueChunks.length} chunks (start/middle/end sampling)`);
+      console.log(`Ending context: ${uniqueChunks.length} chunks (minimal for Groq)`);
       return uniqueChunks;
     }
   }
