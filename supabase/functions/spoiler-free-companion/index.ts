@@ -417,7 +417,72 @@ function detectCrossSeasonReference(question: string): { mentionsPrevious: boole
   };
 }
 
-// Two-stage retrieval with re-ranking
+// Detect if user is asking about the ending of the episode
+function detectEndingQuestion(question: string, timestampSeconds: number, runtimeSeconds: number): boolean {
+  const questionLower = question.toLowerCase();
+  
+  // Check for ending-related keywords
+  const endingKeywords = [
+    'end', 'ending', 'ended', 'ends',
+    'final', 'finale', 'finish', 'finished',
+    'last scene', 'last part', 'conclusion',
+    'how did it end', 'how does it end',
+    'what happened at the end', 'cliffhanger',
+    'wrap up', 'wrapped up'
+  ];
+  
+  const asksAboutEnding = endingKeywords.some(kw => questionLower.includes(kw));
+  
+  // Also consider it an "ending question" if timestamp is in the last 15% of runtime
+  const isNearEnd = runtimeSeconds > 0 && timestampSeconds >= runtimeSeconds * 0.85;
+  
+  return asksAboutEnding || isNearEnd;
+}
+
+// Get comprehensive chunks for full episode context (for ending questions)
+async function getFullEpisodeChunks(
+  supabase: any,
+  tmdbId: number,
+  mediaType: 'tv' | 'movie',
+  seasonNumber: number,
+  episodeNumber: number,
+  maxSeconds: number
+): Promise<RetrievedChunk[]> {
+  let query = supabase
+    .from('subtitle_chunks')
+    .select('id, season_number, episode_number, start_seconds, end_seconds, content')
+    .eq('tmdb_id', tmdbId)
+    .eq('media_type', mediaType)
+    .lte('start_seconds', maxSeconds)
+    .order('start_seconds', { ascending: true });
+  
+  if (mediaType === 'tv') {
+    query = query.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
+  }
+  
+  const { data: chunks, error } = await query;
+  
+  if (error || !chunks || chunks.length === 0) {
+    console.log('No chunks found for full episode retrieval');
+    return [];
+  }
+  
+  console.log(`Full episode: Found ${chunks.length} chunks spanning entire episode`);
+  
+  return chunks.map((chunk: any) => ({
+    id: chunk.id,
+    season_number: chunk.season_number,
+    episode_number: chunk.episode_number,
+    start_seconds: Number(chunk.start_seconds),
+    end_seconds: Number(chunk.end_seconds),
+    content: chunk.content,
+    similarity: 1.0,
+    recencyScore: 1.0,
+    finalScore: 1.0,
+  }));
+}
+
+// Two-stage retrieval with re-ranking - enhanced for ending questions
 async function retrieveContext(
   supabase: any,
   questionEmbedding: number[],
@@ -426,8 +491,48 @@ async function retrieveContext(
   currentSeason: number,
   currentEpisode: number,
   maxSeconds: number,
-  question: string
+  question: string,
+  isEndingQuestion: boolean = false
 ): Promise<RetrievedChunk[]> {
+  // If this is an ending question, get the FULL episode for proper context
+  if (isEndingQuestion) {
+    console.log('Ending question detected - retrieving full episode context');
+    const fullEpisodeChunks = await getFullEpisodeChunks(
+      supabase, tmdbId, mediaType, currentSeason, currentEpisode, maxSeconds
+    );
+    
+    if (fullEpisodeChunks.length > 0) {
+      // For endings, we want to sample chunks throughout the episode
+      // Take beginning (setup), middle (development), and end (conclusion)
+      const total = fullEpisodeChunks.length;
+      const selectedChunks: RetrievedChunk[] = [];
+      
+      // First 3 chunks (beginning/setup)
+      selectedChunks.push(...fullEpisodeChunks.slice(0, 3));
+      
+      // Some middle chunks (every 5th chunk from middle third)
+      const middleStart = Math.floor(total * 0.33);
+      const middleEnd = Math.floor(total * 0.66);
+      for (let i = middleStart; i < middleEnd; i += 5) {
+        selectedChunks.push(fullEpisodeChunks[i]);
+      }
+      
+      // Last 10 chunks (ending/conclusion) - most important!
+      selectedChunks.push(...fullEpisodeChunks.slice(-10));
+      
+      // Remove duplicates
+      const seen = new Set<string>();
+      const uniqueChunks = selectedChunks.filter(c => {
+        if (seen.has(c.id)) return false;
+        seen.add(c.id);
+        return true;
+      });
+      
+      console.log(`Ending context: ${uniqueChunks.length} chunks (start/middle/end sampling)`);
+      return uniqueChunks;
+    }
+  }
+  
   // STAGE 1: Get chunks directly at the user's timestamp (most important!)
   const timestampChunks = await getTimestampChunks(
     supabase, tmdbId, mediaType, currentSeason, currentEpisode, maxSeconds, 5
@@ -904,9 +1009,20 @@ serve(async (req) => {
 
     // Detect cross-season references
     const crossSeasonRef = detectCrossSeasonReference(question);
+    
+    // First fetch TMDB context (needed for runtime estimation)
+    const tmdbContext = await getTMDbContext(tmdbId, mediaType, seasonNumber, episodeNumber, TMDB_API_KEY);
+    
+    // Estimate runtime from coverage or TMDB context
+    const estimatedRuntimeSeconds = coverage.maxAvailableSeconds || (tmdbContext?.runtimeMinutes || 60) * 60;
+    const isEndingQuestion = detectEndingQuestion(question, currentSeconds, estimatedRuntimeSeconds);
+    
+    if (isEndingQuestion) {
+      console.log(`Ending question detected at ${formatTime(currentSeconds)} of ~${formatTime(estimatedRuntimeSeconds)} runtime`);
+    }
 
-    // Retrieve relevant context using two-stage RAG
-    const [retrievedChunks, seasonSummaries, tmdbContext] = await Promise.all([
+    // Retrieve relevant context using two-stage RAG (enhanced for endings)
+    const [retrievedChunks, seasonSummaries] = await Promise.all([
       retrieveContext(
         supabaseService,
         questionEmbedding,
@@ -915,10 +1031,10 @@ serve(async (req) => {
         seasonNumber || 1,
         episodeNumber || 1,
         currentSeconds,
-        question
+        question,
+        isEndingQuestion
       ),
       mediaType === 'tv' ? retrieveSeasonSummaries(supabaseService, questionEmbedding, tmdbId, seasonNumber || 1, crossSeasonRef) : Promise.resolve(''),
-      getTMDbContext(tmdbId, mediaType, seasonNumber, episodeNumber, TMDB_API_KEY),
     ]);
 
     console.log(`Retrieved ${retrievedChunks.length} chunks, has season summaries: ${seasonSummaries.length > 0}`);
