@@ -959,12 +959,12 @@ serve(async (req) => {
         .eq('user_id', user.id);
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    if (!GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is not configured');
     }
     
     if (!OPENAI_API_KEY) {
@@ -1130,16 +1130,16 @@ ${evidenceText}
 Answer the question using the EVIDENCE CHUNKS above. For current scene questions, focus on the LAST chunks (they're closest to the user's position). For past events, use the season summaries. Always cite specific timestamps. If the evidence doesn't contain enough information, say so honestly.`;
     
 
-    console.log('Sending request to Lovable AI with RAG context');
+    console.log('Sending request to Groq with RAG context');
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro', // Using Pro for better script understanding
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
