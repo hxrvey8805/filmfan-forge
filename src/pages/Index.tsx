@@ -473,7 +473,17 @@ const Index = () => {
 
   const handleSearchSelect = (title: Title) => {
     if (searchModalType === "favourite") handleAddToFavourites(title);
-    else if (searchModalType === "watchlist") handleAddToWatchList(title);
+    else if (searchModalType === "watchlist") {
+      handleAddToWatchList(title);
+      // If viewing a personal list, also add the title to that list
+      const activePersonalList = personalLists.find(l => l.id === watchListFilter);
+      if (activePersonalList && !activePersonalList.titleIds.includes(title.id)) {
+        const updatedList = { ...activePersonalList, titleIds: [...activePersonalList.titleIds, title.id] };
+        const updated = personalLists.map(l => l.id === updatedList.id ? updatedList : l);
+        setPersonalLists(updated);
+        localStorage.setItem("personalLists", JSON.stringify(updated));
+      }
+    }
     else if (searchModalType === "watching") handleAddToCurrentlyWatching(title);
     else if (searchModalType === "watched") handleAddToWatched(title);
   };
