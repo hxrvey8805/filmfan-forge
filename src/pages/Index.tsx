@@ -4,9 +4,12 @@ import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
 import CustomFilterDialog from "@/components/CustomFilterDialog";
+import PersonalListDialog from "@/components/PersonalListDialog";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { Check } from "lucide-react";
 
 interface Title {
   id: number;
@@ -22,6 +25,12 @@ interface CustomFilter {
   name: string;
   criteria: string;
   inspirationType: string;
+}
+
+interface PersonalList {
+  id: string;
+  name: string;
+  titleIds: number[];
 }
 
 const Index = () => {
@@ -44,10 +53,29 @@ const Index = () => {
   const [sortedWatchList, setSortedWatchList] = useState<Title[]>([]);
   const [isSorting, setIsSorting] = useState(false);
 
+  // Personal list state
+  const [personalLists, setPersonalLists] = useState<PersonalList[]>([]);
+  const [personalListDialogOpen, setPersonalListDialogOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [pendingListName, setPendingListName] = useState("");
+  const [selectedTitleIds, setSelectedTitleIds] = useState<number[]>([]);
+
   useEffect(() => {
     checkAuth();
     loadCustomFilters();
+    loadPersonalLists();
   }, []);
+
+  const loadPersonalLists = () => {
+    const stored = localStorage.getItem("personalLists");
+    if (stored) {
+      try {
+        setPersonalLists(JSON.parse(stored));
+      } catch (error) {
+        console.error("Error loading personal lists:", error);
+      }
+    }
+  };
 
   const loadCustomFilters = () => {
     const stored = localStorage.getItem("customFilters");
@@ -136,45 +164,23 @@ const Index = () => {
   };
 
   const handleAddToFavourites = async (title: Title) => {
-    console.log("handleAddToFavourites called with:", title);
-    
     if (favourites.find(item => item.id === title.id)) {
-      console.log("Title already in favourites");
       toast.info(`"${title.title}" is already in your Favourites`);
       return;
     }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      console.log("User:", user?.id);
-      if (!user) {
-        console.log("No user found!");
-        return;
-      }
-
-      console.log("Inserting to database with list_type: favourite");
+      if (!user) return;
       const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id,
-        title_id: title.id,
-        title: title.title,
-        type: title.type,
-        poster_path: title.posterPath,
-        year: title.year,
-        list_type: "favourite",
+        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
+        poster_path: title.posterPath, year: title.year, list_type: "favourite",
       });
-
-      if (error) {
-        console.error("Database error:", error);
-        throw error;
-      }
-
-      console.log("Successfully added to favourites");
+      if (error) throw error;
       setFavourites([...favourites, title]);
       toast.success(`Added "${title.title}" to Favourites`);
     } catch (error) {
       console.error("Error adding to favourites:", error);
-      const msg = (error as any)?.message || (typeof error === 'string' ? error : 'Failed to add to Favourites');
-      toast.error(`Failed to add to Favourites: ${msg}`);
+      toast.error("Failed to add to Favourites");
     }
   };
 
@@ -183,23 +189,14 @@ const Index = () => {
       toast.info(`"${title.title}" is already in your Watch List`);
       return;
     }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id,
-        title_id: title.id,
-        title: title.title,
-        type: title.type,
-        poster_path: title.posterPath,
-        year: title.year,
-        list_type: "watchlist",
+        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
+        poster_path: title.posterPath, year: title.year, list_type: "watchlist",
       });
-
       if (error) throw error;
-
       setWatchList([...watchList, title]);
       setSortedWatchList([...watchList, title]);
       toast.success(`Added "${title.title}" to Watch List`);
@@ -214,23 +211,14 @@ const Index = () => {
       toast.info(`"${title.title}" is already in Currently Watching`);
       return;
     }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id,
-        title_id: title.id,
-        title: title.title,
-        type: title.type,
-        poster_path: title.posterPath,
-        year: title.year,
-        list_type: "watching",
+        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
+        poster_path: title.posterPath, year: title.year, list_type: "watching",
       });
-
       if (error) throw error;
-
       setCurrentlyWatching([...currentlyWatching, title]);
       toast.success(`Added "${title.title}" to Currently Watching`);
     } catch (error) {
@@ -240,95 +228,42 @@ const Index = () => {
   };
 
   const handleAddToWatched = async (title: Title) => {
-    console.log("handleAddToWatched called with:", title);
-    
     if (watched.find(item => item.id === title.id)) {
-      console.log("Title already in watched");
       toast.info(`"${title.title}" is already in your Watched list`);
       return;
     }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      console.log("User:", user?.id);
-      if (!user) {
-        console.log("No user found!");
-        return;
-      }
-
-      console.log("Inserting to database with list_type: watched");
+      if (!user) return;
       const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id,
-        title_id: title.id,
-        title: title.title,
-        type: title.type,
-        poster_path: title.posterPath,
-        year: title.year,
-        list_type: "watched",
+        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
+        poster_path: title.posterPath, year: title.year, list_type: "watched",
       });
-
-      if (error) {
-        console.error("Database error:", error);
-        throw error;
-      }
-
-      console.log("Successfully added to watched");
+      if (error) throw error;
       setWatched([...watched, title]);
       toast.success(`Added "${title.title}" to Watched`);
     } catch (error) {
       console.error("Error adding to watched:", error);
-      const msg = (error as any)?.message || (typeof error === 'string' ? error : 'Failed to add to Watched');
-      toast.error(`Failed to add to Watched: ${msg}`);
+      toast.error("Failed to add to Watched");
     }
   };
 
   const handleMoveToCurrentlyWatching = async (title: Title) => {
-    // Check if already in currently watching
     if (currentlyWatching.find(item => item.id === title.id)) {
       toast.info(`"${title.title}" is already in Currently Watching`);
       return;
     }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      console.log("Moving title to currently watching:", title.title);
-
-      // Delete from watchlist
-      const { error: deleteError } = await supabase
-        .from("user_titles")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("title_id", title.id)
-        .eq("list_type", "watchlist");
-
-      if (deleteError) {
-        console.error("Delete error:", deleteError);
-        throw deleteError;
-      }
-
-      console.log("Deleted from watchlist, now inserting to watching");
-
-      // Add to currently watching
+      const { error: deleteError } = await supabase.from("user_titles").delete()
+        .eq("user_id", user.id).eq("title_id", title.id).eq("list_type", "watchlist");
+      if (deleteError) throw deleteError;
       const { error: insertError } = await supabase.from("user_titles").insert({
-        user_id: user.id,
-        title_id: title.id,
-        title: title.title,
-        type: title.type,
-        poster_path: title.posterPath,
-        year: title.year,
-        list_type: "watching",
+        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
+        poster_path: title.posterPath, year: title.year, list_type: "watching",
       });
-
-      if (insertError) {
-        console.error("Insert error:", insertError);
-        throw insertError;
-      }
-
-      console.log("Successfully moved to currently watching");
-
-      // Update state
+      if (insertError) throw insertError;
       const updatedWatchList = watchList.filter((item) => item.id !== title.id);
       setWatchList(updatedWatchList);
       setSortedWatchList(updatedWatchList);
@@ -341,40 +276,21 @@ const Index = () => {
   };
 
   const handleMoveToWatched = async (title: Title) => {
-    // Check if already in watched
     if (watched.find(item => item.id === title.id)) {
       toast.info(`"${title.title}" is already in Watched`);
       return;
     }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      // Delete from currently watching
-      const { error: deleteError } = await supabase
-        .from("user_titles")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("title_id", title.id)
-        .eq("list_type", "watching");
-
+      const { error: deleteError } = await supabase.from("user_titles").delete()
+        .eq("user_id", user.id).eq("title_id", title.id).eq("list_type", "watching");
       if (deleteError) throw deleteError;
-
-      // Add to watched
       const { error: insertError } = await supabase.from("user_titles").insert({
-        user_id: user.id,
-        title_id: title.id,
-        title: title.title,
-        type: title.type,
-        poster_path: title.posterPath,
-        year: title.year,
-        list_type: "watched",
+        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
+        poster_path: title.posterPath, year: title.year, list_type: "watched",
       });
-
       if (insertError) throw insertError;
-
-      // Update state
       setCurrentlyWatching(currentlyWatching.filter((item) => item.id !== title.id));
       setWatched([...watched, title]);
       toast.success(`Moved "${title.title}" to Watched`);
@@ -388,16 +304,9 @@ const Index = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { error } = await supabase
-        .from("user_titles")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("title_id", title.id)
-        .eq("list_type", "favourite");
-
+      const { error } = await supabase.from("user_titles").delete()
+        .eq("user_id", user.id).eq("title_id", title.id).eq("list_type", "favourite");
       if (error) throw error;
-
       setFavourites(favourites.filter((item) => item.id !== title.id));
       toast.success(`Removed "${title.title}" from Favourites`);
     } catch (error) {
@@ -410,16 +319,9 @@ const Index = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { error } = await supabase
-        .from("user_titles")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("title_id", title.id)
-        .eq("list_type", "watchlist");
-
+      const { error } = await supabase.from("user_titles").delete()
+        .eq("user_id", user.id).eq("title_id", title.id).eq("list_type", "watchlist");
       if (error) throw error;
-
       const updatedList = watchList.filter((item) => item.id !== title.id);
       setWatchList(updatedList);
       setSortedWatchList(updatedList);
@@ -434,16 +336,9 @@ const Index = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { error } = await supabase
-        .from("user_titles")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("title_id", title.id)
-        .eq("list_type", "watching");
-
+      const { error } = await supabase.from("user_titles").delete()
+        .eq("user_id", user.id).eq("title_id", title.id).eq("list_type", "watching");
       if (error) throw error;
-
       setCurrentlyWatching(currentlyWatching.filter(item => item.id !== title.id));
       toast.success(`Removed "${title.title}" from Currently Watching`);
     } catch (error) {
@@ -456,16 +351,9 @@ const Index = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { error } = await supabase
-        .from("user_titles")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("title_id", title.id)
-        .eq("list_type", "watched");
-
+      const { error } = await supabase.from("user_titles").delete()
+        .eq("user_id", user.id).eq("title_id", title.id).eq("list_type", "watched");
       if (error) throw error;
-
       setWatched(watched.filter((item) => item.id !== title.id));
       toast.success(`Removed "${title.title}" from Watched`);
     } catch (error) {
@@ -489,34 +377,73 @@ const Index = () => {
     const updated = customFilters.filter(f => f.id !== filterId);
     setCustomFilters(updated);
     localStorage.setItem("customFilters", JSON.stringify(updated));
-    
     if (watchListFilter === filterId) {
       setWatchListFilter("all");
       setSortedWatchList(watchList);
     }
-    
     toast.success("Custom filter deleted");
   };
 
+  // Personal list handlers
+  const handlePersonalListCreated = (name: string) => {
+    setPendingListName(name);
+    setSelectedTitleIds([]);
+    setSelectionMode(true);
+    toast.info("Tap posters in your Watch List to add them to your list, then press Done.");
+  };
+
+  const handleToggleSelection = (titleId: number) => {
+    setSelectedTitleIds(prev =>
+      prev.includes(titleId)
+        ? prev.filter(id => id !== titleId)
+        : [...prev, titleId]
+    );
+  };
+
+  const handleConfirmPersonalList = () => {
+    if (selectedTitleIds.length === 0) {
+      toast.error("Select at least one poster");
+      return;
+    }
+    const newList: PersonalList = {
+      id: `plist_${Date.now()}`,
+      name: pendingListName,
+      titleIds: selectedTitleIds,
+    };
+    const updated = [...personalLists, newList];
+    setPersonalLists(updated);
+    localStorage.setItem("personalLists", JSON.stringify(updated));
+    setSelectionMode(false);
+    setSelectedTitleIds([]);
+    setPendingListName("");
+    setWatchListFilter(newList.id);
+    toast.success(`Created list "${newList.name}" with ${selectedTitleIds.length} titles`);
+  };
+
+  const handleCancelSelection = () => {
+    setSelectionMode(false);
+    setSelectedTitleIds([]);
+    setPendingListName("");
+  };
+
+  const handleDeletePersonalList = (listId: string) => {
+    const updated = personalLists.filter(l => l.id !== listId);
+    setPersonalLists(updated);
+    localStorage.setItem("personalLists", JSON.stringify(updated));
+    if (watchListFilter === listId) {
+      setWatchListFilter("all");
+    }
+    toast.success("Personal list deleted");
+  };
+
   const handleFilterChange = async (value: string) => {
-    console.log("Filter changed to:", value);
-    console.log("Available custom filters:", customFilters);
     setWatchListFilter(value);
     
-    // Check if it's a custom filter
     const customFilter = customFilters.find(f => f.id === value);
-    console.log("Found custom filter:", customFilter);
     
     if (customFilter) {
-      console.log("Starting custom sort with:", {
-        titleCount: watchList.length,
-        criteria: customFilter.criteria,
-        inspirationType: customFilter.inspirationType
-      });
-      
       setIsSorting(true);
       try {
-        console.log("Invoking edge function...");
         const { data, error } = await supabase.functions.invoke("sort-by-custom-filter", {
           body: {
             titles: watchList,
@@ -524,19 +451,8 @@ const Index = () => {
             inspirationType: customFilter.inspirationType,
           },
         });
-
-        console.log("Edge function response:", { data, error });
-
-        if (error) {
-          console.error("Edge function error:", error);
-          throw error;
-        }
-        
-        if (!data || !data.sortedTitles) {
-          throw new Error("Invalid response from edge function");
-        }
-        
-        console.log("Setting sorted titles:", data.sortedTitles.length);
+        if (error) throw error;
+        if (!data || !data.sortedTitles) throw new Error("Invalid response");
         setSortedWatchList(data.sortedTitles);
         toast.success(`Sorted by: ${customFilter.name}`);
       } catch (error) {
@@ -547,34 +463,19 @@ const Index = () => {
         setIsSorting(false);
       }
     } else {
-      console.log("Standard filter selected, resetting to original list");
-      // Reset to original list for standard filters
       setSortedWatchList(watchList);
     }
   };
 
-  const handleFavouritesFilterChange = (value: string) => {
-    setFavouritesFilter(value);
-  };
-
-  const handleCurrentlyWatchingFilterChange = (value: string) => {
-    setCurrentlyWatchingFilter(value);
-  };
-
-  const handleWatchedFilterChange = (value: string) => {
-    setWatchedFilter(value);
-  };
+  const handleFavouritesFilterChange = (value: string) => setFavouritesFilter(value);
+  const handleCurrentlyWatchingFilterChange = (value: string) => setCurrentlyWatchingFilter(value);
+  const handleWatchedFilterChange = (value: string) => setWatchedFilter(value);
 
   const handleSearchSelect = (title: Title) => {
-    if (searchModalType === "favourite") {
-      handleAddToFavourites(title);
-    } else if (searchModalType === "watchlist") {
-      handleAddToWatchList(title);
-    } else if (searchModalType === "watching") {
-      handleAddToCurrentlyWatching(title);
-    } else if (searchModalType === "watched") {
-      handleAddToWatched(title);
-    }
+    if (searchModalType === "favourite") handleAddToFavourites(title);
+    else if (searchModalType === "watchlist") handleAddToWatchList(title);
+    else if (searchModalType === "watching") handleAddToCurrentlyWatching(title);
+    else if (searchModalType === "watched") handleAddToWatched(title);
   };
 
   if (loading) {
@@ -585,7 +486,11 @@ const Index = () => {
     );
   }
 
-  const displayedWatchList = watchListFilter === "all" 
+  // Filter displayed items
+  const personalList = personalLists.find(l => l.id === watchListFilter);
+  const displayedWatchList = personalList
+    ? sortedWatchList.filter(item => personalList.titleIds.includes(item.id))
+    : watchListFilter === "all"
     ? sortedWatchList
     : watchListFilter === "movie" || watchListFilter === "tv"
     ? sortedWatchList.filter(item => item.type === watchListFilter)
@@ -610,65 +515,98 @@ const Index = () => {
     : watched;
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
+    <div className="space-y-8 animate-fade-in max-w-7xl mx-auto relative">
+      {/* Selection Mode Banner */}
+      {selectionMode && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">Creating: {pendingListName}</span>
+            <span className="text-sm opacity-80">({selectedTitleIds.length} selected)</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={handleCancelSelection} className="text-primary-foreground hover:bg-primary-foreground/20">
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleConfirmPersonalList} className="bg-primary-foreground text-primary hover:bg-primary-foreground/90">
+              <Check className="h-4 w-4 mr-1" />
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {selectionMode && <div className="h-12" />}
+
       {/* Favourites Row */}
-      <PosterRow 
-        title="Favourites" 
-        items={displayedFavourites}
-        onPosterClick={(title) => {
-          setSelectedTitle(title);
-          setSelectedTitleSource("favourite");
-        }}
-        onAddClick={() => openSearchModal("favourite")}
-        onDeleteClick={handleDeleteFromFavourites}
-        filterValue={favouritesFilter}
-        onFilterChange={handleFavouritesFilterChange}
-      />
+      <div className={selectionMode ? "opacity-30 pointer-events-none" : ""}>
+        <PosterRow 
+          title="Favourites" 
+          items={displayedFavourites}
+          onPosterClick={(title) => {
+            setSelectedTitle(title);
+            setSelectedTitleSource("favourite");
+          }}
+          onAddClick={() => openSearchModal("favourite")}
+          onDeleteClick={handleDeleteFromFavourites}
+          filterValue={favouritesFilter}
+          onFilterChange={handleFavouritesFilterChange}
+        />
+      </div>
 
       {/* Watch List Row */}
       <PosterRow 
         title="Watch List" 
-        items={isSorting ? [] : displayedWatchList}
+        items={selectionMode ? sortedWatchList : (isSorting ? [] : displayedWatchList)}
         onPosterClick={(title) => {
           setSelectedTitle(title);
           setSelectedTitleSource("watchlist");
         }}
-        onAddClick={() => openSearchModal("watchlist")}
-        onDeleteClick={handleDeleteFromWatchList}
+        onAddClick={selectionMode ? undefined : () => openSearchModal("watchlist")}
+        onDeleteClick={selectionMode ? undefined : handleDeleteFromWatchList}
         filterValue={watchListFilter}
-        onFilterChange={handleFilterChange}
+        onFilterChange={selectionMode ? undefined : handleFilterChange}
         customFilters={customFilters}
         onAddCustomFilter={() => setCustomFilterDialogOpen(true)}
         onDeleteCustomFilter={handleDeleteCustomFilter}
+        personalLists={personalLists}
+        onAddPersonalList={() => setPersonalListDialogOpen(true)}
+        onDeletePersonalList={handleDeletePersonalList}
+        selectionMode={selectionMode}
+        selectedTitleIds={selectedTitleIds}
+        onToggleSelection={handleToggleSelection}
       />
 
       {/* Currently Watching Row */}
-      <PosterRow 
-        title="Currently Watching" 
-        items={displayedCurrentlyWatching}
-        onPosterClick={(title) => {
-          setSelectedTitle(title);
-          setSelectedTitleSource("watching");
-        }}
-        onAddClick={() => openSearchModal("watching")}
-        onDeleteClick={handleDeleteFromCurrentlyWatching}
-        filterValue={currentlyWatchingFilter}
-        onFilterChange={handleCurrentlyWatchingFilterChange}
-      />
+      <div className={selectionMode ? "opacity-30 pointer-events-none" : ""}>
+        <PosterRow 
+          title="Currently Watching" 
+          items={displayedCurrentlyWatching}
+          onPosterClick={(title) => {
+            setSelectedTitle(title);
+            setSelectedTitleSource("watching");
+          }}
+          onAddClick={() => openSearchModal("watching")}
+          onDeleteClick={handleDeleteFromCurrentlyWatching}
+          filterValue={currentlyWatchingFilter}
+          onFilterChange={handleCurrentlyWatchingFilterChange}
+        />
+      </div>
 
       {/* Watched Row */}
-      <PosterRow 
-        title="Watched" 
-        items={displayedWatched}
-        onPosterClick={(title) => {
-          setSelectedTitle(title);
-          setSelectedTitleSource("watched");
-        }}
-        onAddClick={() => openSearchModal("watched")}
-        onDeleteClick={handleDeleteFromWatched}
-        filterValue={watchedFilter}
-        onFilterChange={handleWatchedFilterChange}
-      />
+      <div className={selectionMode ? "opacity-30 pointer-events-none" : ""}>
+        <PosterRow 
+          title="Watched" 
+          items={displayedWatched}
+          onPosterClick={(title) => {
+            setSelectedTitle(title);
+            setSelectedTitleSource("watched");
+          }}
+          onAddClick={() => openSearchModal("watched")}
+          onDeleteClick={handleDeleteFromWatched}
+          filterValue={watchedFilter}
+          onFilterChange={handleWatchedFilterChange}
+        />
+      </div>
 
       {/* Title Detail Modal */}
       {selectedTitle && (
@@ -699,6 +637,13 @@ const Index = () => {
         open={customFilterDialogOpen}
         onOpenChange={setCustomFilterDialogOpen}
         onFilterAdded={handleFilterAdded}
+      />
+
+      {/* Personal List Dialog */}
+      <PersonalListDialog
+        open={personalListDialogOpen}
+        onOpenChange={setPersonalListDialogOpen}
+        onListCreated={handlePersonalListCreated}
       />
     </div>
   );
