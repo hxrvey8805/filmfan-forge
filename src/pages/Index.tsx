@@ -538,7 +538,7 @@ const Index = () => {
       {selectionMode && <div className="h-12" />}
 
       {/* Favourites Row */}
-      <div className={selectionMode ? "opacity-30 pointer-events-none" : ""}>
+      <div className={selectionMode ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
         <PosterRow 
           title="Favourites" 
           items={displayedFavourites}
@@ -577,7 +577,7 @@ const Index = () => {
       />
 
       {/* Currently Watching Row */}
-      <div className={selectionMode ? "opacity-30 pointer-events-none" : ""}>
+      <div className={selectionMode ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
         <PosterRow 
           title="Currently Watching" 
           items={displayedCurrentlyWatching}
@@ -593,7 +593,7 @@ const Index = () => {
       </div>
 
       {/* Watched Row */}
-      <div className={selectionMode ? "opacity-30 pointer-events-none" : ""}>
+      <div className={selectionMode ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
         <PosterRow 
           title="Watched" 
           items={displayedWatched}

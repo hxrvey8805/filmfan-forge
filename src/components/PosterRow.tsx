@@ -166,7 +166,7 @@ const PosterRow = ({
             dragFree: true,
             containScroll: "trimSnaps",
             dragThreshold: 2,
-            watchDrag: !selectionMode,
+            watchDrag: true,
             watchResize: true,
             loop: false,
             duration: 20,
