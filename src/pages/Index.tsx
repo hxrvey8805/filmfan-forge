@@ -471,17 +471,17 @@ const Index = () => {
   const handleCurrentlyWatchingFilterChange = (value: string) => setCurrentlyWatchingFilter(value);
   const handleWatchedFilterChange = (value: string) => setWatchedFilter(value);
 
-  const handleSearchSelect = (title: Title) => {
+  const handleSearchSelect = async (title: Title) => {
     if (searchModalType === "favourite") handleAddToFavourites(title);
     else if (searchModalType === "watchlist") {
-      handleAddToWatchList(title);
+      await handleAddToWatchList(title);
       // If viewing a personal list, also add the title to that list
       const activePersonalList = personalLists.find(l => l.id === watchListFilter);
       if (activePersonalList && !activePersonalList.titleIds.includes(title.id)) {
         const updatedList = { ...activePersonalList, titleIds: [...activePersonalList.titleIds, title.id] };
-        const updated = personalLists.map(l => l.id === updatedList.id ? updatedList : l);
-        setPersonalLists(updated);
-        localStorage.setItem("personalLists", JSON.stringify(updated));
+        const updatedLists = personalLists.map(l => l.id === updatedList.id ? updatedList : l);
+        setPersonalLists(updatedLists);
+        localStorage.setItem("personalLists", JSON.stringify(updatedLists));
       }
     }
     else if (searchModalType === "watching") handleAddToCurrentlyWatching(title);
