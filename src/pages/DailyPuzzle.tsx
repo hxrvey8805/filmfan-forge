@@ -3,7 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { User, Trophy, RotateCcw, Timer, ArrowRight, Loader2, Tv } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { User, Trophy, RotateCcw, Timer, ArrowRight, Loader2, Tv, Search } from 'lucide-react';
 import { GlassesWithLenses } from "@/components/GlassesWithLenses";
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -57,6 +58,8 @@ const DailyPuzzle = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [randomizeCount, setRandomizeCount] = useState<number>(0);
   const [isRandomizing, setIsRandomizing] = useState(false);
+  const [filmographySearch, setFilmographySearch] = useState("");
+  const [castSearch, setCastSearch] = useState("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -178,6 +181,7 @@ const DailyPuzzle = () => {
   const loadFilmography = async (actorId: number) => {
     setIsLoading(true);
     setViewMode('filmography');
+    setFilmographySearch("");
     try {
       const { data, error } = await supabase.functions.invoke('actor-connect', {
         body: { action: 'getActorFilmography', actorId }
@@ -200,6 +204,7 @@ const DailyPuzzle = () => {
   const loadCast = async (contentId: number, type: string, title: string, posterPath: string) => {
     setIsLoading(true);
     setViewMode('cast');
+    setCastSearch("");
     
     setPath(prev => [...prev, {
       type: type as 'movie' | 'tv',
@@ -406,8 +411,9 @@ const DailyPuzzle = () => {
   });
 
   // Split into movies and TV shows
-  const movies = filteredFilmography.filter((c) => c.type === 'movie');
-  const tvShows = filteredFilmography.filter((c) => c.type === 'tv');
+  const searchLower = filmographySearch.toLowerCase();
+  const movies = filteredFilmography.filter((c) => c.type === 'movie' && (!filmographySearch || c.title.toLowerCase().includes(searchLower)));
+  const tvShows = filteredFilmography.filter((c) => c.type === 'tv' && (!filmographySearch || c.title.toLowerCase().includes(searchLower)));
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 animate-fade-in pb-4">
@@ -606,7 +612,18 @@ const DailyPuzzle = () => {
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
           ) : viewMode === 'filmography' ? (
-            <div className="space-y-4">
+             <div className="space-y-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search films..."
+                  value={filmographySearch}
+                  onChange={(e) => setFilmographySearch(e.target.value)}
+                  className="pl-9 bg-secondary"
+                />
+              </div>
+
               {/* Filter Toggle Buttons */}
               <div className="flex gap-2">
                 <Button
@@ -653,15 +670,30 @@ const DailyPuzzle = () => {
               <h3 className="text-lg font-semibold tracking-tight">
                 Cast of {path[path.length - 1].name}
               </h3>
+
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search cast..."
+                  value={castSearch}
+                  onChange={(e) => setCastSearch(e.target.value)}
+                  className="pl-9 bg-secondary"
+                />
+              </div>
               
               {/* Group cast by order - main cast first, then supporting, then rest */}
               {(() => {
-                const mainCast = cast.filter(actor => (actor.order ?? 999) < 10);
-                const supportingCast = cast.filter(actor => {
+                const castSearchLower = castSearch.toLowerCase();
+                const filteredCast = castSearch
+                  ? cast.filter(a => a.name.toLowerCase().includes(castSearchLower) || (a.character || '').toLowerCase().includes(castSearchLower))
+                  : cast;
+                const mainCast = filteredCast.filter(actor => (actor.order ?? 999) < 10);
+                const supportingCast = filteredCast.filter(actor => {
                   const order = actor.order ?? 999;
                   return order >= 10 && order < 50;
                 });
-                const restOfCast = cast.filter(actor => (actor.order ?? 999) >= 50);
+                const restOfCast = filteredCast.filter(actor => (actor.order ?? 999) >= 50);
 
                 return (
                   <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
