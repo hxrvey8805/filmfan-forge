@@ -567,7 +567,7 @@ const Index = () => {
       {/* Watch List Row */}
       <PosterRow 
         title="Watch List" 
-        items={selectionMode ? sortedWatchList : (isSorting ? [] : displayedWatchList)}
+        items={selectionMode ? displayedWatchList : (isSorting ? [] : displayedWatchList)}
         onPosterClick={(title) => {
           setSelectedTitle(title);
           setSelectedTitleSource("watchlist");
