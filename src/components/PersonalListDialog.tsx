@@ -6,34 +6,37 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
-export type PersonalListSource = "watchlist" | "favourite" | "watching" | "watched";
+interface CustomFilter {
+  id: string;
+  name: string;
+}
+
+interface PersonalList {
+  id: string;
+  name: string;
+}
 
 interface PersonalListDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onListCreated: (name: string, source: PersonalListSource) => void;
+  onListCreated: (name: string, filterLabel: string) => void;
+  customFilters?: CustomFilter[];
+  personalLists?: PersonalList[];
 }
 
-const PersonalListDialog = ({ open, onOpenChange, onListCreated }: PersonalListDialogProps) => {
+const PersonalListDialog = ({ open, onOpenChange, onListCreated, customFilters = [], personalLists = [] }: PersonalListDialogProps) => {
   const [listName, setListName] = useState("");
-  const [source, setSource] = useState<PersonalListSource>("watchlist");
+  const [filterLabel, setFilterLabel] = useState("all");
 
   const handleSubmit = () => {
     if (!listName.trim()) {
       toast.error("Please enter a list name");
       return;
     }
-    onListCreated(listName.trim(), source);
+    onListCreated(listName.trim(), filterLabel);
     setListName("");
-    setSource("watchlist");
+    setFilterLabel("all");
     onOpenChange(false);
-  };
-
-  const sourceLabels: Record<PersonalListSource, string> = {
-    watchlist: "Watch List",
-    favourite: "Favourites",
-    watching: "Currently Watching",
-    watched: "Watched",
   };
 
   return (
@@ -42,7 +45,7 @@ const PersonalListDialog = ({ open, onOpenChange, onListCreated }: PersonalListD
         <DialogHeader>
           <DialogTitle>Create Personal List</DialogTitle>
           <DialogDescription>
-            Name your list and choose which collection to pick from.
+            Name your list and choose which view to pick from.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -59,13 +62,19 @@ const PersonalListDialog = ({ open, onOpenChange, onListCreated }: PersonalListD
           </div>
           <div className="space-y-2">
             <Label>Pick From</Label>
-            <Select value={source} onValueChange={(v) => setSource(v as PersonalListSource)}>
+            <Select value={filterLabel} onValueChange={setFilterLabel}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(sourceLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="movies">Movies</SelectItem>
+                <SelectItem value="tv">TV Shows</SelectItem>
+                {personalLists.map((list) => (
+                  <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>
+                ))}
+                {customFilters.map((filter) => (
+                  <SelectItem key={filter.id} value={filter.id}>{filter.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

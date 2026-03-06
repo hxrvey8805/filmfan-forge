@@ -4,7 +4,7 @@ import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
 import CustomFilterDialog from "@/components/CustomFilterDialog";
-import PersonalListDialog, { type PersonalListSource } from "@/components/PersonalListDialog";
+import PersonalListDialog from "@/components/PersonalListDialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,7 +31,6 @@ interface PersonalList {
   id: string;
   name: string;
   titleIds: number[];
-  source: PersonalListSource;
 }
 
 const Index = () => {
@@ -60,7 +59,6 @@ const Index = () => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [pendingListName, setPendingListName] = useState("");
   const [selectedTitleIds, setSelectedTitleIds] = useState<number[]>([]);
-  const [selectionSource, setSelectionSource] = useState<PersonalListSource>("watchlist");
 
   useEffect(() => {
     checkAuth();
@@ -387,15 +385,12 @@ const Index = () => {
   };
 
   // Personal list handlers
-  const handlePersonalListCreated = (name: string, source: PersonalListSource) => {
+  const handlePersonalListCreated = (name: string, filterLabel: string) => {
     setPendingListName(name);
     setSelectedTitleIds([]);
-    setSelectionSource(source);
+    setWatchListFilter(filterLabel);
     setSelectionMode(true);
-    const sourceLabels: Record<PersonalListSource, string> = {
-      watchlist: "Watch List", favourite: "Favourites", watching: "Currently Watching", watched: "Watched"
-    };
-    toast.info(`Tap posters in your ${sourceLabels[source]} to add them to your list, then press Done.`);
+    toast.info("Tap posters in your Watch List to add them to your list, then press Done.");
   };
 
   const handleToggleSelection = (titleId: number) => {
@@ -415,7 +410,6 @@ const Index = () => {
       id: `plist_${Date.now()}`,
       name: pendingListName,
       titleIds: selectedTitleIds,
-      source: selectionSource,
     };
     const updated = [...personalLists, newList];
     setPersonalLists(updated);
@@ -555,7 +549,7 @@ const Index = () => {
       {selectionMode && <div className="h-12" />}
 
       {/* Favourites Row */}
-      <div className={selectionMode && selectionSource !== "favourite" ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
+      <div className={selectionMode ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
         <PosterRow 
           title="Favourites" 
           items={displayedFavourites}
@@ -563,43 +557,38 @@ const Index = () => {
             setSelectedTitle(title);
             setSelectedTitleSource("favourite");
           }}
-          onAddClick={selectionMode ? undefined : () => openSearchModal("favourite")}
-          onDeleteClick={selectionMode ? undefined : handleDeleteFromFavourites}
+          onAddClick={() => openSearchModal("favourite")}
+          onDeleteClick={handleDeleteFromFavourites}
           filterValue={favouritesFilter}
-          onFilterChange={selectionMode ? undefined : handleFavouritesFilterChange}
-          selectionMode={selectionMode && selectionSource === "favourite"}
-          selectedTitleIds={selectedTitleIds}
-          onToggleSelection={handleToggleSelection}
+          onFilterChange={handleFavouritesFilterChange}
         />
       </div>
 
       {/* Watch List Row */}
-      <div className={selectionMode && selectionSource !== "watchlist" ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
-        <PosterRow 
-          title="Watch List" 
-          items={selectionMode && selectionSource === "watchlist" ? sortedWatchList : (isSorting ? [] : displayedWatchList)}
-          onPosterClick={(title) => {
-            setSelectedTitle(title);
-            setSelectedTitleSource("watchlist");
-          }}
-          onAddClick={selectionMode ? undefined : () => openSearchModal("watchlist")}
-          onDeleteClick={selectionMode ? undefined : handleDeleteFromWatchList}
-          filterValue={watchListFilter}
-          onFilterChange={selectionMode ? undefined : handleFilterChange}
-          customFilters={customFilters}
-          onAddCustomFilter={() => setCustomFilterDialogOpen(true)}
-          onDeleteCustomFilter={handleDeleteCustomFilter}
-          personalLists={personalLists}
-          onAddPersonalList={() => setPersonalListDialogOpen(true)}
-          onDeletePersonalList={handleDeletePersonalList}
-          selectionMode={selectionMode && selectionSource === "watchlist"}
-          selectedTitleIds={selectedTitleIds}
-          onToggleSelection={handleToggleSelection}
-        />
-      </div>
+      <PosterRow 
+        title="Watch List" 
+        items={selectionMode ? sortedWatchList : (isSorting ? [] : displayedWatchList)}
+        onPosterClick={(title) => {
+          setSelectedTitle(title);
+          setSelectedTitleSource("watchlist");
+        }}
+        onAddClick={selectionMode ? undefined : () => openSearchModal("watchlist")}
+        onDeleteClick={selectionMode ? undefined : handleDeleteFromWatchList}
+        filterValue={watchListFilter}
+        onFilterChange={selectionMode ? undefined : handleFilterChange}
+        customFilters={customFilters}
+        onAddCustomFilter={() => setCustomFilterDialogOpen(true)}
+        onDeleteCustomFilter={handleDeleteCustomFilter}
+        personalLists={personalLists}
+        onAddPersonalList={() => setPersonalListDialogOpen(true)}
+        onDeletePersonalList={handleDeletePersonalList}
+        selectionMode={selectionMode}
+        selectedTitleIds={selectedTitleIds}
+        onToggleSelection={handleToggleSelection}
+      />
 
       {/* Currently Watching Row */}
-      <div className={selectionMode && selectionSource !== "watching" ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
+      <div className={selectionMode ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
         <PosterRow 
           title="Currently Watching" 
           items={displayedCurrentlyWatching}
@@ -607,18 +596,15 @@ const Index = () => {
             setSelectedTitle(title);
             setSelectedTitleSource("watching");
           }}
-          onAddClick={selectionMode ? undefined : () => openSearchModal("watching")}
-          onDeleteClick={selectionMode ? undefined : handleDeleteFromCurrentlyWatching}
+          onAddClick={() => openSearchModal("watching")}
+          onDeleteClick={handleDeleteFromCurrentlyWatching}
           filterValue={currentlyWatchingFilter}
-          onFilterChange={selectionMode ? undefined : handleCurrentlyWatchingFilterChange}
-          selectionMode={selectionMode && selectionSource === "watching"}
-          selectedTitleIds={selectedTitleIds}
-          onToggleSelection={handleToggleSelection}
+          onFilterChange={handleCurrentlyWatchingFilterChange}
         />
       </div>
 
       {/* Watched Row */}
-      <div className={selectionMode && selectionSource !== "watched" ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
+      <div className={selectionMode ? "opacity-30 select-none [&_button]:pointer-events-none" : ""}>
         <PosterRow 
           title="Watched" 
           items={displayedWatched}
@@ -626,13 +612,10 @@ const Index = () => {
             setSelectedTitle(title);
             setSelectedTitleSource("watched");
           }}
-          onAddClick={selectionMode ? undefined : () => openSearchModal("watched")}
-          onDeleteClick={selectionMode ? undefined : handleDeleteFromWatched}
+          onAddClick={() => openSearchModal("watched")}
+          onDeleteClick={handleDeleteFromWatched}
           filterValue={watchedFilter}
-          onFilterChange={selectionMode ? undefined : handleWatchedFilterChange}
-          selectionMode={selectionMode && selectionSource === "watched"}
-          selectedTitleIds={selectedTitleIds}
-          onToggleSelection={handleToggleSelection}
+          onFilterChange={handleWatchedFilterChange}
         />
       </div>
 
@@ -672,6 +655,8 @@ const Index = () => {
         open={personalListDialogOpen}
         onOpenChange={setPersonalListDialogOpen}
         onListCreated={handlePersonalListCreated}
+        customFilters={customFilters}
+        personalLists={personalLists}
       />
     </div>
   );
