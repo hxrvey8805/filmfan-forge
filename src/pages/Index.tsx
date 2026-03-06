@@ -4,7 +4,7 @@ import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
 import CustomFilterDialog from "@/components/CustomFilterDialog";
-import PersonalListDialog from "@/components/PersonalListDialog";
+import PersonalListDialog, { type PersonalListSource } from "@/components/PersonalListDialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +31,7 @@ interface PersonalList {
   id: string;
   name: string;
   titleIds: number[];
+  source: PersonalListSource;
 }
 
 const Index = () => {
@@ -59,6 +60,7 @@ const Index = () => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [pendingListName, setPendingListName] = useState("");
   const [selectedTitleIds, setSelectedTitleIds] = useState<number[]>([]);
+  const [selectionSource, setSelectionSource] = useState<PersonalListSource>("watchlist");
 
   useEffect(() => {
     checkAuth();
@@ -385,11 +387,15 @@ const Index = () => {
   };
 
   // Personal list handlers
-  const handlePersonalListCreated = (name: string) => {
+  const handlePersonalListCreated = (name: string, source: PersonalListSource) => {
     setPendingListName(name);
     setSelectedTitleIds([]);
+    setSelectionSource(source);
     setSelectionMode(true);
-    toast.info("Tap posters in your Watch List to add them to your list, then press Done.");
+    const sourceLabels: Record<PersonalListSource, string> = {
+      watchlist: "Watch List", favourite: "Favourites", watching: "Currently Watching", watched: "Watched"
+    };
+    toast.info(`Tap posters in your ${sourceLabels[source]} to add them to your list, then press Done.`);
   };
 
   const handleToggleSelection = (titleId: number) => {
@@ -409,6 +415,7 @@ const Index = () => {
       id: `plist_${Date.now()}`,
       name: pendingListName,
       titleIds: selectedTitleIds,
+      source: selectionSource,
     };
     const updated = [...personalLists, newList];
     setPersonalLists(updated);
