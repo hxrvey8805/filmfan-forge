@@ -655,6 +655,8 @@ const Index = () => {
         open={personalListDialogOpen}
         onOpenChange={setPersonalListDialogOpen}
         onListCreated={handlePersonalListCreated}
+        customFilters={customFilters}
+        personalLists={personalLists}
       />
     </div>
   );
