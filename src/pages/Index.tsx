@@ -322,7 +322,7 @@ const Index = () => {
     if (activePersonalList) {
       const updatedLists = personalLists.map((l) =>
         l.id === activePersonalList.id
-          ? { ...l, titleIds: l.titleIds.filter((id) => id !== title.id) }
+          ? { ...l, titleIds: l.titleIds.filter((id) => id !== title.id), titles: l.titles?.filter((t) => t.id !== title.id) }
           : l
       );
       setPersonalLists(updatedLists);
@@ -522,7 +522,9 @@ const Index = () => {
   // Filter displayed items
   const personalList = personalLists.find(l => l.id === watchListFilter);
   const displayedWatchList = personalList
-    ? sortedWatchList.filter(item => personalList.titleIds.includes(item.id))
+    ? personalList.titleIds
+        .map(id => sortedWatchList.find(item => item.id === id) ?? personalList.titles?.find(t => t.id === id))
+        .filter((t): t is Title => Boolean(t))
     : watchListFilter === "all"
     ? sortedWatchList
     : watchListFilter === "movie" || watchListFilter === "tv"
