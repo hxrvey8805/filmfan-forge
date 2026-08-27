@@ -31,6 +31,7 @@ interface PersonalList {
   id: string;
   name: string;
   titleIds: number[];
+  titles?: Title[]; // pool for titles added only to this list (not in wider watchlist)
 }
 
 const Index = () => {
@@ -321,7 +322,7 @@ const Index = () => {
     if (activePersonalList) {
       const updatedLists = personalLists.map((l) =>
         l.id === activePersonalList.id
-          ? { ...l, titleIds: l.titleIds.filter((id) => id !== title.id) }
+          ? { ...l, titleIds: l.titleIds.filter((id) => id !== title.id), titles: l.titles?.filter((t) => t.id !== title.id) }
           : l
       );
       setPersonalLists(updatedLists);
@@ -488,15 +489,23 @@ const Index = () => {
   const handleSearchSelect = async (title: Title) => {
     if (searchModalType === "favourite") handleAddToFavourites(title);
     else if (searchModalType === "watchlist") {
-      await handleAddToWatchList(title);
-      // If viewing a personal list, also add the title to that list
+      // If viewing a personal list, add only to that list (not the wider watchlist)
       const activePersonalList = personalLists.find(l => l.id === watchListFilter);
-      if (activePersonalList && !activePersonalList.titleIds.includes(title.id)) {
-        const updatedList = { ...activePersonalList, titleIds: [...activePersonalList.titleIds, title.id] };
-        const updatedLists = personalLists.map(l => l.id === updatedList.id ? updatedList : l);
-        setPersonalLists(updatedLists);
-        localStorage.setItem("personalLists", JSON.stringify(updatedLists));
+      if (activePersonalList) {
+        if (!activePersonalList.titleIds.includes(title.id)) {
+          const updatedList = {
+            ...activePersonalList,
+            titleIds: [...activePersonalList.titleIds, title.id],
+            titles: [...(activePersonalList.titles ?? []).filter(t => t.id !== title.id), title],
+          };
+          const updatedLists = personalLists.map(l => l.id === updatedList.id ? updatedList : l);
+          setPersonalLists(updatedLists);
+          localStorage.setItem("personalLists", JSON.stringify(updatedLists));
+          toast.success(`Added "${title.title}" to ${activePersonalList.name}`);
+        }
+        return;
       }
+      await handleAddToWatchList(title);
     }
     else if (searchModalType === "watching") handleAddToCurrentlyWatching(title);
     else if (searchModalType === "watched") handleAddToWatched(title);
@@ -513,7 +522,9 @@ const Index = () => {
   // Filter displayed items
   const personalList = personalLists.find(l => l.id === watchListFilter);
   const displayedWatchList = personalList
-    ? sortedWatchList.filter(item => personalList.titleIds.includes(item.id))
+    ? personalList.titleIds
+        .map(id => sortedWatchList.find(item => item.id === id) ?? personalList.titles?.find(t => t.id === id))
+        .filter((t): t is Title => Boolean(t))
     : watchListFilter === "all"
     ? sortedWatchList
     : watchListFilter === "movie" || watchListFilter === "tv"
