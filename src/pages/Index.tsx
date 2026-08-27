@@ -316,6 +316,19 @@ const Index = () => {
   };
 
   const handleDeleteFromWatchList = async (title: Title) => {
+    // If viewing a personal list, only remove it from that list (keep in wider watchlist)
+    const activePersonalList = personalLists.find((l) => l.id === watchListFilter);
+    if (activePersonalList) {
+      const updatedLists = personalLists.map((l) =>
+        l.id === activePersonalList.id
+          ? { ...l, titleIds: l.titleIds.filter((id) => id !== title.id) }
+          : l
+      );
+      setPersonalLists(updatedLists);
+      localStorage.setItem("personalLists", JSON.stringify(updatedLists));
+      toast.success(`Removed "${title.title}" from ${activePersonalList.name}`);
+      return;
+    }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
