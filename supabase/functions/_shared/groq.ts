@@ -3,9 +3,10 @@ import type { JsonGenerator } from './answer.ts';
 // Groq retired llama-3.3-70b-versatile for developer accounts in August 2026.
 export const COMPANION_MODEL = 'openai/gpt-oss-120b';
 
-export function groqGenerator(key: string, request: typeof fetch = fetch): JsonGenerator {
+export function groqGenerator(key: string, request: typeof fetch = fetch,
+  wait: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms))): JsonGenerator {
   return async (system, user, maxTokens) => {
-    const response = await request('https://api.groq.com/openai/v1/chat/completions', {
+    const send = () => request('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: COMPANION_MODEL, temperature: 0,
         response_format: { type: 'json_object' }, reasoning_effort: 'medium', include_reasoning: false,
@@ -15,6 +16,16 @@ export function groqGenerator(key: string, request: typeof fetch = fetch): JsonG
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
       signal: AbortSignal.timeout(30000),
     });
+    let response = await send();
+    const retryHeader = response.headers.get('retry-after');
+    const retrySeconds = retryHeader === null ? NaN : Number(retryHeader);
+    // Honor a short provider-requested cooldown once. Never retry a daily quota
+    // or loop indefinitely; failures cannot publish or charge for a draft.
+    if (response.status === 429 && Number.isFinite(retrySeconds) && retrySeconds >= 0 && retrySeconds <= 15) {
+      await response.body?.cancel();
+      await wait(Math.max(1000, Math.ceil(retrySeconds * 1000)));
+      response = await send();
+    }
     if (!response.ok) {
       // Do not log provider bodies: they can echo private questions or evidence.
       console.error('Companion model request failed', { status: response.status, model: COMPANION_MODEL });

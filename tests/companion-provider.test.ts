@@ -6,6 +6,30 @@ const completion = (content: string, finish_reason = 'stop') => new Response(JSO
 }));
 
 describe('companion model transport', () => {
+  it('honors a short rate-limit cooldown once before continuing verification', async () => {
+    const request = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('', { status: 429, headers: { 'retry-after': '2' } }))
+      .mockResolvedValueOnce(completion('{"supported":true}'));
+    const wait = vi.fn().mockResolvedValue(undefined);
+    expect(await groqGenerator('test-key', request, wait)('System', 'Evidence', 500)).toEqual({ supported: true });
+    expect(wait).toHaveBeenCalledWith(2000);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry repeatedly or wait out long quotas', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const request = vi.fn<typeof fetch>().mockImplementation(async () => new Response('', { status: 429, headers: { 'retry-after': '2' } }));
+      const wait = vi.fn().mockResolvedValue(undefined);
+      await expect(groqGenerator('test-key', request, wait)('System', 'Evidence', 500)).rejects.toThrow('busy');
+      expect(request).toHaveBeenCalledTimes(2);
+      const daily = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 429, headers: { 'retry-after': '86400' } }));
+      await expect(groqGenerator('test-key', daily, wait)('System', 'Evidence', 500)).rejects.toThrow('busy');
+      expect(daily).toHaveBeenCalledTimes(1);
+      expect(wait).toHaveBeenCalledTimes(1);
+    } finally { log.mockRestore(); }
+  });
+
   it('uses the supported model with separate room for reasoning and parses only final JSON', async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{"supported":true}'));
     expect(await groqGenerator('test-key', request)('Check evidence', 'Question and evidence', 500)).toEqual({ supported: true });
