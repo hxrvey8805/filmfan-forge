@@ -38,6 +38,14 @@ describe('answer generation and independent verification', () => {
     expect(await checkedAnswer('Why?', position, evidence, [], generate)).toBeNull();
     expect(generate).toHaveBeenCalledTimes(1);
   });
+  it('checks every cited passage without resending unrelated dialogue', async () => {
+    const unrelated = { ...evidence[0], id: 'unrelated', text: 'Unrelated permitted dialogue.' };
+    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
+    const result = await checkedAnswer('Why?', position, [...evidence, unrelated], [], generate);
+    expect(JSON.parse(generate.mock.calls[0][1]).evidence).toHaveLength(2);
+    expect(JSON.parse(generate.mock.calls[1][1]).evidence).toEqual(evidence);
+    expect(result?.evidence.map(item => item.id)).toEqual(['letter']);
+  });
   it('does not call the model without evidence, including at 00:00:00', async () => {
     const generate = vi.fn();
     expect(await checkedAnswer('Tell me the ending', { ...position, seconds: 0 }, [], [], generate)).toBeNull();

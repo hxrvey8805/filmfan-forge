@@ -76,14 +76,18 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
   const overview = intent === 'recap' && chronological.length > 14
     ? Array.from({ length: 14 }, (_, i) => chronological[Math.round(i * (chronological.length - 1) / 13)])
     : chronological;
-  const prioritized = [...(recent.data ?? []), ...(relevant.data ?? []), ...overview] as unknown as SubtitleRecord[];
+  // Mix nearby, relevant and overview chunks so a bounded prompt still includes
+  // earlier context instead of filling its entire budget with the newest cues.
+  const sources = [recent.data ?? [], relevant.data ?? [], overview];
+  const prioritized = Array.from({ length: Math.max(...sources.map(rows => rows.length)) }, (_, i) =>
+    sources.flatMap(rows => rows[i] ? [rows[i]] : [])).flat() as unknown as SubtitleRecord[];
   const selected: SubtitleRecord[] = [];
   const seen = new Set<string>();
   let budget = 0;
   for (const record of prioritized) {
     const safe = safeEvidence([record], position)[0];
     if (!safe || seen.has(record.id)) continue;
-    if (budget + safe.text.length > 36000) continue;
+    if (budget + safe.text.length > 12000) continue;
     selected.push(record); seen.add(record.id); budget += safe.text.length;
   }
   return safeEvidence(selected, position);
