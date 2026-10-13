@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chunkCues, COMPANION_VERSION, formatTimestamp, parseSubtitles } from "../_shared/companion.ts";
+import { selectSubtitleFile, subtitleSearchParams } from "../_shared/subtitle-source.ts";
 
 const headers = { 'Content-Type': 'application/json' };
 // Delay helper
@@ -74,17 +75,12 @@ serve(async (req) => {
     const apiKey = Deno.env.get('OPENSUBTITLES_API_KEY');
     if (!apiKey) throw new Error('Subtitle service is not configured');
     const apiHeaders = { 'Api-Key': apiKey, 'Content-Type': 'application/json' };
-    const params = new URLSearchParams({ tmdb_id: String(tmdbId), languages: 'en',
-      type: mediaType === 'tv' ? 'episode' : 'movie', order_by: 'download_count', order_direction: 'desc' });
-    if (mediaType === 'tv') {
-      params.set('season_number', String(seasonNumber));
-      params.set('episode_number', String(episodeNumber));
-    }
+    const titlePosition = { tmdbId, mediaType, seasonNumber, episodeNumber };
+    const params = subtitleSearchParams(titlePosition);
     const search = await fetchWithRetry(`https://api.opensubtitles.com/api/v1/subtitles?${params}`, { headers: apiHeaders });
     if (!search.ok) throw new Error('Subtitle search failed');
     const results = (await search.json()).data ?? [];
-    const best = results.sort((a: any, b: any) => (b.attributes?.download_count ?? 0) - (a.attributes?.download_count ?? 0))[0];
-    const fileId = best?.attributes?.files?.[0]?.file_id;
+    const fileId = selectSubtitleFile(results, titlePosition);
     if (!fileId) return new Response(JSON.stringify({ success: false, reason: 'unavailable' }), { headers });
     const download = await fetchWithRetry('https://api.opensubtitles.com/api/v1/download', {
       method: 'POST', headers: apiHeaders, body: JSON.stringify({ file_id: fileId }),
