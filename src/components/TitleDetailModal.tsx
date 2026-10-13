@@ -1,8 +1,11 @@
+import { useCompanion } from "@/hooks/use-companion";
+import { CompanionTimestamp } from "@/components/CompanionTimestamp";
+import { CompanionAnswer } from "@/components/CompanionAnswer";
+import { formatTimestamp as formatPosition } from "../../supabase/functions/_shared/companion";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clapperboard, Tv, Clock, Send, Loader2, Plus, Eye, Heart, X, Zap, Coins, Sparkles } from "lucide-react";
@@ -26,15 +29,6 @@ interface Title {
   progress?: number;
 }
 
-interface Message {
-  id: string;
-  question: string;
-  answer: string;
-  context: string;
-  timestamp: string;
-  created_at?: string;
-}
-
 interface TitleDetailModalProps {
   title: Title;
   open: boolean;
@@ -48,12 +42,10 @@ interface TitleDetailModalProps {
   sourceList?: "favourite" | "watchlist" | "watching" | "watched";
 }
 
-const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddToWatchList, onAddToCurrentlyWatching, onAddToWatched, onMoveToCurrentlyWatching, onMoveToWatched, sourceList }: TitleDetailModalProps) => {
+const TitleDetailModalContent = ({ title, open, onOpenChange, onAddToFavourites, onAddToWatchList, onAddToCurrentlyWatching, onAddToWatched, onMoveToCurrentlyWatching, onMoveToWatched, sourceList }: TitleDetailModalProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const [coins, setCoins] = useState(0);
   
@@ -64,11 +56,18 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
   const [episodes, setEpisodes] = useState<{ episodeNumber: number; name: string; runtime: number }[]>([]);
   
   // Timestamp state
-  const [timestampMinutes, setTimestampMinutes] = useState([30]);
+  const [timestampMinutes, setTimestampMinutes] = useState([0]);
   const [maxRuntime, setMaxRuntime] = useState(120);
+  const [timestampValid, setTimestampValid] = useState(true);
+  const position = title.type === 'movie' || (selectedSeason && selectedEpisode) ? {
+    tmdbId: title.id, mediaType: title.type, seconds: Math.round(timestampMinutes[0] * 60),
+    ...(title.type === 'tv' ? { seasonNumber: Number(selectedSeason), episodeNumber: Number(selectedEpisode) } : {}),
+  } : null;
+  const { ask, messages, isLoading, historyError } = useCompanion(position, open && timestampValid);
 
   // Fetch seasons for TV shows
   useEffect(() => {
+    let active = true;
     const fetchSeasons = async () => {
       if (title.type !== 'tv') return;
 
@@ -77,6 +76,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
           body: { tvId: title.id }
         });
 
+        if (!active) return;
         if (error) throw error;
         setSeasons(data.seasons || []);
       } catch (error) {
@@ -85,10 +85,13 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
     };
 
     fetchSeasons();
-  }, [title]);
+    return () => { active = false; };
+  }, [title.id, title.type]);
 
   // Fetch episodes when season changes
   useEffect(() => {
+    let active = true;
+    setEpisodes([]);
     const fetchEpisodes = async () => {
       if (title.type !== 'tv' || !selectedSeason) return;
 
@@ -97,6 +100,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
           body: { tvId: title.id, season: parseInt(selectedSeason) }
         });
 
+        if (!active) return;
         if (error) throw error;
         setEpisodes(data.episodes || []);
       } catch (error) {
@@ -105,10 +109,13 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
     };
 
     fetchEpisodes();
-  }, [title, selectedSeason]);
+    return () => { active = false; };
+  }, [title.id, title.type, selectedSeason]);
 
   // Fetch runtime
   useEffect(() => {
+    let active = true;
+    setMaxRuntime(title.type === 'movie' ? 180 : 120);
     const fetchRuntime = async () => {
       try {
         if (title.type === 'movie') {
@@ -116,10 +123,10 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
             body: { movieId: title.id }
           });
 
+          if (!active) return;
           if (error) throw error;
           const runtime = data.runtime || 120;
           setMaxRuntime(runtime);
-          setTimestampMinutes([Math.min(30, runtime)]);
         } else if (selectedSeason && selectedEpisode) {
           const { data, error } = await supabase.functions.invoke('search-content', {
             body: { 
@@ -129,10 +136,10 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
             }
           });
 
+          if (!active) return;
           if (error) throw error;
           const runtime = data.runtime || 45;
           setMaxRuntime(runtime);
-          setTimestampMinutes([Math.min(30, runtime)]);
         }
       } catch (error) {
         console.error('Error fetching runtime:', error);
@@ -140,14 +147,14 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
     };
 
     fetchRuntime();
-  }, [title, selectedSeason, selectedEpisode]);
+    return () => { active = false; };
+  }, [title.id, title.type, selectedSeason, selectedEpisode]);
 
   // Load AI usage, coins, and conversation history when modal opens
   useEffect(() => {
     if (open) {
       loadAIUsage();
       loadUserStats();
-      loadConversationHistory();
     }
   }, [open, title.id, title.type]);
 
@@ -168,7 +175,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
       if (!user) return;
 
       const today = new Date().toISOString().split('T')[0];
-      let { data: aiUsage } = await supabase
+      const { data: aiUsage } = await supabase
         .from('user_ai_usage')
         .select('questions_today, last_reset_date')
         .eq('user_id', user.id)
@@ -195,7 +202,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      let { data: stats } = await supabase
+      const { data: stats } = await supabase
         .from('user_stats')
         .select('coins')
         .eq('user_id', user.id)
@@ -209,172 +216,24 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
     }
   };
 
-  const loadConversationHistory = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: conversations, error } = await supabase
-        .from('ai_conversations')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('title_id', title.id)
-        .eq('media_type', title.type)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) {
-        console.error('Error loading conversation history:', error);
-        return;
-      }
-
-      if (conversations && conversations.length > 0) {
-        const loadedMessages: Message[] = conversations.map(conv => ({
-          id: conv.id,
-          question: conv.question,
-          answer: conv.answer,
-          context: conv.context,
-          timestamp: new Date(conv.created_at).toLocaleDateString(),
-          created_at: conv.created_at
-        }));
-        setMessages(loadedMessages);
-      }
-    } catch (error) {
-      console.error('Error loading conversation history:', error);
-    }
-  };
-
-  const formatTimestamp = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.floor(minutes % 60);
-    const secs = Math.floor((minutes % 1) * 60);
-    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const timestamp = formatTimestamp(timestampMinutes[0]);
+  const timestamp = formatPosition(Math.round(timestampMinutes[0] * 60));
 
   const handleAskQuestion = async () => {
-    if (!question.trim()) {
-      toast({
-        title: "Question required",
-        description: "Please enter a question",
-        variant: "destructive"
-      });
+    if (isLoading) return;
+    if (!question.trim() || !position || !timestampValid) {
+      toast({ title: "Check your question", description: "Select what you’re watching, enter a valid timestamp, and ask a question.", variant: "destructive" });
       return;
     }
-
-    setIsLoading(true);
-
     try {
-      const contextInfo = title.type === "tv" 
-        ? `S${selectedSeason}E${selectedEpisode} @ ${timestamp}`
-        : `@ ${timestamp}`;
-
-      // Include previous Q&A for AI context (last 5 messages)
-      const previousQA = messages.slice(0, 5).map(m => ({
-        question: m.question,
-        answer: m.answer,
-        context: m.context
-      }));
-
-      const { data, error } = await supabase.functions.invoke('spoiler-free-companion', {
-        body: {
-          tmdbId: title.id,
-          mediaType: title.type,
-          seasonNumber: title.type === 'tv' ? parseInt(selectedSeason) : undefined,
-          episodeNumber: title.type === 'tv' ? parseInt(selectedEpisode) : undefined,
-          title: title.title,
-          timestamp,
-          question: question.trim(),
-          previousQA,
-        }
-      });
-
-      if (error) {
-        // Handle specific error cases
-        if (error.status === 402) {
-          const errorData = error.data || error;
-          toast({
-            title: "Insufficient Coins",
-            description: errorData.error || `You need 150 coins for this question. You have ${errorData.coinsAvailable || 0} coins.`,
-            variant: "destructive"
-          });
-          // Reload coins
-          loadUserStats();
-          return;
-        }
-        throw error;
-      }
-
-      // Save to database
-      const { data: { user } } = await supabase.auth.getUser();
-      let savedId: string = crypto.randomUUID();
-      
-      if (user) {
-        const { data: savedConv, error: saveError } = await supabase
-          .from('ai_conversations')
-          .insert({
-            user_id: user.id,
-            title_id: title.id,
-            media_type: title.type,
-            question: question.trim(),
-            answer: data.answer,
-            context: contextInfo,
-            season_number: title.type === 'tv' ? parseInt(selectedSeason) : null,
-            episode_number: title.type === 'tv' ? parseInt(selectedEpisode) : null,
-            timestamp: timestamp,
-          })
-          .select('id')
-          .single();
-        
-        if (saveError) {
-          console.error('Error saving conversation:', saveError);
-        } else if (savedConv) {
-          savedId = savedConv.id as string;
-        }
-      }
-
-      const newMessage: Message = {
-        id: savedId,
-        question: question,
-        answer: data.answer,
-        context: contextInfo,
-        timestamp: "Just now"
-      };
-
-      setMessages([newMessage, ...messages]);
+      const data = await ask(question, timestamp);
+      if (data.remainingFreeQuestions !== undefined) setRemainingFree(data.remainingFreeQuestions);
+      if (data.usedCoins) setCoins(previous => Math.max(0, previous - data.usedCoins));
+      if (data.stale) return;
       setQuestion("");
-      
-      // Update remaining free questions and coins
-      if (data.remainingFreeQuestions !== undefined && data.remainingFreeQuestions !== null) {
-        setRemainingFree(data.remainingFreeQuestions);
-      }
-      if (data.usedCoins) {
-        setCoins(prev => Math.max(0, prev - data.usedCoins));
-      }
-      
-      // Dispatch custom event to notify Dashboard to refresh
-      window.dispatchEvent(new CustomEvent('questionAsked'));
-      
-      const description = data.remainingFreeQuestions !== undefined && data.remainingFreeQuestions >= 0
-        ? `${data.remainingFreeQuestions} free questions remaining today.`
-        : data.usedCoins
-        ? `Used ${data.usedCoins} coins.`
-        : "Spoiler-free response generated!";
-      
-      toast({
-        title: "Answer received",
-        description: description,
-      });
+      toast({ title: "Answer received", description: data.conversation.answer_status === 'insufficient_evidence'
+        ? "No question or coins used." : "Conversation saved at your viewing position." });
     } catch (error) {
-      console.error('Error asking question:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to get answer",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
+      toast({ title: "Could not answer", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
     }
   };
 
@@ -686,7 +545,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Season</label>
-                  <Select value={selectedSeason} onValueChange={setSelectedSeason}>
+                  <Select value={selectedSeason} onValueChange={value => { setSelectedSeason(value); setSelectedEpisode(""); setTimestampMinutes([0]); }}>
                     <SelectTrigger className="bg-background/50">
                       <SelectValue placeholder="Select season" />
                     </SelectTrigger>
@@ -701,7 +560,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Episode</label>
-                  <Select value={selectedEpisode} onValueChange={setSelectedEpisode}>
+                  <Select value={selectedEpisode} onValueChange={value => { setSelectedEpisode(value); setTimestampMinutes([0]); }}>
                     <SelectTrigger className="bg-background/50">
                       <SelectValue placeholder="Select episode" />
                     </SelectTrigger>
@@ -717,39 +576,21 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
               </div>
             )}
 
-            {/* Timestamp Slider */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  Timestamp
-                </label>
-                <span className="text-sm font-mono text-primary">{timestamp}</span>
-              </div>
-              <Slider
-                value={timestampMinutes}
-                onValueChange={setTimestampMinutes}
-                max={maxRuntime}
-                step={0.5}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>00:00:00</span>
-                <span>{formatTimestamp(maxRuntime)}</span>
-              </div>
-            </div>
+            <CompanionTimestamp key={`${selectedSeason}:${selectedEpisode}`} minutes={timestampMinutes[0]} maxMinutes={maxRuntime}
+              onChange={setTimestampMinutes} onValidityChange={setTimestampValid} />
 
             {/* Question Input */}
             <div className="space-y-2">
               <Textarea
                 placeholder="Ask a question about the story so far..."
                 value={question}
+                maxLength={2000}
                 onChange={(e) => setQuestion(e.target.value)}
                 className="min-h-[80px] bg-background/50"
               />
               <Button 
                 onClick={handleAskQuestion}
-                disabled={isLoading}
+                disabled={isLoading || !timestampValid}
                 className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90"
               >
                 {isLoading ? (
@@ -767,6 +608,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
             </div>
           </Card>
 
+          {historyError && <p role="status" className="text-sm text-destructive">{historyError}</p>}
           {/* Messages */}
           {messages.length > 0 && (
             <div className="space-y-4">
@@ -778,7 +620,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
                       <p className="font-medium text-sm">{msg.question}</p>
                       <Badge variant="outline" className="text-xs">{msg.context}</Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">{msg.answer}</p>
+                    <CompanionAnswer message={msg} />
                   </Card>
                 ))}
               </div>
@@ -790,4 +632,7 @@ const TitleDetailModal = ({ title, open, onOpenChange, onAddToFavourites, onAddT
   );
 };
 
-export default TitleDetailModal;
+// A different title starts with a fresh position and episode before rendering.
+export default function TitleDetailModal(props: TitleDetailModalProps) {
+  return <TitleDetailModalContent key={`${props.title.type}:${props.title.id}`} {...props} />;
+}

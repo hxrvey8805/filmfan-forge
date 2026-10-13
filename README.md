@@ -60,6 +60,24 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Testing the timestamp-only companion
+
+```sh
+npm ci --ignore-scripts
+npm run test:companion
+npx tsc -p tsconfig.app.json --noEmit
+npm run build
+deno check supabase/functions/spoiler-free-companion/index.ts supabase/functions/process-subtitles/index.ts supabase/functions/annotate-speakers/index.ts
+```
+
+The regression suite uses synthetic subtitles and conversations, React interface tests, and an isolated PostgreSQL database with pgvector. It runs the actual companion migration and retrieval/payment functions without contacting production or paid AI providers. Tests cover exact cue boundaries, CRLF subtitle parsing, movie retrieval, rewinds, episode/title/account changes, delayed responses, model memory, answer verification, and retry-safe charging.
+
+Both companion screens use server-owned conversation records scoped to the title, episode and viewing timestamp. Rewinding hides later records immediately; they become available again only when the viewing position permits them. Legacy conversations and subtitle caches remain stored but are excluded from the new companion. Cache misses import raw timed cues on demand. Earlier assistant answers help resolve conversational references but cannot serve as plot evidence.
+
+For rollout, apply `supabase/migrations/20261013120000_companion_evidence_and_memory.sql`, deploy `process-subtitles`, `annotate-speakers`, and `spoiler-free-companion` with their shared modules, then publish the frontend. The backend requires the existing Supabase, OpenSubtitles and Groq environment secrets; OpenAI embeddings are optional because keyword and timestamp retrieval also work. The schema, functions, and frontend must be released together through the project's deployment workflow.
+
+Automated checks do not measure live model accuracy or subtitle alignment with a particular streaming edition. Validate representative films and episodes against the actual playback timestamps after deployment, including rewind, episode switch and follow-up questions. Subtitles cannot establish every silent visual action; unsupported questions receive an uncertainty response without consuming a free question or coins. A later scene-understanding data source would be needed to answer those visual questions reliably while retaining timestamp-only input.
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/fc3d7687-7c1e-47f1-8ebf-4ac5e131eb86) and click on Share -> Publish.

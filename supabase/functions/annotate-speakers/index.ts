@@ -180,6 +180,7 @@ serve(async (req) => {
       .select('id, chunk_index, content, start_seconds, end_seconds')
       .eq('tmdb_id', tmdbId)
       .eq('media_type', mediaType)
+      .eq('ingestion_version', 1) // Never modify verified raw-cue caches.
       .order('chunk_index', { ascending: true });
 
     if (mediaType === 'tv') {

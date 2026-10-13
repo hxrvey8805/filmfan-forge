@@ -1,167 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { chunkCues, COMPANION_VERSION, formatTimestamp, parseSubtitles } from "../_shared/companion.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// Chunking configuration
-const TARGET_TOKENS = 500;
-const MAX_TOKENS = 800;
-const OVERLAP_TOKENS = 75;
-const APPROX_CHARS_PER_TOKEN = 4;
-
-interface SubtitleEntry {
-  start: number;
-  end: number;
-  text: string;
-}
-
-interface SubtitleChunk {
-  chunk_index: number;
-  start_seconds: number;
-  end_seconds: number;
-  content: string;
-}
-
-// Estimate tokens from text
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
-}
-
-// Parse SRT subtitle format into structured entries
-function parseSRT(srtText: string): SubtitleEntry[] {
-  const entries: SubtitleEntry[] = [];
-  const blocks = srtText.split('\n\n');
-  
-  for (const block of blocks) {
-    const lines = block.trim().split('\n');
-    if (lines.length < 3) continue;
-    
-    const timeLine = lines[1];
-    const timeMatch = timeLine.match(/(\d+):(\d+):(\d+),?\d* --> (\d+):(\d+):(\d+)/);
-    
-    if (timeMatch) {
-      const startSeconds = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
-      const endSeconds = parseInt(timeMatch[4]) * 3600 + parseInt(timeMatch[5]) * 60 + parseInt(timeMatch[6]);
-      
-      const text = lines.slice(2).join(' ')
-        .replace(/<[^>]*>/g, '')
-        .replace(/\[[^\]]*\]/g, '')
-        .replace(/\([^)]*\)/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      if (text) {
-        entries.push({ start: startSeconds, end: endSeconds, text });
-      }
-    }
-  }
-  
-  return entries;
-}
-
-// Chunk subtitles with token cap and overlap
-function chunkSubtitles(entries: SubtitleEntry[]): SubtitleChunk[] {
-  if (entries.length === 0) return [];
-  
-  const chunks: SubtitleChunk[] = [];
-  let currentLines: SubtitleEntry[] = [];
-  let currentTokens = 0;
-  
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
-    const entryTokens = estimateTokens(entry.text);
-    
-    // If adding this entry would exceed max, finalize current chunk
-    if (currentTokens + entryTokens > MAX_TOKENS && currentLines.length > 0) {
-      // Create chunk
-      chunks.push({
-        chunk_index: chunks.length,
-        start_seconds: currentLines[0].start,
-        end_seconds: currentLines[currentLines.length - 1].end,
-        content: currentLines.map(e => `[${formatTime(e.start)}] ${e.text}`).join(' '),
-      });
-      
-      // Calculate overlap: keep last entries that fit within OVERLAP_TOKENS
-      let overlapTokens = 0;
-      let overlapStart = currentLines.length;
-      for (let j = currentLines.length - 1; j >= 0; j--) {
-        const tokens = estimateTokens(currentLines[j].text);
-        if (overlapTokens + tokens <= OVERLAP_TOKENS) {
-          overlapTokens += tokens;
-          overlapStart = j;
-        } else {
-          break;
-        }
-      }
-      
-      currentLines = currentLines.slice(overlapStart);
-      currentTokens = overlapTokens;
-    }
-    
-    currentLines.push(entry);
-    currentTokens += entryTokens;
-    
-    // If we've reached target size and entry ends a natural break, create chunk
-    if (currentTokens >= TARGET_TOKENS && isNaturalBreak(entry.text)) {
-      chunks.push({
-        chunk_index: chunks.length,
-        start_seconds: currentLines[0].start,
-        end_seconds: currentLines[currentLines.length - 1].end,
-        content: currentLines.map(e => `[${formatTime(e.start)}] ${e.text}`).join(' '),
-      });
-      
-      // Calculate overlap
-      let overlapTokens = 0;
-      let overlapStart = currentLines.length;
-      for (let j = currentLines.length - 1; j >= 0; j--) {
-        const tokens = estimateTokens(currentLines[j].text);
-        if (overlapTokens + tokens <= OVERLAP_TOKENS) {
-          overlapTokens += tokens;
-          overlapStart = j;
-        } else {
-          break;
-        }
-      }
-      
-      currentLines = currentLines.slice(overlapStart);
-      currentTokens = overlapTokens;
-    }
-  }
-  
-  // Push remaining content
-  if (currentLines.length > 0) {
-    chunks.push({
-      chunk_index: chunks.length,
-      start_seconds: currentLines[0].start,
-      end_seconds: currentLines[currentLines.length - 1].end,
-      content: currentLines.map(e => `[${formatTime(e.start)}] ${e.text}`).join(' '),
-    });
-  }
-  
-  return chunks;
-}
-
-// Format seconds to MM:SS or HH:MM:SS
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  
-  if (hours > 0) {
-    return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-  return `${mins}:${String(secs).padStart(2, '0')}`;
-}
-
-// Check if text ends at a natural break (sentence end, question, etc.)
-function isNaturalBreak(text: string): boolean {
-  const trimmed = text.trim();
-  return /[.!?]$/.test(trimmed) || /[.!?][\"']$/.test(trimmed);
-}
-
+const headers = { 'Content-Type': 'application/json' };
 // Delay helper
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -208,277 +49,91 @@ async function fetchWithRetry(
   throw lastError || new Error('Max retries exceeded');
 }
 
-// Generate embedding using OpenAI text-embedding-3-small (1536 dimensions)
-async function generateEmbedding(text: string, apiKey: string): Promise<number[] | null> {
-  try {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: text.slice(0, 8000), // text-embedding-3-small supports up to 8191 tokens
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI embedding error:', response.status, errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    const embedding = data.data?.[0]?.embedding;
-    
-    if (!Array.isArray(embedding) || embedding.length !== 1536) {
-      console.error('Invalid embedding dimensions:', embedding?.length);
-      return null;
-    }
-    
-    return embedding;
-  } catch (error) {
-    console.error('Error generating embedding:', error);
-    return null;
-  }
-}
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  // Subtitle ingestion is an internal operation, not a public paid-API proxy.
+  if (!serviceKey || req.headers.get('Authorization') !== `Bearer ${serviceKey}`) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
   }
-
   try {
     const { tmdbId, mediaType, seasonNumber, episodeNumber } = await req.json();
-    
-    console.log('Process subtitles request:', { tmdbId, mediaType, seasonNumber, episodeNumber });
-    
-    if (!tmdbId || !mediaType) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: tmdbId, mediaType' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!Number.isInteger(tmdbId) || tmdbId <= 0 || !['movie', 'tv'].includes(mediaType) ||
+        (mediaType === 'tv' && (!Number.isInteger(seasonNumber) || seasonNumber < 0 ||
+          !Number.isInteger(episodeNumber) || episodeNumber < 1))) {
+      return new Response(JSON.stringify({ error: 'Invalid title or episode' }), { status: 400, headers });
     }
-    
-    if (mediaType === 'tv' && (!seasonNumber || !episodeNumber)) {
-      return new Response(
-        JSON.stringify({ error: 'TV shows require seasonNumber and episodeNumber' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    const OPENSUBTITLES_API_KEY = Deno.env.get('OPENSUBTITLES_API_KEY');
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    
-    if (!OPENSUBTITLES_API_KEY) {
-      throw new Error('OPENSUBTITLES_API_KEY is not configured');
-    }
-    
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not configured');
-    }
-    
-    // Create Supabase client with service role for inserts
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-    
-    // Check if already cached
-    let existingQuery = supabase
-      .from('subtitle_chunks')
-      .select('id')
-      .eq('tmdb_id', tmdbId)
-      .eq('media_type', mediaType);
-    
-    if (mediaType === 'tv') {
-      existingQuery = existingQuery
-        .eq('season_number', seasonNumber)
-        .eq('episode_number', episodeNumber);
-    }
-    
-    const { data: existing } = await existingQuery.limit(1);
-    
-    if (existing && existing.length > 0) {
-      console.log('Subtitles already cached, skipping');
-      return new Response(
-        JSON.stringify({ success: true, cached: true, message: 'Already cached' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    // Search for subtitles
-    const params = new URLSearchParams({
-      tmdb_id: String(tmdbId),
-      languages: 'en',
-      type: mediaType === 'tv' ? 'episode' : 'movie',
-      order_by: 'download_count',
-      order_direction: 'desc',
-    });
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey);
+    let existing = db.from('subtitle_chunks').select('id').eq('tmdb_id', tmdbId)
+      .eq('media_type', mediaType).eq('ingestion_version', COMPANION_VERSION);
+    if (mediaType === 'tv') existing = existing.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
+    const cached = await existing.limit(1);
+    if (cached.error) throw cached.error;
+    if (cached.data?.length) return new Response(JSON.stringify({ success: true, cached: true }), { headers });
 
+    const apiKey = Deno.env.get('OPENSUBTITLES_API_KEY');
+    if (!apiKey) throw new Error('Subtitle service is not configured');
+    const apiHeaders = { 'Api-Key': apiKey, 'Content-Type': 'application/json' };
+    const params = new URLSearchParams({ tmdb_id: String(tmdbId), languages: 'en',
+      type: mediaType === 'tv' ? 'episode' : 'movie', order_by: 'download_count', order_direction: 'desc' });
     if (mediaType === 'tv') {
       params.set('season_number', String(seasonNumber));
       params.set('episode_number', String(episodeNumber));
     }
-
-    const searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?${params.toString()}`;
-    
-    const searchResponse = await fetchWithRetry(searchUrl, {
-      method: 'GET',
-      headers: {
-        'Api-Key': OPENSUBTITLES_API_KEY,
-        'Content-Type': 'application/json',
-      },
+    const search = await fetchWithRetry(`https://api.opensubtitles.com/api/v1/subtitles?${params}`, { headers: apiHeaders });
+    if (!search.ok) throw new Error('Subtitle search failed');
+    const results = (await search.json()).data ?? [];
+    const best = results.sort((a: any, b: any) => (b.attributes?.download_count ?? 0) - (a.attributes?.download_count ?? 0))[0];
+    const fileId = best?.attributes?.files?.[0]?.file_id;
+    if (!fileId) return new Response(JSON.stringify({ success: false, reason: 'unavailable' }), { headers });
+    const download = await fetchWithRetry('https://api.opensubtitles.com/api/v1/download', {
+      method: 'POST', headers: apiHeaders, body: JSON.stringify({ file_id: fileId }),
     });
-
-    if (!searchResponse.ok) {
-      console.error('Subtitle search failed:', searchResponse.status);
-      return new Response(
-        JSON.stringify({ error: 'Subtitle search failed', status: searchResponse.status }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!download.ok) throw new Error('Subtitle download failed');
+    const link = (await download.json()).link;
+    if (!link) throw new Error('Subtitle download unavailable');
+    const file = await fetch(link);
+    if (!file.ok) throw new Error('Subtitle file unavailable');
+    const chunks = chunkCues(parseSubtitles(await file.text()));
+    if (!chunks.length) return new Response(JSON.stringify({ success: false, reason: 'unavailable' }), { headers });
+    const rows = chunks.map((cues, index) => ({
+      tmdb_id: tmdbId, media_type: mediaType,
+      season_number: mediaType === 'tv' ? seasonNumber : null,
+      episode_number: mediaType === 'tv' ? episodeNumber : null,
+      chunk_index: index, start_seconds: cues[0].start, end_seconds: Math.max(...cues.map(cue => cue.end)),
+      content: cues.map(cue => `[${formatTimestamp(cue.start)}] ${cue.text}`).join('\n'),
+      cues, ingestion_version: COMPANION_VERSION, source_file_id: fileId,
+      cache_key: `${mediaType}:${tmdbId}:${seasonNumber ?? 0}:${episodeNumber ?? 0}:${COMPANION_VERSION}:${index}`,
+      embedding: null as number[] | null,
+    }));
+    const embeddingKey = Deno.env.get('OPENAI_API_KEY');
+    if (embeddingKey) {
+      for (let offset = 0; offset < rows.length; offset += 32) {
+        const batch = rows.slice(offset, offset + 32);
+        try {
+          const response = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST', headers: { Authorization: `Bearer ${embeddingKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'text-embedding-3-small', input: batch.map(row => row.content) }),
+          });
+          if (response.ok) {
+            for (const item of (await response.json()).data ?? []) {
+              if (Number.isInteger(item.index) && batch[item.index] && item.embedding?.length === 1536) {
+                batch[item.index].embedding = item.embedding;
+              }
+            }
+          }
+        } catch { /* Exact-time and keyword retrieval still work without embeddings. */ }
+      }
     }
-
-    const searchData = await searchResponse.json();
-    const results = searchData.data || [];
-    
-    if (results.length === 0) {
-      console.log('No subtitles found');
-      return new Response(
-        JSON.stringify({ success: false, message: 'No subtitles found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    results.sort((a: any, b: any) => (b.attributes?.download_count || 0) - (a.attributes?.download_count || 0));
-    const best = results[0];
-    
-    if (!best?.attributes?.files?.[0]?.file_id) {
-      return new Response(
-        JSON.stringify({ success: false, message: 'No valid subtitle file found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    await delay(500);
-
-    const downloadResponse = await fetchWithRetry(`https://api.opensubtitles.com/api/v1/download`, {
-      method: 'POST',
-      headers: {
-        'Api-Key': OPENSUBTITLES_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ file_id: best.attributes.files[0].file_id }),
+    // A single database transaction publishes the entire parsed file. A failed
+    // import cannot leave a partially populated cache that looks complete.
+    const { error } = await db.from('subtitle_chunks').upsert(rows, {
+      onConflict: mediaType === 'tv' ? 'tmdb_id,media_type,season_number,episode_number,chunk_index' : 'cache_key',
     });
-
-    if (!downloadResponse.ok) {
-      console.error('Subtitle download failed:', downloadResponse.status);
-      return new Response(
-        JSON.stringify({ error: 'Subtitle download failed', status: downloadResponse.status }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const downloadData = await downloadResponse.json();
-    if (!downloadData.link) {
-      return new Response(
-        JSON.stringify({ success: false, message: 'No download link returned' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const subtitleResponse = await fetch(downloadData.link);
-    const subtitleText = await subtitleResponse.text();
-    
-    // Parse and chunk subtitles
-    const entries = parseSRT(subtitleText);
-    console.log(`Parsed ${entries.length} subtitle entries`);
-    
-    if (entries.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, message: 'No valid subtitle entries parsed' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    const chunks = chunkSubtitles(entries);
-    console.log(`Created ${chunks.length} chunks`);
-    
-    // Process chunks in small batches with OpenAI embeddings
-    const BATCH_SIZE = 5;
-    let successCount = 0;
-    let embeddingsGenerated = 0;
-    
-    for (let batchStart = 0; batchStart < chunks.length; batchStart += BATCH_SIZE) {
-      const batch = chunks.slice(batchStart, batchStart + BATCH_SIZE);
-      const insertData: any[] = [];
-      
-      for (const chunk of batch) {
-        // Generate embedding using OpenAI
-        const embedding = await generateEmbedding(chunk.content, OPENAI_API_KEY);
-        if (embedding) embeddingsGenerated++;
-        
-        insertData.push({
-          tmdb_id: tmdbId,
-          media_type: mediaType,
-          season_number: mediaType === 'tv' ? seasonNumber : null,
-          episode_number: mediaType === 'tv' ? episodeNumber : null,
-          chunk_index: chunk.chunk_index,
-          start_seconds: chunk.start_seconds,
-          end_seconds: chunk.end_seconds,
-          content: chunk.content,
-          embedding: embedding,
-        });
-      }
-      
-      // Insert this batch
-      const { error: insertError } = await supabase
-        .from('subtitle_chunks')
-        .upsert(insertData, { 
-          onConflict: 'tmdb_id,media_type,season_number,episode_number,chunk_index',
-          ignoreDuplicates: true 
-        });
-      
-      if (insertError) {
-        console.error(`Batch insert error at ${batchStart}:`, insertError);
-      } else {
-        successCount += batch.length;
-        console.log(`Inserted batch ${Math.floor(batchStart / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)}`);
-      }
-      
-      // Small delay between batches to respect OpenAI rate limits
-      if (batchStart + BATCH_SIZE < chunks.length) {
-        await delay(200);
-      }
-    }
-    
-    if (successCount === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Failed to store any chunks' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    console.log(`Successfully cached ${successCount}/${chunks.length} chunks with ${embeddingsGenerated} embeddings for ${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber}` : 'movie'}`);
-    
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        cached: false,
-        chunksStored: successCount,
-        embeddingsGenerated,
-        chunksCreated: chunks.length,
-        entriesParsed: entries.length 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-    
+    if (error) throw error;
+    return new Response(JSON.stringify({ success: true, chunksStored: rows.length }), { headers });
   } catch (error) {
-    console.error('Error in process-subtitles:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error('Subtitle ingestion failed', error instanceof Error ? error.message : 'database error');
+    return new Response(JSON.stringify({ error: 'Unable to prepare subtitles' }), { status: 503, headers });
   }
 });

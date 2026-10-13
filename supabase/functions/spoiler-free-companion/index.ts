@@ -1,1205 +1,174 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  COMPANION_VERSION, conversationMemory, formatTimestamp,
+  parseTimestamp, questionIntent, safeEvidence,
+  type Conversation, type SubtitleRecord, type ViewingPosition,
+} from "../_shared/companion.ts";
 
-const corsHeaders = {
+import { checkedAnswer } from "../_shared/answer.ts";
+
+const headers = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json',
 };
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
+const columns = 'id, tmdb_id, media_type, season_number, episode_number, ingestion_version, cues, start_seconds, end_seconds';
 
-// Helper function to parse timestamp to seconds
-function timestampToSeconds(timestamp: string): number {
-  const parts = timestamp.split(':').map(Number);
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1]; // MM:SS
-  } else if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2]; // HH:MM:SS
-  }
-  return 0;
+function currentChunks(db: SupabaseClient, position: ViewingPosition) {
+  let query = db.from('subtitle_chunks').select(columns).eq('tmdb_id', position.tmdbId)
+    .eq('media_type', position.mediaType).eq('ingestion_version', COMPANION_VERSION);
+  if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
+  return query;
 }
 
-// Format seconds to timestamp string
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  
-  if (hours > 0) {
-    return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-  return `${mins}:${String(secs).padStart(2, '0')}`;
-}
-
-// Delay helper
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-interface CharacterSummary {
-  character: string;
-  actor?: string;
-}
-
-interface TMDbContext {
-  type: 'tv' | 'movie';
-  title?: string;
-  year?: string;
-  overview?: string;
-  seasonOverview?: string;
-  episodeOverview?: string;
-  movieOverview?: string;
-  runtimeMinutes?: number;
-  genres?: string[];
-  tagline?: string;
-  characters?: CharacterSummary[];
-}
-
-interface SubtitleCoverage {
-  maxAvailableSeconds: number;
-  minAvailableSeconds: number;
-  hasData: boolean;
-  coverageComplete: boolean;
-  adjustedTimestamp: number;
-}
-
-function extractYear(dateString?: string | null): string | undefined {
-  if (!dateString) return undefined;
-  return dateString.split('-')[0];
-}
-
-function buildCharacterList(cast: any[] | undefined, limit = 15): CharacterSummary[] {
-  if (!Array.isArray(cast)) return [];
-  const seen = new Set<string>();
-  const summaries: CharacterSummary[] = [];
-
-  for (const member of cast) {
-    const actor = member.name || member.original_name;
-    const character =
-      member.character ||
-      member.roles?.[0]?.character ||
-      (member.roles?.[0]?.credit_id ? member.roles[0].character : undefined);
-
-    if (!character) continue;
-
-    const key = character.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    summaries.push({ character, actor });
-    if (summaries.length >= limit) break;
-  }
-
-  return summaries;
-}
-
-// Fetch TMDB context for metadata
-async function getTMDbContext(
-  tmdbId: number,
-  mediaType: 'tv' | 'movie',
-  seasonNumber?: number,
-  episodeNumber?: number,
-  apiKey?: string
-): Promise<TMDbContext | null> {
+async function ensureCurrentSubtitles(db: SupabaseClient, position: ViewingPosition): Promise<void> {
+  const existing = await currentChunks(db, position).limit(1);
+  if (existing.error) throw existing.error;
+  if (existing.data?.length) return;
+  // Prepare only this episode, not every preceding episode during a question.
   try {
-    if (!apiKey) return null;
-
-    if (mediaType === 'tv') {
-      const seriesUrl = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${apiKey}&append_to_response=aggregate_credits`;
-      const seasonUrl = seasonNumber !== undefined
-        ? `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${apiKey}`
-        : undefined;
-      const episodeUrl = seasonNumber !== undefined && episodeNumber !== undefined
-        ? `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${apiKey}&append_to_response=credits`
-        : undefined;
-
-      const [seriesResult, seasonResult, episodeResult] = await Promise.allSettled([
-        fetch(seriesUrl).then(res => res.ok ? res.json() : Promise.reject(res.status)),
-        seasonUrl ? fetch(seasonUrl).then(res => res.ok ? res.json() : Promise.reject(res.status)) : Promise.resolve(null),
-        episodeUrl ? fetch(episodeUrl).then(res => res.ok ? res.json() : Promise.reject(res.status)) : Promise.resolve(null),
-      ]);
-
-      const context: TMDbContext = { type: 'tv' };
-
-      if (seriesResult.status === 'fulfilled' && seriesResult.value) {
-        const series = seriesResult.value;
-        context.title = series.name;
-        context.year = extractYear(series.first_air_date);
-        context.overview = series.overview;
-        context.genres = series.genres?.map((g: any) => g.name).filter(Boolean);
-        const aggregateCast = series.aggregate_credits?.cast;
-        if (aggregateCast) {
-          context.characters = buildCharacterList(aggregateCast);
-        }
-      }
-
-      if (seasonResult.status === 'fulfilled' && seasonResult.value) {
-        const season = seasonResult.value;
-        context.seasonOverview = season.overview || season.name;
-      }
-
-      if (episodeResult.status === 'fulfilled' && episodeResult.value) {
-        const episode = episodeResult.value;
-        context.episodeOverview = episode.overview;
-        context.runtimeMinutes = episode.runtime;
-        const episodeCast = episode.credits?.cast;
-        if (episodeCast && episodeCast.length > 0) {
-          context.characters = buildCharacterList(episodeCast);
-        }
-      }
-
-      return context;
-    }
-
-    // Movie handling
-    const movieUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&append_to_response=credits`;
-    const response = await fetch(movieUrl);
-    if (!response.ok) return null;
-    const movie = await response.json();
-
-    return {
-      type: 'movie',
-      title: movie.title,
-      year: extractYear(movie.release_date),
-      overview: movie.overview,
-      movieOverview: movie.overview,
-      runtimeMinutes: movie.runtime,
-      genres: movie.genres?.map((g: any) => g.name).filter(Boolean),
-      tagline: movie.tagline,
-      characters: buildCharacterList(movie.credits?.cast),
-    };
-  } catch (error) {
-    console.error('Error fetching TMDb context:', error);
-    return null;
-  }
-}
-
-// Format TMDB context for AI prompt
-function formatTMDbContext(context: TMDbContext | null, mediaType: 'tv' | 'movie', seasonNumber?: number, episodeNumber?: number): string {
-  if (!context) return '';
-
-  const parts: string[] = [];
-  
-  if (context.title) parts.push(`**Title:** ${context.title}`);
-  if (context.year) parts.push(`**Year:** ${context.year}`);
-  if (context.genres && context.genres.length > 0) parts.push(`**Genres:** ${context.genres.join(', ')}`);
-  if (context.tagline) parts.push(`**Tagline:** ${context.tagline}`);
-  
-  if (mediaType === 'tv') {
-    if (context.overview) parts.push(`\n**Series Overview:** ${context.overview}`);
-    if (context.seasonOverview) parts.push(`\n**Season ${seasonNumber} Overview:** ${context.seasonOverview}`);
-    if (context.episodeOverview) parts.push(`\n**Episode ${episodeNumber} Overview:** ${context.episodeOverview}`);
-  } else {
-    if (context.movieOverview || context.overview) {
-      parts.push(`\n**Movie Overview:** ${context.movieOverview || context.overview}`);
-    }
-  }
-  
-  if (context.characters && context.characters.length > 0) {
-    parts.push(`\n**Main Characters:**`);
-    context.characters.forEach(char => {
-      if (char.actor) {
-        parts.push(`- ${char.character} (played by ${char.actor})`);
-      } else {
-        parts.push(`- ${char.character}`);
-      }
+    await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-subtitles`, {
+      method: 'POST', headers: { Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tmdbId: position.tmdbId, mediaType: position.mediaType,
+        seasonNumber: position.seasonNumber, episodeNumber: position.episodeNumber }),
+      signal: AbortSignal.timeout(45000),
     });
-  }
-  
-  return parts.join('\n');
+  } catch { /* Fail closed below if the cache is still unavailable. */ }
 }
 
-// Generate embedding using OpenAI text-embedding-3-small (1536 dimensions)
-async function generateEmbedding(text: string, apiKey: string): Promise<number[] | null> {
+async function embedQuestion(text: string): Promise<number[] | null> {
+  const key = Deno.env.get('OPENAI_API_KEY');
+  if (!key) return null;
   try {
     const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: text.slice(0, 8000),
-      }),
+      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'text-embedding-3-small', input: text.slice(0, 8000) }),
+      signal: AbortSignal.timeout(12000),
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI embedding error:', response.status, errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    const embedding = data.data?.[0]?.embedding;
-    
-    if (!Array.isArray(embedding) || embedding.length !== 1536) {
-      console.error('Invalid embedding dimensions:', embedding?.length);
-      return null;
-    }
-    
-    return embedding;
-  } catch (error) {
-    console.error('Error generating embedding:', error);
-    return null;
-  }
+    if (!response.ok) return null;
+    const vector = (await response.json()).data?.[0]?.embedding;
+    return Array.isArray(vector) && vector.length === 1536 ? vector : null;
+  } catch { return null; }
 }
 
-interface RetrievedChunk {
-  id: string;
-  season_number: number | null;
-  episode_number: number | null;
-  start_seconds: number;
-  end_seconds: number;
-  content: string;
-  similarity: number;
-  recencyScore: number;
-  finalScore: number;
+async function retrieve(db: SupabaseClient, position: ViewingPosition, question: string, memory: Conversation[]) {
+  const searchText = [...memory.slice(-2).map(row => `${row.question}\n${row.answer}`), question].join('\n');
+  const embedding = await embedQuestion(searchText);
+  const intent = questionIntent(question);
+  const [recent, relevant, beginning] = await Promise.all([
+    // This may overlap the boundary, so ONLY safeEvidence's completed raw cues
+    // enter the prompt. Never send the chunk's unfiltered content.
+    currentChunks(db, position).lte('start_seconds', position.seconds)
+      .order('start_seconds', { ascending: false }).limit(intent === 'scene' ? 4 : 6),
+    db.rpc('match_companion_chunks', { p_tmdb_id: position.tmdbId, p_media_type: position.mediaType,
+      p_current_season: position.seasonNumber ?? 0, p_current_episode: position.episodeNumber ?? 0,
+      p_max_seconds: position.seconds, p_question: searchText, p_embedding: embedding }),
+    currentChunks(db, position).lte('start_seconds', position.seconds)
+      .order('start_seconds', { ascending: true }).limit(intent === 'recap' ? 200 : 2),
+  ]);
+  if (recent.error || beginning.error) throw recent.error || beginning.error;
+  if (relevant.error) throw relevant.error;
+  const chronological = (beginning.data ?? []) as unknown as SubtitleRecord[];
+  // Recaps sample across the permitted prefix, preserving its beginning and end.
+  const overview = intent === 'recap' && chronological.length > 14
+    ? Array.from({ length: 14 }, (_, i) => chronological[Math.round(i * (chronological.length - 1) / 13)])
+    : chronological;
+  const prioritized = [...(recent.data ?? []), ...(relevant.data ?? []), ...overview] as unknown as SubtitleRecord[];
+  const selected: SubtitleRecord[] = [];
+  const seen = new Set<string>();
+  let budget = 0;
+  for (const record of prioritized) {
+    const safe = safeEvidence([record], position)[0];
+    if (!safe || seen.has(record.id)) continue;
+    if (budget + safe.text.length > 36000) continue;
+    selected.push(record); seen.add(record.id); budget += safe.text.length;
+  }
+  return safeEvidence(selected, position);
 }
 
-// Check subtitle coverage for the episode
-async function getSubtitleCoverage(
-  supabase: any,
-  tmdbId: number,
-  mediaType: 'tv' | 'movie',
-  seasonNumber: number,
-  episodeNumber: number,
-  requestedSeconds: number
-): Promise<SubtitleCoverage> {
-  let query = supabase
-    .from('subtitle_chunks')
-    .select('start_seconds, end_seconds')
-    .eq('tmdb_id', tmdbId)
-    .eq('media_type', mediaType);
-  
-  if (mediaType === 'tv') {
-    query = query.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
-  }
-  
-  const { data: chunks, error } = await query;
-  
-  if (error || !chunks || chunks.length === 0) {
-    console.log('No subtitle chunks found for coverage check');
-    return {
-      maxAvailableSeconds: 0,
-      minAvailableSeconds: 0,
-      hasData: false,
-      coverageComplete: false,
-      adjustedTimestamp: requestedSeconds,
-    };
-  }
-  
-  const maxAvailable = Math.max(...chunks.map((c: any) => Number(c.end_seconds)));
-  const minAvailable = Math.min(...chunks.map((c: any) => Number(c.start_seconds)));
-  const coverageComplete = requestedSeconds <= maxAvailable;
-  
-  // If user's timestamp exceeds available data, use the latest available
-  const adjustedTimestamp = coverageComplete ? requestedSeconds : maxAvailable;
-  
-  console.log(`Subtitle coverage: min=${formatTime(minAvailable)}, max=${formatTime(maxAvailable)}, requested=${formatTime(requestedSeconds)}, adjusted=${formatTime(adjustedTimestamp)}, complete=${coverageComplete}`);
-  
-  return {
-    maxAvailableSeconds: maxAvailable,
-    minAvailableSeconds: minAvailable,
-    hasData: true,
-    coverageComplete,
-    adjustedTimestamp,
-  };
-}
-
-// Get chunks directly at/near the user's timestamp with fallback
-async function getTimestampChunks(
-  supabase: any,
-  tmdbId: number,
-  mediaType: 'tv' | 'movie',
-  currentSeason: number,
-  currentEpisode: number,
-  targetSeconds: number,
-  windowMinutes: number = 5
-): Promise<RetrievedChunk[]> {
-  const windowSeconds = windowMinutes * 60;
-  const minSeconds = Math.max(0, targetSeconds - windowSeconds);
-  
-  let query = supabase
-    .from('subtitle_chunks')
-    .select('id, season_number, episode_number, start_seconds, end_seconds, content')
-    .eq('tmdb_id', tmdbId)
-    .eq('media_type', mediaType)
-    .lte('start_seconds', targetSeconds)
-    // Include chunks that OVERLAP the window (chunks can be long)
-    .gte('end_seconds', minSeconds)
-    .order('start_seconds', { ascending: true }) // Chronological order!
-    .limit(15);
-  
-  if (mediaType === 'tv') {
-    query = query.eq('season_number', currentSeason).eq('episode_number', currentEpisode);
-  }
-  
-  const { data: chunks, error } = await query;
-  
-  // FALLBACK: If no chunks found in the window, get the latest available chunks
-  if (error || !chunks || chunks.length === 0) {
-    console.log('No chunks in timestamp window, trying fallback to latest chunks');
-    
-    let fallbackQuery = supabase
-      .from('subtitle_chunks')
-      .select('id, season_number, episode_number, start_seconds, end_seconds, content')
-      .eq('tmdb_id', tmdbId)
-      .eq('media_type', mediaType)
-      .order('end_seconds', { ascending: false })
-      .limit(10);
-    
-    if (mediaType === 'tv') {
-      fallbackQuery = fallbackQuery.eq('season_number', currentSeason).eq('episode_number', currentEpisode);
-    }
-    
-    const { data: fallbackChunks, error: fallbackError } = await fallbackQuery;
-    
-    if (fallbackError || !fallbackChunks || fallbackChunks.length === 0) {
-      console.error('Fallback chunks also failed:', fallbackError);
-      return [];
-    }
-    
-    console.log(`Fallback: Found ${fallbackChunks.length} latest chunks`);
-    
-    // Reverse to get chronological order
-    return fallbackChunks.reverse().map((chunk: any) => ({
-      id: chunk.id,
-      season_number: chunk.season_number,
-      episode_number: chunk.episode_number,
-      start_seconds: Number(chunk.start_seconds),
-      end_seconds: Number(chunk.end_seconds),
-      content: chunk.content,
-      similarity: 1.0,
-      recencyScore: 1.0,
-      finalScore: 1.0,
-    }));
-  }
-  
-  console.log(`Found ${chunks.length} timestamp chunks (${formatTime(minSeconds)} to ${formatTime(targetSeconds)})`);
-  
-  return chunks.map((chunk: any) => ({
-    id: chunk.id,
-    season_number: chunk.season_number,
-    episode_number: chunk.episode_number,
-    start_seconds: Number(chunk.start_seconds),
-    end_seconds: Number(chunk.end_seconds),
-    content: chunk.content,
-    similarity: 1.0,
-    recencyScore: 1.0,
-    finalScore: 1.0,
-  }));
-}
-
-// Detect if question references previous seasons/episodes
-function detectCrossSeasonReference(question: string): { mentionsPrevious: boolean; specificSeason?: number; specificEpisode?: number } {
-  const questionLower = question.toLowerCase();
-  
-  // Check for season/episode references
-  const seasonMatch = questionLower.match(/season\s*(\d+)/i);
-  const episodeMatch = questionLower.match(/episode\s*(\d+)/i);
-  
-  // Check for temporal references to past
-  const mentionsPast = 
-    questionLower.includes('before') ||
-    questionLower.includes('earlier') ||
-    questionLower.includes('previously') ||
-    questionLower.includes('remember when') ||
-    questionLower.includes('last season') ||
-    questionLower.includes('last episode') ||
-    questionLower.includes('in the past') ||
-    questionLower.includes('happened to') ||
-    questionLower.includes('what happened with');
-  
-  return {
-    mentionsPrevious: mentionsPast || !!seasonMatch,
-    specificSeason: seasonMatch ? parseInt(seasonMatch[1]) : undefined,
-    specificEpisode: episodeMatch ? parseInt(episodeMatch[1]) : undefined,
-  };
-}
-
-// Detect if user is asking about the ending of the episode
-function detectEndingQuestion(question: string, timestampSeconds: number, runtimeSeconds: number): boolean {
-  const questionLower = question.toLowerCase();
-  
-  // Check for ending-related keywords
-  const endingKeywords = [
-    'end', 'ending', 'ended', 'ends',
-    'final', 'finale', 'finish', 'finished',
-    'last scene', 'last part', 'conclusion',
-    'how did it end', 'how does it end',
-    'what happened at the end', 'cliffhanger',
-    'wrap up', 'wrapped up'
-  ];
-  
-  const asksAboutEnding = endingKeywords.some(kw => questionLower.includes(kw));
-  
-  // Also consider it an "ending question" if timestamp is in the last 15% of runtime
-  const isNearEnd = runtimeSeconds > 0 && timestampSeconds >= runtimeSeconds * 0.85;
-  
-  return asksAboutEnding || isNearEnd;
-}
-
-// Get comprehensive chunks for full episode context (for ending questions)
-async function getFullEpisodeChunks(
-  supabase: any,
-  tmdbId: number,
-  mediaType: 'tv' | 'movie',
-  seasonNumber: number,
-  episodeNumber: number,
-  maxSeconds: number
-): Promise<RetrievedChunk[]> {
-  let query = supabase
-    .from('subtitle_chunks')
-    .select('id, season_number, episode_number, start_seconds, end_seconds, content')
-    .eq('tmdb_id', tmdbId)
-    .eq('media_type', mediaType)
-    .lte('start_seconds', maxSeconds)
-    .order('start_seconds', { ascending: true });
-  
-  if (mediaType === 'tv') {
-    query = query.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
-  }
-  
-  const { data: chunks, error } = await query;
-  
-  if (error || !chunks || chunks.length === 0) {
-    console.log('No chunks found for full episode retrieval');
-    return [];
-  }
-  
-  console.log(`Full episode: Found ${chunks.length} chunks spanning entire episode`);
-  
-  return chunks.map((chunk: any) => ({
-    id: chunk.id,
-    season_number: chunk.season_number,
-    episode_number: chunk.episode_number,
-    start_seconds: Number(chunk.start_seconds),
-    end_seconds: Number(chunk.end_seconds),
-    content: chunk.content,
-    similarity: 1.0,
-    recencyScore: 1.0,
-    finalScore: 1.0,
-  }));
-}
-
-// Two-stage retrieval with re-ranking - enhanced for ending questions
-async function retrieveContext(
-  supabase: any,
-  questionEmbedding: number[],
-  tmdbId: number,
-  mediaType: 'tv' | 'movie',
-  currentSeason: number,
-  currentEpisode: number,
-  maxSeconds: number,
-  question: string,
-  isEndingQuestion: boolean = false
-): Promise<RetrievedChunk[]> {
-  // If this is an ending question, get the FULL episode for proper context
-  if (isEndingQuestion) {
-    console.log('Ending question detected - retrieving full episode context');
-    const fullEpisodeChunks = await getFullEpisodeChunks(
-      supabase, tmdbId, mediaType, currentSeason, currentEpisode, maxSeconds
-    );
-    
-    if (fullEpisodeChunks.length > 0) {
-      // For endings, focus on the ending with minimal context
-      // Groq has limited context, so we need to be efficient
-      const total = fullEpisodeChunks.length;
-      const selectedChunks: RetrievedChunk[] = [];
-      
-      // Just first chunk (brief setup)
-      selectedChunks.push(fullEpisodeChunks[0]);
-      
-      // Last 3 chunks (ending/conclusion) - most important!
-      selectedChunks.push(...fullEpisodeChunks.slice(-3));
-      
-      // Remove duplicates
-      const seen = new Set<string>();
-      const uniqueChunks = selectedChunks.filter(c => {
-        if (seen.has(c.id)) return false;
-        seen.add(c.id);
-        return true;
-      });
-      
-      console.log(`Ending context: ${uniqueChunks.length} chunks (minimal for Groq)`);
-      return uniqueChunks;
-    }
-  }
-  
-  // STAGE 1: Get chunks directly at the user's timestamp (most important!)
-  const timestampChunks = await getTimestampChunks(
-    supabase, tmdbId, mediaType, currentSeason, currentEpisode, maxSeconds, 5
-  );
-  console.log(`Direct timestamp chunks: ${timestampChunks.length}`);
-  
-  // Check for cross-season references
-  const crossSeasonRef = detectCrossSeasonReference(question);
-  if (crossSeasonRef.mentionsPrevious) {
-    console.log('Question references previous content:', crossSeasonRef);
-  }
-  
-  // STAGE 2: Vector search for semantically relevant content
-  const { data: candidates, error } = await supabase.rpc('match_subtitle_chunks', {
-    query_embedding: questionEmbedding,
-    p_tmdb_id: tmdbId,
-    p_media_type: mediaType,
-    p_current_season: currentSeason,
-    p_current_episode: currentEpisode,
-    p_max_seconds: maxSeconds,
-    match_count: 60,
+async function generateJson(system: string, user: string, key: string, maxTokens: number): Promise<unknown> {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'llama-3.3-70b-versatile', temperature: 0,
+      response_format: { type: 'json_object' }, max_tokens: maxTokens,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+    signal: AbortSignal.timeout(30000),
   });
-  
-  if (error) {
-    console.error('Vector search error:', error);
-    return timestampChunks;
-  }
-  
-  // Get IDs of timestamp chunks to avoid duplicates
-  const timestampChunkIds = new Set(timestampChunks.map(c => c.id));
-  
-  // Filter out duplicates from vector results
-  const vectorCandidates = (candidates || []).filter((c: any) => !timestampChunkIds.has(c.id));
-  
-  const questionWords = question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  
-  // Re-rank vector results with ALWAYS high timestamp priority
-  const rerankedVector: RetrievedChunk[] = vectorCandidates.map((chunk: any) => {
-    const contentLower = chunk.content.toLowerCase();
-    const chunkEndSeconds = Number(chunk.end_seconds);
-    const chunkStartSeconds = Number(chunk.start_seconds);
-    
-    // Timestamp proximity score - ALWAYS prioritize this highly
-    let timestampProximityScore = 0;
-    if (chunk.season_number === currentSeason && chunk.episode_number === currentEpisode) {
-      const distanceFromTimestamp = Math.abs(maxSeconds - chunkEndSeconds);
-      const maxDistance = maxSeconds;
-      timestampProximityScore = 1 - Math.min(distanceFromTimestamp / maxDistance, 1);
-      
-      // Extra boost for very close chunks
-      if (distanceFromTimestamp <= 300) {
-        timestampProximityScore = Math.min(1, timestampProximityScore + 0.3);
-      }
-    }
-    
-    // Episode recency score
-    let episodeRecencyScore = 0;
-    if (mediaType === 'tv') {
-      const seasonDiff = currentSeason - (chunk.season_number || 1);
-      const episodeDiff = currentEpisode - (chunk.episode_number || 1);
-      if (seasonDiff === 0 && episodeDiff === 0) {
-        episodeRecencyScore = 1.0;
-      } else if (seasonDiff === 0) {
-        episodeRecencyScore = 0.7 - (episodeDiff * 0.1);
-      } else {
-        // Boost previous season content if question references past
-        episodeRecencyScore = crossSeasonRef.mentionsPrevious ? 0.5 : 0.3 - (seasonDiff * 0.1);
-      }
-      episodeRecencyScore = Math.max(0, episodeRecencyScore);
-    } else {
-      episodeRecencyScore = timestampProximityScore;
-    }
-    
-    // Keyword overlap score
-    let keywordScore = 0;
-    for (const word of questionWords) {
-      if (contentLower.includes(word)) {
-        keywordScore += 0.15;
-      }
-    }
-    keywordScore = Math.min(0.4, keywordScore);
-    
-    // Combined score - ALWAYS prioritize timestamp highly (45%)
-    const finalScore = 
-      (chunk.similarity * 0.25) + 
-      (timestampProximityScore * 0.45) + 
-      (episodeRecencyScore * 0.2) + 
-      (keywordScore * 0.1);
-    
-    return {
-      id: chunk.id,
-      season_number: chunk.season_number,
-      episode_number: chunk.episode_number,
-      start_seconds: chunkStartSeconds,
-      end_seconds: chunkEndSeconds,
-      content: chunk.content,
-      similarity: chunk.similarity,
-      recencyScore: timestampProximityScore,
-      finalScore,
-    };
-  });
-  
-  // Sort vector results by final score
-  rerankedVector.sort((a, b) => b.finalScore - a.finalScore);
-  
-  // COMBINE: Timestamp chunks FIRST (sorted chronologically), then top vector results
-  // Limit to 10 timestamp + 10 vector for more focused context
-  const combined = [
-    ...timestampChunks.slice(0, 10),
-    ...rerankedVector.slice(0, 10),
-  ];
-  
-  console.log(`Combined: ${Math.min(10, timestampChunks.length)} timestamp + ${Math.min(10, rerankedVector.length)} vector = ${combined.length} total`);
-  
-  return combined;
+  if (!response.ok) throw new Error(response.status === 429 ? 'AI service busy. Please try again shortly.' : 'Unable to generate a checked answer. Please try again.');
+  const result = await response.json();
+  if (result.choices?.[0]?.finish_reason !== 'stop') throw new Error('The answer was incomplete. Please try again.');
+  try { return JSON.parse(result.choices[0].message.content); } catch { return null; }
 }
 
-// Retrieve season summaries for previous seasons - more focused
-async function retrieveSeasonSummaries(
-  supabase: any,
-  questionEmbedding: number[],
-  tmdbId: number,
-  currentSeason: number,
-  crossSeasonRef: { mentionsPrevious: boolean; specificSeason?: number }
-): Promise<string> {
-  if (currentSeason <= 1) return '';
-  
-  const matchCount = crossSeasonRef.mentionsPrevious ? 5 : 3; // More if question references past
-  
-  const { data: summaries, error } = await supabase.rpc('match_season_summaries', {
-    query_embedding: questionEmbedding,
-    p_tmdb_id: tmdbId,
-    p_max_season: currentSeason,
-    match_count: matchCount,
-  });
-  
-  if (error || !summaries || summaries.length === 0) {
-    return '';
-  }
-  
-  // Sort by season number for logical order
-  summaries.sort((a: any, b: any) => a.season_number - b.season_number);
-  
-  const parts: string[] = ['**PREVIOUS SEASONS (Summaries - use for context about past events):**\n'];
-  
-  // Limit to 2 most relevant seasons to reduce context bloat
-  const limitedSummaries = summaries.slice(0, 2);
-  
-  for (const summary of limitedSummaries) {
-    parts.push(`\n**${summary.season_name || `Season ${summary.season_number}`}:**`);
-    if (summary.overview) {
-      parts.push(summary.overview.substring(0, 300) + (summary.overview.length > 300 ? '...' : ''));
-    }
-    
-    const episodes = summary.episode_summaries as { episode: number; name: string; overview: string }[];
-    if (episodes && episodes.length > 0) {
-      for (const ep of episodes.slice(0, 3)) { // Limit to first 3 episodes per season
-        if (ep.overview) {
-          parts.push(`- E${ep.episode}: ${ep.name} - ${ep.overview.substring(0, 100)}${ep.overview.length > 100 ? '...' : ''}`);
-        }
-      }
-    }
-  }
-  
-  return parts.join('\n');
-}
 
-// Ensure subtitles are cached and trigger speaker annotation if needed
-async function ensureSubtitlesCached(
-  supabase: any,
-  tmdbId: number,
-  mediaType: 'tv' | 'movie',
-  currentSeason: number,
-  currentEpisode: number,
-  title?: string
-): Promise<void> {
-  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-  
-  if (mediaType === 'tv') {
-    for (let ep = 1; ep <= currentEpisode; ep++) {
-      const { data: existing } = await supabase
-        .from('subtitle_chunks')
-        .select('id, content')
-        .eq('tmdb_id', tmdbId)
-        .eq('media_type', 'tv')
-        .eq('season_number', currentSeason)
-        .eq('episode_number', ep)
-        .limit(1);
-      
-      if (!existing || existing.length === 0) {
-        console.log(`Triggering subtitle cache for S${currentSeason}E${ep}`);
-        try {
-          await fetch(`${SUPABASE_URL}/functions/v1/process-subtitles`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tmdbId,
-              mediaType: 'tv',
-              seasonNumber: currentSeason,
-              episodeNumber: ep,
-            }),
-          });
-          await delay(500);
-        } catch (error) {
-          console.error(`Failed to cache S${currentSeason}E${ep}:`, error);
-        }
-      } else if (ep === currentEpisode) {
-        // Check if speaker annotations exist for current episode
-        const hasAnnotations = /\*\*[A-Z][A-Za-z\s]+:\*\*/.test(existing[0].content);
-        if (!hasAnnotations && title) {
-          console.log(`Triggering speaker annotation for S${currentSeason}E${ep}`);
-          try {
-            // Fire and forget - don't block the response
-            fetch(`${SUPABASE_URL}/functions/v1/annotate-speakers`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ tmdbId, mediaType: 'tv', seasonNumber: currentSeason, episodeNumber: ep, title }),
-            }).catch(err => console.error('Annotation trigger failed:', err));
-          } catch (error) {
-            console.error('Failed to trigger annotation:', error);
-          }
-        }
-      }
-    }
-  } else {
-    const { data: existing } = await supabase
-      .from('subtitle_chunks')
-      .select('id, content')
-      .eq('tmdb_id', tmdbId)
-      .eq('media_type', 'movie')
-      .limit(1);
-    
-    if (!existing || existing.length === 0) {
-      console.log('Triggering subtitle cache for movie');
-      try {
-        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-subtitles`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tmdbId, mediaType: 'movie' }),
-        });
-      } catch (error) {
-        console.error('Failed to cache movie subtitles:', error);
-      }
-    } else {
-      const hasAnnotations = /\*\*[A-Z][A-Za-z\s]+:\*\*/.test(existing[0].content);
-      if (!hasAnnotations && title) {
-        console.log('Triggering speaker annotation for movie');
-        try {
-          fetch(`${SUPABASE_URL}/functions/v1/annotate-speakers`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tmdbId, mediaType: 'movie', title }),
-          }).catch(err => console.error('Annotation trigger failed:', err));
-        } catch (error) {
-          console.error('Failed to trigger annotation:', error);
-        }
-      }
-    }
-  }
-}
-
-// Ensure season summaries are cached
-async function ensureSeasonSummariesCached(
-  supabase: any,
-  tmdbId: number,
-  currentSeason: number
-): Promise<void> {
-  if (currentSeason <= 1) return;
-  
-  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-  
-  for (let season = 1; season < currentSeason; season++) {
-    const { data: existing } = await supabase
-      .from('season_summaries')
-      .select('id')
-      .eq('tmdb_id', tmdbId)
-      .eq('season_number', season)
-      .limit(1);
-    
-    if (!existing || existing.length === 0) {
-      console.log(`Triggering season summary cache for S${season}`);
-      try {
-        await fetch(`${SUPABASE_URL}/functions/v1/cache-season-summary`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tmdbId, seasonNumber: season }),
-        });
-        await delay(200);
-      } catch (error) {
-        console.error(`Failed to cache season ${season} summary:`, error);
-      }
-    }
-  }
-}
-
-// Validate response contains citations
-function validateResponse(response: string): boolean {
-  const citationPattern = /\[S?\d+E?\d*\s+\d+:\d+(?::\d+)?\]/i;
-  return citationPattern.test(response);
-}
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+serve(async req => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers });
+  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   try {
-    // Get authentication
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized. Please log in.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const authorization = req.headers.get('Authorization');
+    if (!authorization) return json({ error: 'Please log in.' }, 401);
+    const userDb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authorization } } });
+    const { data: { user }, error: authError } = await userDb.auth.getUser();
+    if (authError || !user) return json({ error: 'Please log in.' }, 401);
+    let body;
+    try { body = await req.json(); } catch { return json({ error: 'Invalid request' }, 400); }
+    const { tmdbId, mediaType, seasonNumber, episodeNumber, timestamp, question, requestId } = body;
+    const seconds = parseTimestamp(timestamp);
+    if (!Number.isInteger(tmdbId) || tmdbId <= 0 || !['tv', 'movie'].includes(mediaType) ||
+        seconds === null || typeof question !== 'string' || !question.trim() || question.length > 2000 ||
+        (mediaType === 'tv' && (!Number.isInteger(seasonNumber) || seasonNumber < 0 || !Number.isInteger(episodeNumber) || episodeNumber < 1)) ||
+        (requestId !== undefined && (typeof requestId !== 'string' || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestId)))) {
+      return json({ error: 'Choose a title and episode, enter a valid MM:SS or HH:MM:SS timestamp, and ask a question (up to 2,000 characters).' }, 400);
     }
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    // Service role client for cache operations
-    const supabaseService = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    // Get user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized. Please log in.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const { tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question, previousQA } = await req.json();
-    
-    console.log('RAG spoiler-free request:', { userId: user.id, tmdbId, mediaType, seasonNumber, episodeNumber, title, timestamp, question });
-
-    // Validate required fields
-    if (!tmdbId || !mediaType || !timestamp || !question) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: tmdbId, mediaType, timestamp, question' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (mediaType !== 'tv' && mediaType !== 'movie') {
-      return new Response(
-        JSON.stringify({ error: 'Invalid mediaType. Must be "tv" or "movie"' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (mediaType === 'tv' && (!seasonNumber || !episodeNumber)) {
-      return new Response(
-        JSON.stringify({ error: 'TV shows require seasonNumber and episodeNumber' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check usage limits and charge coins if needed
-    const FREE_QUESTIONS_PER_DAY = 5;
-    const COINS_PER_QUESTION = 150;
-    const today = new Date().toISOString().split('T')[0];
-
-    let { data: aiUsage } = await supabase
-      .from('user_ai_usage')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!aiUsage) {
-      const { data: newUsage } = await supabase
-        .from('user_ai_usage')
-        .insert({ user_id: user.id, questions_today: 0, last_reset_date: today })
-        .select()
-        .single();
-      aiUsage = newUsage;
-    }
-
-    if (aiUsage.last_reset_date !== today) {
-      await supabase
-        .from('user_ai_usage')
-        .update({ questions_today: 0, last_reset_date: today })
-        .eq('user_id', user.id);
-      aiUsage.questions_today = 0;
-    }
-
-    const hasFreeQuestions = aiUsage.questions_today < FREE_QUESTIONS_PER_DAY;
-    
-    if (!hasFreeQuestions) {
-      let { data: userStats } = await supabase
-        .from('user_stats')
-        .select('coins')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!userStats) {
-        const { data: newStats } = await supabase
-          .from('user_stats')
-          .insert({ user_id: user.id, coins: 100 })
-          .select()
-          .single();
-        userStats = newStats;
+    const position: ViewingPosition = { tmdbId, mediaType, seconds,
+      ...(mediaType === 'tv' ? { seasonNumber, episodeNumber } : {}) };
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const id = requestId ?? crypto.randomUUID();
+    const prior = await userDb.from('ai_conversations').select('*').eq('id', id).eq('companion_version', COMPANION_VERSION).maybeSingle();
+    if (prior.error) throw prior.error;
+    if (prior.data) {
+      // An ID cannot be reused to retrieve a future or different title's answer.
+      if (prior.data.title_id !== tmdbId || prior.data.media_type !== mediaType || prior.data.position_seconds !== seconds ||
+          prior.data.season_number !== (position.seasonNumber ?? null) || prior.data.episode_number !== (position.episodeNumber ?? null) || prior.data.question !== question.trim()) {
+        return json({ error: 'Request ID already used for a different question.' }, 409);
       }
-
-      if (!userStats || userStats.coins < COINS_PER_QUESTION) {
-        return new Response(
-          JSON.stringify({ 
-            error: `Insufficient coins. You need ${COINS_PER_QUESTION} coins. You have ${userStats?.coins || 0}.`,
-            coinsNeeded: COINS_PER_QUESTION,
-            coinsAvailable: userStats?.coins || 0
-          }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      await supabase
-        .from('user_stats')
-        .update({ coins: userStats.coins - COINS_PER_QUESTION })
-        .eq('user_id', user.id);
+      return json({ answer: prior.data.answer, conversation: prior.data, usedCoins: 0 });
     }
-
-    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
-    const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    
-    if (!GROQ_API_KEY) {
-      throw new Error('GROQ_API_KEY is not configured');
+    let historyQuery = userDb.from('ai_conversations').select('*').eq('title_id', tmdbId)
+      .eq('media_type', mediaType).eq('companion_version', COMPANION_VERSION).lte('position_seconds', seconds);
+    if (mediaType === 'tv') historyQuery = historyQuery.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
+    const historyResult = await historyQuery.order('created_at', { ascending: false }).limit(30);
+    if (historyResult.error) throw historyResult.error;
+    const memory = conversationMemory((historyResult.data ?? []) as Conversation[], position);
+    await ensureCurrentSubtitles(db, position);
+    const evidence = await retrieve(db, position, question.trim(), memory);
+    let checked = null;
+    if (evidence.length) {
+      const key = Deno.env.get('GROQ_API_KEY');
+      if (!key) throw new Error('The companion is temporarily unavailable. Please try again later.');
+      checked = await checkedAnswer(question.trim(), position, evidence, memory,
+        (system, user, tokens) => generateJson(system, user, key, tokens));
     }
-    
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not configured');
+    const answer = checked?.answer ?? (evidence.length
+      ? `I can’t establish that from the dialogue available up to ${formatTimestamp(seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`
+      : `I don’t have reliable dialogue available up to ${formatTimestamp(seconds)} for this title yet. I can’t give a grounded answer at this point.`);
+    const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
+    const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: checked !== null,
+      p_conversation: { id, title_id: tmdbId, media_type: mediaType, season_number: position.seasonNumber ?? null,
+        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds),
+        question: question.trim(), answer, context, evidence: checked?.evidence ?? [],
+        answer_status: checked ? 'answered' : 'insufficient_evidence' } });
+    if (saved.error) {
+      if (saved.error.message.includes('Insufficient coins')) return json({ error: 'You need 150 coins for another question.' }, 402);
+      throw saved.error;
     }
-
-    let requestedSeconds = timestampToSeconds(timestamp);
-    if (requestedSeconds === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid timestamp format. Use HH:MM:SS or MM:SS' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Ensure caches are populated (now also triggers speaker annotation)
-    await Promise.all([
-      ensureSubtitlesCached(supabaseService, tmdbId, mediaType, seasonNumber || 1, episodeNumber || 1, title),
-      mediaType === 'tv' ? ensureSeasonSummariesCached(supabaseService, tmdbId, seasonNumber || 1) : Promise.resolve(),
-    ]);
-
-    // CHECK SUBTITLE COVERAGE - Critical fix!
-    const coverage = await getSubtitleCoverage(
-      supabaseService, tmdbId, mediaType, seasonNumber || 1, episodeNumber || 1, requestedSeconds
-    );
-    
-    // Use adjusted timestamp if user's exceeds available data
-    const currentSeconds = coverage.adjustedTimestamp;
-    
-    // If timestamp exceeds subtitle data, the episode has finished - no warning needed
-    // The AI has full access to the episode content
-    const coverageWarning = '';
-
-    // Generate embedding for the question
-    const questionEmbedding = await generateEmbedding(question, OPENAI_API_KEY);
-    
-    if (!questionEmbedding) {
-      console.error('Failed to generate question embedding');
-      return new Response(
-        JSON.stringify({ error: 'Failed to process question. Please try again.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Detect cross-season references
-    const crossSeasonRef = detectCrossSeasonReference(question);
-    
-    // First fetch TMDB context (needed for runtime estimation)
-    const tmdbContext = await getTMDbContext(tmdbId, mediaType, seasonNumber, episodeNumber, TMDB_API_KEY);
-    
-    // Estimate runtime from coverage or TMDB context
-    const estimatedRuntimeSeconds = coverage.maxAvailableSeconds || (tmdbContext?.runtimeMinutes || 60) * 60;
-    const isEndingQuestion = detectEndingQuestion(question, currentSeconds, estimatedRuntimeSeconds);
-    
-    if (isEndingQuestion) {
-      console.log(`Ending question detected at ${formatTime(currentSeconds)} of ~${formatTime(estimatedRuntimeSeconds)} runtime`);
-    }
-
-    // Retrieve relevant context using two-stage RAG (enhanced for endings)
-    const [retrievedChunks, seasonSummaries] = await Promise.all([
-      retrieveContext(
-        supabaseService,
-        questionEmbedding,
-        tmdbId,
-        mediaType,
-        seasonNumber || 1,
-        episodeNumber || 1,
-        currentSeconds,
-        question,
-        isEndingQuestion
-      ),
-      mediaType === 'tv' ? retrieveSeasonSummaries(supabaseService, questionEmbedding, tmdbId, seasonNumber || 1, crossSeasonRef) : Promise.resolve(''),
-    ]);
-
-    console.log(`Retrieved ${retrievedChunks.length} chunks, has season summaries: ${seasonSummaries.length > 0}`);
-
-    console.log(`Sample chunks:`, retrievedChunks.slice(0, 3).map(c => ({
-      season: c.season_number,
-      episode: c.episode_number,
-      startSeconds: c.start_seconds,
-      endSeconds: c.end_seconds,
-      contentPreview: c.content.substring(0, 100)
-    })));
-
-    // Format retrieved chunks as evidence - now in chronological order
-    let evidenceText = '';
-    if (retrievedChunks.length > 0) {
-      const formattedChunks = retrievedChunks.map(chunk => {
-        const location = mediaType === 'tv' 
-          ? `[S${chunk.season_number}E${chunk.episode_number} ${formatTime(chunk.start_seconds)}-${formatTime(chunk.end_seconds)}]`
-          : `[${formatTime(chunk.start_seconds)}-${formatTime(chunk.end_seconds)}]`;
-        return `${location}\n${chunk.content}`;
-      });
-      evidenceText = `\n\n**EVIDENCE CHUNKS (in chronological order - cite these in your answer):**\n\n${formattedChunks.join('\n\n')}`;
-    }
-    
-    console.log('Evidence text length:', evidenceText.length);
-
-    const tmdbContextText = formatTMDbContext(tmdbContext, mediaType, seasonNumber, episodeNumber);
-
-    if (!evidenceText && !seasonSummaries && !tmdbContextText) {
-      return new Response(
-        JSON.stringify({ 
-          answer: "I couldn't find enough context for this content yet. The subtitles may still be loading. Please try again in a moment.",
-          maxAvailableTimestamp: coverage.hasData ? formatTime(coverage.maxAvailableSeconds) : null,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Build evidence-locked system prompt
-    const mediaLabel = mediaType === 'tv' 
-      ? `Season ${seasonNumber}, Episode ${episodeNumber}`
-      : 'this movie';
-
-    // Determine if user has finished the episode (timestamp at/past end of subtitles)
-    const isEpisodeFinished = !coverage.coverageComplete;
-
-    const systemPrompt = `You are the viewer's spoiler-free companion for "${title}" — ${mediaLabel}.
-Your vibe: a supportive friend on the couch (warm, casual, human). Never say "as an AI".
-
-**CRITICAL - SPOILER & TIMESTAMP RULES:**
-${isEpisodeFinished 
-  ? `1. The viewer has FINISHED this episode (their timestamp ${timestamp} is at/past the end). You can discuss the ENTIRE episode including the ending.
-2. NEVER reveal events from FUTURE episodes or seasons.
-3. NEVER invent plot details.` 
-  : `1. The viewer asked at ${timestamp}. The latest safe point is ${formatTime(currentSeconds)} (based on available subtitles).
-2. NEVER reveal events after ${formatTime(currentSeconds)}.
-3. NEVER invent plot details or timestamps.`}
-
-**HOW TO USE EVIDENCE:**
-- The EVIDENCE CHUNKS are in chronological order; the LAST chunks are closest to where the viewer is.
-${isEpisodeFinished 
-  ? `- For ending questions: The LAST chunks contain the episode's conclusion. Summarize the ending confidently.`
-  : `- For "what's happening now / how did this end / what just happened": rely heavily on the LAST few chunks.`}
-- For "before / earlier / last season / previous episodes": you may use PREVIOUS SEASONS summaries + earlier chunks.
-
-**EVIDENCE-ONLY RULES (non‑negotiable):**
-1. Only state facts that appear in EVIDENCE CHUNKS (and PREVIOUS SEASONS summaries when the user asks about earlier seasons).
-2. Every claim needs a bracket citation from the evidence, e.g. [S5E4 1:07:40-1:08:05].
-${isEpisodeFinished 
-  ? `3. The user has finished watching - answer ending questions directly and confidently. Do NOT mention subtitle coverage or limitations.`
-  : `3. Do not reveal anything beyond the user's current timestamp.`}
-
-**STYLE:**
-- 2–6 short paragraphs, conversational.
-- If helpful, end with one quick follow‑up question.
-
-${tmdbContextText ? `\n**SHOW INFO (metadata only, not evidence for plot):**\n${tmdbContextText}` : ''}
-${seasonSummaries ? `\n\n${seasonSummaries}` : ''}`;
-
-    let previousQAContext = '';
-    if (previousQA && Array.isArray(previousQA) && previousQA.length > 0) {
-      previousQAContext = '\n\n**PREVIOUS QUESTIONS FROM THIS USER:**\n';
-      previousQA.slice(0, 3).reverse().forEach((qa: { question: string; answer: string; context: string }, index: number) => {
-        previousQAContext += `${index + 1}. Q: "${qa.question}" A: ${qa.answer.substring(0, 200)}...\n`;
-      });
-    }
-
-    const userPrompt = `The viewer is at ${timestamp} in ${mediaLabel} and asks: "${question}"
-${previousQAContext}
-${evidenceText}
-
-Answer the question using the EVIDENCE CHUNKS above. For current scene questions, focus on the LAST chunks (they're closest to the user's position). For past events, use the season summaries. Always cite specific timestamps. If the evidence doesn't contain enough information, say so honestly.`;
-    
-
-    console.log('Sending request to Groq with RAG context');
-
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 2500,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.', retryAfter: 30 }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'AI service credits exhausted. Please try again later.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      const errorText = await response.text();
-      console.error('Lovable AI error:', response.status, errorText);
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const answer = data.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
-    console.log('AI response finish_reason:', data.choices[0]?.finish_reason);
-    console.log('AI response content length:', answer.length);
-
-    // Validate response has citations (log warning but don't fail)
-    if (!validateResponse(answer)) {
-      console.warn('Response may lack proper citations');
-    }
-
-    console.log('RAG response generated successfully');
-
-    // Update usage tracking
-    await supabase
-      .from('user_ai_usage')
-      .update({ 
-        questions_today: aiUsage.questions_today + 1,
-        total_questions: (aiUsage.total_questions || 0) + 1
-      })
-      .eq('user_id', user.id);
-
-    const remainingFree = Math.max(0, FREE_QUESTIONS_PER_DAY - (aiUsage.questions_today + 1));
-
-    return new Response(
-      JSON.stringify({ 
-        answer,
-        remainingFreeQuestions: remainingFree,
-        usedCoins: hasFreeQuestions ? 0 : COINS_PER_QUESTION,
-        chunksRetrieved: retrievedChunks.length,
-        maxAvailableTimestamp: coverage.hasData ? formatTime(coverage.maxAvailableSeconds) : null,
-        subtitleCoverageComplete: coverage.coverageComplete,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
+    return json({ ...saved.data, answer: saved.data.conversation.answer,
+      status: saved.data.conversation.answer_status, evidence: saved.data.conversation.evidence, boundary: position });
   } catch (error) {
-    console.error('Error in spoiler-free-companion:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'An unexpected error occurred' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error('Companion request failed', error instanceof Error ? error.message : 'database error');
+    return json({ error: error instanceof Error ? error.message : 'Unable to answer right now. Please try again.' }, 503);
   }
 });
