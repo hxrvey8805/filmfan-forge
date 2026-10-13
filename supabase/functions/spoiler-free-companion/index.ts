@@ -7,6 +7,7 @@ import {
 } from "../_shared/companion.ts";
 
 import { checkedAnswer } from "../_shared/answer.ts";
+import { groqGenerator } from "../_shared/groq.ts";
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -88,21 +89,6 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
   return safeEvidence(selected, position);
 }
 
-async function generateJson(system: string, user: string, key: string, maxTokens: number): Promise<unknown> {
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'llama-3.3-70b-versatile', temperature: 0,
-      response_format: { type: 'json_object' }, max_tokens: maxTokens,
-      messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!response.ok) throw new Error(response.status === 429 ? 'AI service busy. Please try again shortly.' : 'Unable to generate a checked answer. Please try again.');
-  const result = await response.json();
-  if (result.choices?.[0]?.finish_reason !== 'stop') throw new Error('The answer was incomplete. Please try again.');
-  try { return JSON.parse(result.choices[0].message.content); } catch { return null; }
-}
-
-
 serve(async req => {
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -149,8 +135,7 @@ serve(async req => {
     if (evidence.length) {
       const key = Deno.env.get('GROQ_API_KEY');
       if (!key) throw new Error('The companion is temporarily unavailable. Please try again later.');
-      checked = await checkedAnswer(question.trim(), position, evidence, memory,
-        (system, user, tokens) => generateJson(system, user, key, tokens));
+      checked = await checkedAnswer(question.trim(), position, evidence, memory, groqGenerator(key));
     }
     const answer = checked?.answer ?? (evidence.length
       ? `I can’t establish that from the dialogue available up to ${formatTimestamp(seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`
