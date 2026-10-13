@@ -29,7 +29,8 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
       if (!active) return;
       authChanged = true;
       setUserId(session?.user.id ?? null);
-      setHistory({ scope: '', rows: [] });
+      // Scope filtering hides another account's rows immediately. Refreshing
+      // this user's token must not erase history without triggering a reload.
     });
     return () => { active = false; currentView.current = ''; subscription.unsubscribe(); };
   }, []);
