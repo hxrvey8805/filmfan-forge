@@ -1,9 +1,12 @@
+import { useCompanion } from "@/hooks/use-companion";
+import { CompanionTimestamp } from "@/components/CompanionTimestamp";
+import { CompanionAnswer } from "@/components/CompanionAnswer";
+import { formatTimestamp as formatPosition } from "../../supabase/functions/_shared/companion";
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
 import { Send, Clock, Loader2, Search, Coins, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -38,14 +41,6 @@ interface ContentItem {
   posterPath?: string | null;
 }
 
-interface Message {
-  id: number;
-  question: string;
-  answer: string;
-  context: string;
-  timestamp: string;
-}
-
 const Companion = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -58,11 +53,15 @@ const Companion = () => {
   const [episodes, setEpisodes] = useState<{ episodeNumber: number; name: string; runtime: number }[]>([]);
   const [selectedSeason, setSelectedSeason] = useState("");
   const [selectedEpisode, setSelectedEpisode] = useState("");
-  const [timestampMinutes, setTimestampMinutes] = useState([30]); // Default 30 minutes
+  const [timestampMinutes, setTimestampMinutes] = useState([0]); // Start at the beginning until the viewer sets their position
   const [maxRuntime, setMaxRuntime] = useState(180); // Default 3 hours
+  const [timestampValid, setTimestampValid] = useState(true);
+  const position = selectedContent && (selectedContent.type === 'movie' || (selectedSeason && selectedEpisode)) ? {
+    tmdbId: selectedContent.id, mediaType: selectedContent.type, seconds: Math.round(timestampMinutes[0] * 60),
+    ...(selectedContent.type === 'tv' ? { seasonNumber: Number(selectedSeason), episodeNumber: Number(selectedEpisode) } : {}),
+  } : null;
+  const { ask, messages, isLoading, historyError } = useCompanion(position, timestampValid);
   const [question, setQuestion] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const [coins, setCoins] = useState(0);
 
@@ -96,6 +95,8 @@ const Companion = () => {
 
   // Fetch seasons when TV show is selected
   useEffect(() => {
+    let active = true;
+    setSeasons([]);
     const fetchSeasons = async () => {
       if (!selectedContent || selectedContent.type !== 'tv') {
         setSeasons([]);
@@ -110,19 +111,23 @@ const Companion = () => {
           body: { tvId: selectedContent.id }
         });
 
+        if (!active) return;
         if (error) throw error;
         setSeasons(data.seasons || []);
       } catch (error) {
         console.error('Error fetching seasons:', error);
-        setSeasons([]);
+        if (active) setSeasons([]);
       }
     };
 
     fetchSeasons();
+    return () => { active = false; };
   }, [selectedContent]);
 
   // Fetch episodes when season is selected
   useEffect(() => {
+    let active = true;
+    setEpisodes([]);
     const fetchEpisodes = async () => {
       if (!selectedContent || !selectedSeason || selectedContent.type !== 'tv') {
         setEpisodes([]);
@@ -135,23 +140,26 @@ const Companion = () => {
           body: { tvId: selectedContent.id, season: parseInt(selectedSeason) }
         });
 
+        if (!active) return;
         if (error) throw error;
         setEpisodes(data.episodes || []);
       } catch (error) {
         console.error('Error fetching episodes:', error);
-        setEpisodes([]);
+        if (active) setEpisodes([]);
       }
     };
 
     fetchEpisodes();
+    return () => { active = false; };
   }, [selectedContent, selectedSeason]);
 
   // Fetch runtime when content or episode is selected
   useEffect(() => {
+    let active = true;
+    setMaxRuntime(selectedContent?.type === 'tv' ? 120 : 180);
     const fetchRuntime = async () => {
       if (!selectedContent) {
         setMaxRuntime(180);
-        setTimestampMinutes([30]);
         return;
       }
 
@@ -161,10 +169,10 @@ const Companion = () => {
             body: { movieId: selectedContent.id }
           });
 
+          if (!active) return;
           if (error) throw error;
           const runtime = data.runtime || 120;
           setMaxRuntime(runtime);
-          setTimestampMinutes([Math.min(30, runtime)]);
         } else if (selectedContent.type === 'tv' && selectedSeason && selectedEpisode) {
           const { data, error } = await supabase.functions.invoke('search-content', {
             body: { 
@@ -174,18 +182,19 @@ const Companion = () => {
             }
           });
 
+          if (!active) return;
           if (error) throw error;
           const runtime = data.runtime || 45;
           setMaxRuntime(runtime);
-          setTimestampMinutes([Math.min(30, runtime)]);
         }
       } catch (error) {
         console.error('Error fetching runtime:', error);
-        setMaxRuntime(180);
+        if (active) setMaxRuntime(180);
       }
     };
 
     fetchRuntime();
+    return () => { active = false; };
   }, [selectedContent, selectedSeason, selectedEpisode]);
 
   // Load user stats and AI usage
@@ -196,7 +205,7 @@ const Companion = () => {
         if (!user) return;
 
         // Load coins
-        let { data: stats } = await supabase
+        const { data: stats } = await supabase
           .from('user_stats')
           .select('coins')
           .eq('user_id', user.id)
@@ -208,7 +217,7 @@ const Companion = () => {
 
         // Load AI usage
         const today = new Date().toISOString().split('T')[0];
-        let { data: aiUsage } = await supabase
+        const { data: aiUsage } = await supabase
           .from('user_ai_usage')
           .select('questions_today, last_reset_date')
           .eq('user_id', user.id)
@@ -231,153 +240,29 @@ const Companion = () => {
     };
 
     loadUserData();
+    window.addEventListener('questionAsked', loadUserData);
+    return () => window.removeEventListener('questionAsked', loadUserData);
   }, []);
 
   // Convert minutes to HH:MM:SS format
-  const formatTimestamp = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.floor(minutes % 60);
-    const secs = Math.floor((minutes % 1) * 60);
-    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const timestamp = formatTimestamp(timestampMinutes[0]);
+  const timestamp = formatPosition(Math.round(timestampMinutes[0] * 60));
 
   const handleAskQuestion = async () => {
-    // Check if user has questions remaining or coins
-    if (remainingFree !== null && remainingFree === 0 && coins < 150) {
-      toast({
-        title: "No questions available",
-        description: "You've used all 5 free questions today and don't have enough coins. Purchase questions in the Store.",
-        variant: "destructive"
-      });
+    if (isLoading) return;
+    if (!question.trim() || !position || !timestampValid) {
+      toast({ title: "Check your question", description: "Select what you’re watching, enter a valid timestamp, and ask a question.", variant: "destructive" });
       return;
     }
-
-    if (!question.trim()) {
-      toast({
-        title: "Question required",
-        description: "Please enter a question",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!selectedContent) {
-      toast({
-        title: "Content required",
-        description: "Please select a movie or TV show",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (selectedContent.type === "tv" && (!selectedSeason || !selectedEpisode)) {
-      toast({
-        title: "Episode required",
-        description: "Please select a season and episode for TV shows",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-
     try {
-      const contextInfo = selectedContent.type === "tv" 
-        ? `S${selectedSeason}E${selectedEpisode} @ ${timestamp}`
-        : `@ ${timestamp}`;
-
-      const { data, error } = await supabase.functions.invoke('spoiler-free-companion', {
-        body: {
-          tmdbId: selectedContent.id,
-          mediaType: selectedContent.type,
-          seasonNumber: selectedContent.type === 'tv' ? parseInt(selectedSeason) : undefined,
-          episodeNumber: selectedContent.type === 'tv' ? parseInt(selectedEpisode) : undefined,
-          title: selectedContent.title,
-          timestamp,
-          question: question.trim(),
-        }
-      });
-
-      if (error) {
-        // Handle specific error cases
-        if (error.status === 402) {
-          const errorData = error.data || error;
-          toast({
-            title: "Insufficient Coins",
-            description: errorData.error || `You need 150 coins for this question. You have ${errorData.coinsAvailable || 0} coins.`,
-            variant: "destructive"
-          });
-          // Reload coins
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: stats } = await supabase
-              .from('user_stats')
-              .select('coins')
-              .eq('user_id', user.id)
-              .single();
-            if (stats) setCoins(stats.coins);
-          }
-          return;
-        }
-        
-        if (error.status === 429) {
-          const errorData = error.data || error;
-          const retryAfter = errorData.retryAfter || 30;
-          toast({
-            title: "Service Busy",
-            description: errorData.error || `The AI service is experiencing high demand. Please wait ${retryAfter} seconds and try again.`,
-            variant: "destructive"
-          });
-          return;
-        }
-        
-        throw error;
-      }
-
-      const newMessage: Message = {
-        id: messages.length + 1,
-        question: question,
-        answer: data.answer,
-        context: contextInfo,
-        timestamp: "Just now"
-      };
-
-      setMessages([newMessage, ...messages]);
+      const data = await ask(question, timestamp);
+      if (data.remainingFreeQuestions !== undefined) setRemainingFree(data.remainingFreeQuestions);
+      if (data.usedCoins) setCoins(previous => Math.max(0, previous - data.usedCoins));
+      if (data.stale) return;
       setQuestion("");
-
-      // Update remaining free questions and coins
-      if (data.remainingFreeQuestions !== undefined && data.remainingFreeQuestions !== null) {
-        console.log('Updating remainingFree to:', data.remainingFreeQuestions);
-        setRemainingFree(data.remainingFreeQuestions);
-      }
-      if (data.usedCoins) {
-        setCoins(prev => Math.max(0, prev - data.usedCoins));
-      }
-      
-      // Dispatch custom event to notify Dashboard to refresh
-      window.dispatchEvent(new CustomEvent('questionAsked'));
-      
-      const description = data.remainingFreeQuestions !== undefined && data.remainingFreeQuestions >= 0
-        ? `${data.remainingFreeQuestions} free questions remaining today.`
-        : data.usedCoins
-        ? `Used ${data.usedCoins} coins.`
-        : "Spoiler-free response generated!";
-      
-      toast({
-        title: "Answer received",
-        description: description,
-      });
+      toast({ title: "Answer received", description: data.conversation.answer_status === 'insufficient_evidence'
+        ? "No question or coins used." : "Conversation saved at your viewing position." });
     } catch (error) {
-      console.error('Error asking question:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to get answer. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
+      toast({ title: "Could not answer", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
     }
   };
 
@@ -528,12 +413,12 @@ const Companion = () => {
                           value={item.title}
                           onSelect={() => {
                             setSelectedContent(item);
+                            setTimestampMinutes([0]);
+                            setQuestion("");
                             setSearchQuery("");
                             setOpen(false);
-                            if (item.type === "movie") {
-                              setSelectedSeason("");
-                              setSelectedEpisode("");
-                            }
+                            setSelectedSeason("");
+                            setSelectedEpisode("");
                           }}
                         >
                           <div className="flex items-center gap-3 w-full">
@@ -577,7 +462,7 @@ const Companion = () => {
           }`}>
             <div className="space-y-2">
               <label className="text-sm font-medium">Season</label>
-              <Select value={selectedSeason} onValueChange={setSelectedSeason}>
+              <Select value={selectedSeason} onValueChange={value => { setSelectedSeason(value); setSelectedEpisode(""); setTimestampMinutes([0]); }}>
                 <SelectTrigger className="bg-background/50">
                   <SelectValue placeholder="Select season" />
                 </SelectTrigger>
@@ -594,7 +479,7 @@ const Companion = () => {
               <label className="text-sm font-medium">Episode</label>
               <Select 
                 value={selectedEpisode} 
-                onValueChange={setSelectedEpisode}
+                onValueChange={value => { setSelectedEpisode(value); setTimestampMinutes([0]); }}
                 disabled={!selectedSeason}
               >
                 <SelectTrigger className="bg-background/50">
@@ -612,29 +497,8 @@ const Companion = () => {
           </div>
         )}
         
-        {/* Timestamp Slider */}
-        <div className={`space-y-3 transition-opacity ${
-          remainingFree !== null && remainingFree === 0 && coins < 150 && selectedContent ? 'opacity-30' : ''
-        }`}>
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              Timestamp
-            </label>
-            <span className="text-sm font-mono text-primary">{timestamp}</span>
-          </div>
-          <Slider
-            value={timestampMinutes}
-            onValueChange={setTimestampMinutes}
-            max={maxRuntime}
-            step={0.5}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>00:00:00</span>
-            <span>{formatTimestamp(maxRuntime)}</span>
-          </div>
-        </div>
+        <CompanionTimestamp key={`${selectedSeason}:${selectedEpisode}`} minutes={timestampMinutes[0]} maxMinutes={maxRuntime}
+          onChange={setTimestampMinutes} onValidityChange={setTimestampValid} />
 
         <div className={`flex gap-2 transition-opacity ${
           remainingFree !== null && remainingFree === 0 && coins < 150 && selectedContent ? 'opacity-30' : ''
@@ -642,6 +506,7 @@ const Companion = () => {
           <Textarea
             placeholder="Ask a question about the story so far..."
             value={question}
+            maxLength={2000}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -663,7 +528,7 @@ const Companion = () => {
         )}
         <Button 
           onClick={handleAskQuestion}
-          disabled={isLoading || (remainingFree !== null && remainingFree === 0 && coins < 150)}
+          disabled={isLoading || !timestampValid || (remainingFree !== null && remainingFree === 0 && coins < 150)}
           className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? (
@@ -680,9 +545,10 @@ const Companion = () => {
         </Button>
       </Card>
 
+      {historyError && <p role="status" className="text-sm text-destructive">{historyError}</p>}
       {/* Messages */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Previous Questions</h3>
+        <h3 className="text-lg font-semibold">Conversation so far</h3>
         {messages.length === 0 ? (
           <Card className="p-6 text-center bg-card border-border">
             <p className="text-muted-foreground">
@@ -695,14 +561,14 @@ const Companion = () => {
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="font-medium text-foreground">{msg.question}</p>
-                <p className="text-sm text-muted-foreground mt-2">{msg.answer}</p>
+                <CompanionAnswer message={msg} />
               </div>
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground border-t border-border pt-3">
               <span className="px-2 py-1 bg-secondary rounded text-primary font-mono">
                 {msg.context}
               </span>
-              <span>{msg.timestamp}</span>
+              <span>{new Date(msg.created_at).toLocaleDateString()}</span>
             </div>
           </Card>
           ))

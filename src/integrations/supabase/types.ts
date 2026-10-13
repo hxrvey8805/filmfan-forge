@@ -16,6 +16,11 @@ export type Database = {
     Tables: {
       ai_conversations: {
         Row: {
+          companion_version: number
+          position_seconds: number | null
+          evidence: Json
+          answer_status: string | null
+          used_coins: number
           answer: string
           context: string
           created_at: string
@@ -29,6 +34,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          companion_version?: number
+          position_seconds?: number | null
+          evidence?: Json
+          answer_status?: string | null
+          used_coins?: number
           answer: string
           context: string
           created_at?: string
@@ -42,6 +52,11 @@ export type Database = {
           user_id: string
         }
         Update: {
+          companion_version?: number
+          position_seconds?: number | null
+          evidence?: Json
+          answer_status?: string | null
+          used_coins?: number
           answer?: string
           context?: string
           created_at?: string
@@ -91,6 +106,10 @@ export type Database = {
       }
       subtitle_chunks: {
         Row: {
+          ingestion_version: number
+          cues: Json
+          cache_key: string | null
+          source_file_id: number | null
           chunk_index: number
           content: string
           created_at: string
@@ -104,6 +123,10 @@ export type Database = {
           tmdb_id: number
         }
         Insert: {
+          ingestion_version?: number
+          cues?: Json
+          cache_key?: string | null
+          source_file_id?: number | null
           chunk_index: number
           content: string
           created_at?: string
@@ -117,6 +140,10 @@ export type Database = {
           tmdb_id: number
         }
         Update: {
+          ingestion_version?: number
+          cues?: Json
+          cache_key?: string | null
+          source_file_id?: number | null
           chunk_index?: number
           content?: string
           created_at?: string
