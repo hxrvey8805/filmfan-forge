@@ -35,7 +35,7 @@ describe('companion model transport', () => {
     expect(await groqGenerator('test-key', request)('Check evidence', 'Question and evidence', 500)).toEqual({ supported: true });
     const body = JSON.parse(request.mock.calls[0][1]!.body as string);
     expect(body).toMatchObject({ model: 'openai/gpt-oss-120b', include_reasoning: false,
-      response_format: { type: 'json_object' }, max_completion_tokens: 4596 });
+      response_format: { type: 'json_object' }, max_completion_tokens: 2548 });
     expect(body.messages).toEqual([{ role: 'system', content: 'Check evidence' }, { role: 'user', content: 'Question and evidence' }]);
   });
 

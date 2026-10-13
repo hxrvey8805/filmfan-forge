@@ -12,7 +12,9 @@ export function groqGenerator(key: string, request: typeof fetch = fetch,
         response_format: { type: 'json_object' }, reasoning_effort: 'medium', include_reasoning: false,
         // Reasoning shares the completion budget. The old 500-token verifier
         // budget could end before the model produced its final JSON verdict.
-        max_completion_tokens: maxTokens + 4096,
+        // Keep room for reasoning without reserving most of the free plan's
+        // per-minute allowance for each of the two generation passes.
+        max_completion_tokens: maxTokens + 2048,
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
       signal: AbortSignal.timeout(30000),
     });
@@ -29,6 +31,19 @@ export function groqGenerator(key: string, request: typeof fetch = fetch,
     if (!response.ok) {
       // Do not log provider bodies: they can echo private questions or evidence.
       console.error('Companion model request failed', { status: response.status, model: COMPANION_MODEL });
+      if (response.status === 429) {
+        // Numeric quota diagnostics only; never log prompts, keys or bodies.
+        const numericHeader = (name: string) => {
+          const value = response.headers.get(name);
+          return value !== null && /^\d+(\.\d+)?$/.test(value) ? Number(value) : null;
+        };
+        console.error('Companion quota', {
+          retryAfterSeconds: numericHeader('retry-after'),
+          tokenLimit: numericHeader('x-ratelimit-limit-tokens'),
+          remainingTokens: numericHeader('x-ratelimit-remaining-tokens'),
+          remainingRequests: numericHeader('x-ratelimit-remaining-requests'),
+        });
+      }
       throw new Error(response.status === 429 ? 'AI service busy. Please try again shortly.'
         : 'Unable to generate a checked answer. Please try again.');
     }

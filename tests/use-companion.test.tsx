@@ -55,6 +55,15 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('companion history and in-flight responses', () => {
+  it.each(['TOKEN_REFRESHED', 'SIGNED_IN'])('preserves safe history on same-user %s events', async event => {
+    mock.load.mockResolvedValue({ data: [row(), row({ id: 'future', position_seconds: 61 })], error: null });
+    const hook = await mount();
+    act(() => { mock.authChange?.(event, { user: { id: 'user-1' } }); });
+    await flush();
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+    act(() => { mock.authChange?.('SIGNED_OUT', null); });
+    expect(hook.result.current.messages).toEqual([]);
+  });
   it('applies title/episode/cutoff in the query and filters later rows again in the browser', async () => {
     mock.load.mockResolvedValue({ data: [row(), row({ id: 'future', position_seconds: 61 })], error: null });
     const hook = await mount();
