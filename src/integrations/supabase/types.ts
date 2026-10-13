@@ -17,41 +17,56 @@ export type Database = {
       ai_conversations: {
         Row: {
           answer: string
+          answer_status: string | null
+          companion_version: number
           context: string
           created_at: string
           episode_number: number | null
+          evidence: Json
           id: string
           media_type: string
+          position_seconds: number | null
           question: string
           season_number: number | null
           timestamp: string | null
           title_id: number
+          used_coins: number
           user_id: string
         }
         Insert: {
           answer: string
+          answer_status?: string | null
+          companion_version?: number
           context: string
           created_at?: string
           episode_number?: number | null
+          evidence?: Json
           id?: string
           media_type: string
+          position_seconds?: number | null
           question: string
           season_number?: number | null
           timestamp?: string | null
           title_id: number
+          used_coins?: number
           user_id: string
         }
         Update: {
           answer?: string
+          answer_status?: string | null
+          companion_version?: number
           context?: string
           created_at?: string
           episode_number?: number | null
+          evidence?: Json
           id?: string
           media_type?: string
+          position_seconds?: number | null
           question?: string
           season_number?: number | null
           timestamp?: string | null
           title_id?: number
+          used_coins?: number
           user_id?: string
         }
         Relationships: []
@@ -91,41 +106,53 @@ export type Database = {
       }
       subtitle_chunks: {
         Row: {
+          cache_key: string | null
           chunk_index: number
           content: string
           created_at: string
+          cues: Json
           embedding: string | null
           end_seconds: number
           episode_number: number | null
           id: string
+          ingestion_version: number
           media_type: string
           season_number: number | null
+          source_file_id: number | null
           start_seconds: number
           tmdb_id: number
         }
         Insert: {
+          cache_key?: string | null
           chunk_index: number
           content: string
           created_at?: string
+          cues?: Json
           embedding?: string | null
           end_seconds: number
           episode_number?: number | null
           id?: string
+          ingestion_version?: number
           media_type: string
           season_number?: number | null
+          source_file_id?: number | null
           start_seconds: number
           tmdb_id: number
         }
         Update: {
+          cache_key?: string | null
           chunk_index?: number
           content?: string
           created_at?: string
+          cues?: Json
           embedding?: string | null
           end_seconds?: number
           episode_number?: number | null
           id?: string
+          ingestion_version?: number
           media_type?: string
           season_number?: number | null
+          source_file_id?: number | null
           start_seconds?: number
           tmdb_id?: number
         }
@@ -298,6 +325,40 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      match_companion_chunks: {
+        Args: {
+          p_current_episode: number
+          p_current_season: number
+          p_embedding?: string
+          p_max_seconds: number
+          p_media_type: string
+          p_question: string
+          p_tmdb_id: number
+        }
+        Returns: {
+          cache_key: string | null
+          chunk_index: number
+          content: string
+          created_at: string
+          cues: Json
+          embedding: string | null
+          end_seconds: number
+          episode_number: number | null
+          id: string
+          ingestion_version: number
+          media_type: string
+          season_number: number | null
+          source_file_id: number | null
+          start_seconds: number
+          tmdb_id: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "subtitle_chunks"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       match_season_summaries: {
         Args: {
           match_count?: number
@@ -337,6 +398,10 @@ export type Database = {
           start_seconds: number
           tmdb_id: number
         }[]
+      }
+      record_companion_answer: {
+        Args: { p_charge: boolean; p_conversation: Json; p_user_id: string }
+        Returns: Json
       }
     }
     Enums: {
