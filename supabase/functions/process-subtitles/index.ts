@@ -1,56 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { chunkCues, COMPANION_VERSION, formatTimestamp, parseSubtitles } from "../_shared/companion.ts";
-import { selectSubtitleFile, subtitleSearchParams } from "../_shared/subtitle-source.ts";
+import { chunkCues, COMPANION_VERSION, formatTimestamp } from "../_shared/companion.ts";
+import { loadSubtitleFile, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
 
 const headers = { 'Content-Type': 'application/json' };
-// Delay helper
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Fetch with retry for rate limiting
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries: number = 3,
-  initialDelayMs: number = 2000
-): Promise<Response> {
-  let lastError: Error | null = null;
-  
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, options);
-      
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('Retry-After');
-        const waitTime = retryAfter 
-          ? parseInt(retryAfter) * 1000 
-          : initialDelayMs * Math.pow(2, attempt);
-        
-        console.log(`Rate limited (429). Attempt ${attempt + 1}/${maxRetries + 1}. Waiting ${waitTime}ms...`);
-        
-        if (attempt < maxRetries) {
-          await delay(waitTime);
-          continue;
-        }
-      }
-      
-      return response;
-    } catch (error) {
-      lastError = error as Error;
-      console.error(`Fetch attempt ${attempt + 1} failed:`, error);
-      
-      if (attempt < maxRetries) {
-        await delay(initialDelayMs * Math.pow(2, attempt));
-      }
-    }
-  }
-  
-  throw lastError || new Error('Max retries exceeded');
-}
-
-
 serve(async (req) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   // Subtitle ingestion is an internal operation, not a public paid-API proxy.
@@ -74,24 +27,10 @@ serve(async (req) => {
 
     const apiKey = Deno.env.get('OPENSUBTITLES_API_KEY');
     if (!apiKey) throw new Error('Subtitle service is not configured');
-    const apiHeaders = { 'Api-Key': apiKey, 'Content-Type': 'application/json' };
-    const titlePosition = { tmdbId, mediaType, seasonNumber, episodeNumber };
-    const params = subtitleSearchParams(titlePosition);
-    const search = await fetchWithRetry(`https://api.opensubtitles.com/api/v1/subtitles?${params}`, { headers: apiHeaders });
-    if (!search.ok) throw new Error('Subtitle search failed');
-    const results = (await search.json()).data ?? [];
-    const fileId = selectSubtitleFile(results, titlePosition);
-    if (!fileId) return new Response(JSON.stringify({ success: false, reason: 'unavailable' }), { headers });
-    const download = await fetchWithRetry('https://api.opensubtitles.com/api/v1/download', {
-      method: 'POST', headers: apiHeaders, body: JSON.stringify({ file_id: fileId }),
-    });
-    if (!download.ok) throw new Error('Subtitle download failed');
-    const link = (await download.json()).link;
-    if (!link) throw new Error('Subtitle download unavailable');
-    const file = await fetch(link);
-    if (!file.ok) throw new Error('Subtitle file unavailable');
-    const chunks = chunkCues(parseSubtitles(await file.text()));
-    if (!chunks.length) return new Response(JSON.stringify({ success: false, reason: 'unavailable' }), { headers });
+    const source = await loadSubtitleFile({ tmdbId, mediaType, seasonNumber, episodeNumber }, apiKey);
+    if (!source) return new Response(JSON.stringify({ success: false, reason: 'unavailable' }), { headers });
+    const { fileId, cues } = source;
+    const chunks = chunkCues(cues);
     const rows = chunks.map((cues, index) => ({
       tmdb_id: tmdbId, media_type: mediaType,
       season_number: mediaType === 'tv' ? seasonNumber : null,
@@ -110,6 +49,7 @@ serve(async (req) => {
           const response = await fetch('https://api.openai.com/v1/embeddings', {
             method: 'POST', headers: { Authorization: `Bearer ${embeddingKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ model: 'text-embedding-3-small', input: batch.map(row => row.content) }),
+            signal: AbortSignal.timeout(8000),
           });
           if (response.ok) {
             for (const item of (await response.json()).data ?? []) {
@@ -129,6 +69,10 @@ serve(async (req) => {
     if (error) throw error;
     return new Response(JSON.stringify({ success: true, chunksStored: rows.length }), { headers });
   } catch (error) {
+    if (error instanceof SubtitleProviderError) {
+      console.error('Subtitle provider failed', { reason: error.reason, stage: error.stage, status: error.status });
+      return new Response(JSON.stringify({ error: error.message, reason: error.reason }), { status: 503, headers });
+    }
     console.error('Subtitle ingestion failed', error instanceof Error ? error.message : 'database error');
     return new Response(JSON.stringify({ error: 'Unable to prepare subtitles' }), { status: 503, headers });
   }

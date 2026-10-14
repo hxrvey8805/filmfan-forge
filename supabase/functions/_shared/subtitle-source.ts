@@ -20,6 +20,7 @@ export function subtitleSearchParams(position: TitlePosition): URLSearchParams {
     params.set('season_number', String(position.seasonNumber));
     params.set('episode_number', String(position.episodeNumber));
   }
+  params.sort();
   return params;
 }
 
