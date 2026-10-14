@@ -4,7 +4,7 @@ import { conversationMemory, permittedCues, questionIntent,
 const stopWords = new Set(('a an the and or of to in on at by for with about from up until so far what whats is are was were ' +
   'has have had do does did be being been can could would should me my we us you your i it its this that these those ' +
   'he she they his her their him them why how who whom when where tell explain describe please know happening happened ' +
-  'point moment scene episode movie film show story recap summary summarize summarise main just here now').split(' '));
+  'point moment scene episode movie film show story recap summary summarize summarise main just here now right based dialogue').split(' '));
 const terms = (value: string) => [...new Set(value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
   .match(/[a-z0-9]+/g) ?? [])].filter(word => word.length > 2 && !stopWords.has(word));
 
@@ -20,33 +20,78 @@ export function subtitleSearchText(question: string, history: Conversation[], po
   return retrievalTerms(question, history, position).map(term => `"${term}"`).join(' OR ');
 }
 
+// Subtitle files often contain uploader credits. Remove only explicit subtitle
+// production credits, never general dialogue, character labels, or sound cues.
+export function isSubtitleCredit(text: string): boolean {
+  return /^(?:subs|subtitles|captions)\s+(?:(?:collected|corrected|adapted|synced|synchronized|synchronised|translated|created|provided|downloaded|ripped|encoded)\b.*|by\s+\S+)/i.test(text.trim()) ||
+    /^(?:sync(?:hroni[sz]ation)?|translation)\s+(?:and\s+corrections?\s+)?by\s+\S+/i.test(text.trim());
+}
+
 function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence[] {
-  const result: Evidence[] = [];
+  const scopes = new Map<string, { record: SubtitleRecord; cue: Cue }[]>();
   const seen = new Set<string>();
   for (const record of records) {
     if (seen.has(record.id)) continue;
     seen.add(record.id);
-    const cues = permittedCues(record, position);
-    let group: Cue[] = [];
+    const key = `${record.season_number}:${record.episode_number}`;
+    const rows = scopes.get(key) ?? [];
+    // Clip BEFORE joining, deduplication, scoring, or continuity decisions.
+    for (const cue of permittedCues(record, position)) {
+      if (!isSubtitleCredit(cue.text)) rows.push({ record, cue });
+    }
+    scopes.set(key, rows);
+  }
+  const result: Evidence[] = [];
+  for (const rows of scopes.values()) {
+    rows.sort((a, b) => a.cue.start - b.cue.start || a.cue.end - b.cue.end || a.record.id.localeCompare(b.record.id));
+    const seenCues = new Set<string>();
+    let group: typeof rows = [];
     let chars = 0;
     const flush = () => {
       if (!group.length) return;
-      result.push({ id: `${record.id}:${Math.round(group[0].start * 1000)}`,
-        season: record.season_number, episode: record.episode_number,
-        start: group[0].start, end: Math.max(...group.map(cue => cue.end)),
-        // Small, contiguous dialogue passages retain turn order and sound cues.
-        // Their exact start/end are metadata; repeated per-line clocks waste tokens.
-        text: group.map(cue => cue.text).join('\n') });
+      const first = group[0];
+      result.push({ id: `${first.record.id}:${Math.round(first.cue.start * 1000)}`,
+        season: first.record.season_number, episode: first.record.episode_number,
+        start: first.cue.start, end: Math.max(...group.map(row => row.cue.end)),
+        text: group.map(row => row.cue.text).join('\n') });
       group = []; chars = 0;
     };
-    for (const cue of cues) {
-      if (group.length && (cue.start - group[0].start > 40 ||
-          cue.start - group[group.length - 1].end > 12 || chars + cue.text.length > 850)) flush();
-      group.push(cue); chars += cue.text.length;
+    for (const row of rows) {
+      const { cue } = row;
+      const signature = JSON.stringify(cue);
+      if (seenCues.has(signature)) continue;
+      seenCues.add(signature);
+      const previous = group.at(-1)?.cue;
+      // Storage chunks are not scene boundaries. Keep adjacent turns together,
+      // including sentence continuations, but never bridge a long silent gap.
+      const continuing = previous && /(?:\.\.\.|…|[,;:—-])$/.test(previous.text.trim());
+      const maxDuration = continuing ? 120 : 90;
+      const maxText = continuing ? 1500 : 1200;
+      if (previous && (cue.start - previous.end > 12 ||
+          cue.start - group[0].cue.start > maxDuration || chars + cue.text.length + 1 > maxText)) flush();
+      group.push(row); chars += cue.text.length + 1;
     }
     flush();
   }
   return result.sort(chronological);
+}
+
+// Spread recap coverage over time; within each interval prefer a substantive
+// exchange over a one-word acknowledgement. Every passage remains eligible in
+// later rounds, so an arbitrary sample count cannot leave usable space empty.
+function overviewOrder(prefix: Evidence[], maxChars: number): Evidence[] {
+  if (!prefix.length) return [];
+  const bins = Math.min(8, Math.max(1, Math.floor(maxChars / 2000)), prefix.length);
+  const start = prefix[0].start;
+  const duration = Math.max(1, prefix.at(-1)!.end - start);
+  const buckets: Evidence[][] = Array.from({ length: bins }, () => []);
+  for (const item of prefix) buckets[Math.min(bins - 1, Math.floor((item.start - start) / duration * bins))].push(item);
+  for (const bucket of buckets) bucket.sort((a, b) => b.text.length - a.text.length || chronological(a, b));
+  const ordered: Evidence[] = [];
+  for (let i = 0; i < Math.max(...buckets.map(bucket => bucket.length)); i++) {
+    for (const bucket of buckets) if (bucket[i]) ordered.push(bucket[i]);
+  }
+  return ordered;
 }
 
 const chronological = (a: Evidence, b: Evidence) => (a.season ?? 0) - (b.season ?? 0) ||
@@ -73,17 +118,23 @@ export function selectSceneEvidence(records: SubtitleRecord[], position: Viewing
     sum + (words[index].includes(term) ? Math.log(1 + all.length / (1 + (frequency.get(term) ?? 0))) : 0), 0) }));
   const relevant = scored.filter(row => row.score > 0).sort((a, b) => b.score - a.score || chronological(a.item, b.item)).map(row => row.item);
   const prefix = all.filter(item => current(item, position));
-  const overview = prefix.length <= 14 ? prefix : Array.from({ length: 14 }, (_, i) =>
-    prefix[Math.round(i * (prefix.length - 1) / 13)]);
-  const sources = intent === 'scene' ? [local, relevant, prefix.slice(0, 2)] :
-    intent === 'recap' ? [overview, relevant, local] : [relevant, local, overview];
+  // Short prefixes should reach the model intact instead of being sampled.
+  if (JSON.stringify(all).length <= maxChars) return all;
+  const overview = overviewOrder(prefix, maxChars);
+  const neighbours = relevant.flatMap(item => {
+    const index = all.indexOf(item);
+    return all.slice(Math.max(0, index - 1), index + 2).filter(other =>
+      other.season === item.season && other.episode === item.episode &&
+      other.start <= item.end + 12 && other.end >= item.start - 12);
+  });
+  const sources = intent === 'scene' ? [local, relevant, neighbours, overview] :
+    intent === 'recap' ? [local.slice(0, 2), overview, relevant, local, neighbours] : [relevant, neighbours, local, overview];
   const selected: Evidence[] = [];
   const used = new Set<string>();
   let size = 2;
-  for (let i = 0; i < Math.max(...sources.map(rows => rows.length)); i++) {
-    for (const rows of sources) {
-      const item = rows[i];
-      if (!item || used.has(item.id)) continue;
+  for (const rows of sources) {
+    for (const item of rows) {
+      if (used.has(item.id)) continue;
       const cost = JSON.stringify(item).length + (selected.length ? 1 : 0);
       if (size + cost > maxChars) continue;
       used.add(item.id); selected.push(item); size += cost;

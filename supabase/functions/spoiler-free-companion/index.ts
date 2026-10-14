@@ -125,7 +125,9 @@ serve(async req => {
     if (evidence.length) {
       const key = Deno.env.get('GROQ_API_KEY');
       if (!key) throw new Error('The companion is temporarily unavailable. Please try again later.');
-      checked = await checkedAnswer(question.trim(), position, evidence, memory, groqGenerator(key));
+      checked = await checkedAnswer(question.trim(), position, evidence, memory, groqGenerator(key),
+        diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
+          evidenceChars: JSON.stringify(evidence).length }));
     }
     const answer = checked?.answer ?? (evidence.length
       ? `I can’t establish that from the dialogue available up to ${formatTimestamp(seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`

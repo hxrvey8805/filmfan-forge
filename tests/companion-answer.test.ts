@@ -55,4 +55,18 @@ describe('answer generation and independent verification', () => {
     const generate = vi.fn().mockResolvedValueOnce(draft).mockRejectedValueOnce(new Error('Provider unavailable'));
     await expect(checkedAnswer('Why?', position, evidence, [], generate)).rejects.toThrow('Provider unavailable');
   });
+  it.each([
+    [null, null, 'draft_invalid'],
+    [{ status: 'insufficient_evidence', claims: [] }, null, 'draft_insufficient'],
+    [draft, { supported: false, withinBoundary: true, unsupportedClaimIndexes: [0] }, 'verification_rejected'],
+    [draft, pass, 'answered'],
+  ])('identifies the refusal stage without logging private prompts or answer text', async (writer, verdict, stage) => {
+    const generate = vi.fn().mockResolvedValueOnce(writer).mockResolvedValueOnce(verdict);
+    const observe = vi.fn();
+    await checkedAnswer('PRIVATE_QUESTION', position, evidence, [history()], generate, observe);
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe.mock.calls[0][0]).toMatchObject({ stage, evidenceCount: 1 });
+    expect(JSON.stringify(observe.mock.calls)).not.toMatch(/PRIVATE_QUESTION|SAFE_ANSWER|sealed/);
+  });
+
 });

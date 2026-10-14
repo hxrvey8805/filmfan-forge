@@ -111,6 +111,7 @@ describe('conversation memory and answer validation', () => {
     expect(questionIntent('What is the defendant doing?')).toBe('explanation');
     expect(questionIntent('What is happening right now?')).toBe('scene');
     expect(questionIntent('Give me a recap so far')).toBe('recap');
+    expect(questionIntent('What do we know about Maximus and his relationship with the emperor so far?')).toBe('explanation');
   });
   it('rejects fabricated/missing evidence IDs and requires a positive verifier verdict', () => {
     const evidence = safeEvidence([record()], position);

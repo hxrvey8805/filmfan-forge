@@ -37,7 +37,7 @@ describe('subtitle import reliability', () => {
     await expect(loadSubtitleFile(position, 'secret', fetcher)).rejects.toThrow('temporarily unavailable');
     const malformed = mock().mockResolvedValueOnce(response({ link: 'https://files.example/test' }))
       .mockResolvedValueOnce(new Response('1\n00:00:03,000 --> 00:00:01,000\nReversed cue'));
-    await expect(loadSubtitleFile(position, 'secret', malformed)).rejects.toMatchObject({ reason: 'provider_error' });
+    await expect(loadSubtitleFile(position, 'secret', malformed)).rejects.toMatchObject({ reason: 'provider_error', stage: 'parse' });
   });
   it('does not turn failed imports into a saved insufficient-evidence answer', async () => {
     await expect(assertSubtitlePreparation(response({ reason: 'quota_exceeded' }, 503))).rejects.toThrow('daily download limit');
