@@ -2,15 +2,27 @@
 
 `scripts/companion-replay.ts` runs the shared retrieval, writer and checker against an exported subtitle prefix. It does not call Lovable or write production conversations. Use exports with individual cues already clipped to the intended viewing point, and keep exports, keys and results outside Git.
 
-Input JSON contains `question`, `position`, `records` and optional `history`, using the shared companion types. Without `--live`, the script writes retrieval and the writer prompt. With `--live`, it calls the existing Groq model and saves the actual writer/checker requests, final JSON responses, token usage, safe provider error codes, and the returned answer or refusal. It never saves credentials, provider response bodies or model reasoning. Errors preserve the partial audit and exit with a nonzero status.
+Input JSON contains `question`, `position`, `records` and optional `history`, using the shared companion types. Without `--live`, the script writes retrieval and the writer prompt. With `--live`, it calls Nemotron 3 Ultra's free OpenRouter endpoint for private evaluation and saves the actual writer/checker requests, final JSON responses, token usage, safe provider error codes, and the returned answer or refusal. It never saves credentials, provider response bodies or model reasoning. Errors preserve the partial audit and exit with a nonzero status.
+
+## Nemotron setup and release restriction
+
+The private replay uses `nvidia/nemotron-3-ultra-550b-a55b:free`, pinned to NVIDIA with zero maximum token/request prices, no provider fallbacks, no tools and explicitly disabled plugins. An empty plugin array would inherit account defaults. Before any live replay, use a workspace with plugins disabled: OpenRouter's account-level “Prevent overrides” setting can override request-level disabling. Keep billing off. The public edge function still uses Groq. The private adapter lives under `scripts/lib` to avoid an accidental production switch.
+
+The [OpenRouter model page](https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b:free) explicitly applies the [NVIDIA API Trial Terms](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Sections 1.2–1.4 limit this endpoint to internal trial/evaluation and exclude production use. Do not enable this free endpoint for the public companion. A production-serving arrangement would need different terms and separate authorization for any cost. No production deployment or model-quality evaluation is claimed by this change.
+
+Keep `OPENROUTER_API_KEY` in a private file outside Git (mode 0600) or a server secret, never a `VITE_` variable. Do not submit confidential information or personal data to this free endpoint; NVIDIA's model page discloses collection of prompts and outputs for service improvement. Do not override account privacy preferences to force a request through. Free requests are limited to 50/day without credit purchases; failures count too. The adapter does not automatically retry provider failures or enable billing.
+
+This endpoint supports reasoning but does not support `response_format`. The system instruction requests JSON; only complete final JSON objects enter the existing claim and checker validators. Reasoning text and incomplete or malformed responses cannot be published. Reasoning and visible output share a bounded completion budget. Each request has a 90-second timeout; answer quality and latency remain unmeasured for this integration.
+
+Live replay is opt-in and should only run when requested. No live AI questions were run for this provider change.
 
 ```sh
 deno run --allow-read=/private/audit --allow-write=/private/audit \
   scripts/companion-replay.ts /private/audit/input.json /private/audit/result.json
 
-# GROQ_API_KEY must be supplied privately; never place its value in this command.
-deno run --env-file=/private/groq.env --allow-env=GROQ_API_KEY \
-  --allow-net=api.groq.com --allow-read=/private/audit --allow-write=/private/audit \
+# OPENROUTER_API_KEY must be supplied privately; never place its value in this command.
+deno run --env-file=/private/openrouter.env --allow-env=OPENROUTER_API_KEY \
+  --allow-net=openrouter.ai --allow-read=/private/audit --allow-write=/private/audit \
   scripts/companion-replay.ts /private/audit/input.json /private/audit/result-live.json --live
 ```
 
@@ -24,7 +36,7 @@ An unusable draft or insufficient answer gets at most one fresh rewrite and anot
 
 Conversation memory includes only saved `answered` turns from the same permitted scope. Failed answers remain visible in chat but cannot prime the next answer. Overlong replies are omitted from prompt memory instead of being cut mid-qualification. Retrieval and generation both enforce the viewing boundary.
 
-The model is unchanged. These code changes passed local regression, type and lint checks; no further live model evaluation was run, as requested. Historical results below do not establish the quality of this revised flow. Backend deployment is separate.
+The public model is unchanged; the private replay now targets Nemotron. The underlying answer and memory changes passed local regression, type and lint checks; no further live model evaluation was run, as requested. Historical results below do not establish the quality of this revised flow or the new model. Backend deployment is separate.
 
 ## Earlier 14 October 2026 evaluation
 
@@ -45,4 +57,4 @@ Direct calls used `openai/gpt-oss-120b`, with exported production dialogue and e
 - Withhold unsupported answers; a safe refusal still fails answer usefulness when sufficient evidence exists.
 - Verify on the deployed backend separately. A GitHub merge or local replay is not deployment evidence.
 
-Those earlier changes retained retrieval and diagnostic improvements only. The current flow above supersedes the earlier verification contract; it does not change the model, reasoning setting, secrets or schema.
+Those earlier changes retained retrieval and diagnostic improvements only. The current flow above supersedes the earlier verification contract. The private Nemotron adapter does not change production secrets, the public model or the database schema.
