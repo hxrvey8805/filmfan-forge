@@ -59,7 +59,53 @@ describe('timestamped scene retrieval', () => {
       message({ id: 'episode', episode_number: 3, question: 'NEXTSECRET' })];
     expect(subtitleSearchText('Why is he hiding it?', history, position)).toContain('"sam" OR "hide" OR "key"');
     expect(subtitleSearchText('Why is he hiding it?', history, position)).not.toMatch(/futuresecret|nextsecret/);
-    expect(subtitleSearchText('What is happening right now?', [], position)).toBe('"right"');
+    expect(subtitleSearchText('What is happening right now?', [], position)).toBe('');
+    expect(subtitleSearchText('What is happening at this moment, based on the dialogue?', [], position)).toBe('');
+  });
+  it('keeps the entire permitted prefix when it fits, even beyond 14 passages', () => {
+    const cues = Array.from({ length: 35 }, (_, i) => ({ start: i * 20, end: i * 20 + 3, text: `Event_${i}.` }));
+    const result = selectSceneEvidence([record({ cues })], { ...position, seconds: 700 }, 'Recap so far');
+    for (const cue of cues) expect(result.some(item => item.text.includes(cue.text))).toBe(true);
+  });
+  it('joins adjacent exchanges across storage chunks without importing their future continuation', () => {
+    const rows = [record({ id: 'a', cues: [{ start: 80, end: 84, text: 'The first thing I will do when...' }] }),
+      record({ id: 'b', cues: [{ start: 85, end: 89, text: '...I take over is thank her.' },
+        { start: 99, end: 100.001, text: 'FUTURE_IDENTITY' }] })];
+    const result = selectSceneEvidence(rows, position, 'What do we know about the leader so far?');
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe('The first thing I will do when...\n...I take over is thank her.');
+    expect(result[0].end).toBe(89);
+    // Same timeline in a different episode must not become the same exchange.
+    expect(selectSceneEvidence([...rows, record({ id: 'old', episode_number: 1 })], position, 'Explain')).toHaveLength(2);
+  });
+  it('removes explicit uploader credits while retaining dialogue and sound labels', () => {
+    const cues = [{ start: 1, end: 6, text: 'Subs collected, corrected and adapted by UPLOADER for TV seasons' },
+      { start: 7, end: 9, text: '(SAM) Did you turn the subtitles on? [door opens]' },
+      { start: 10, end: 12, text: 'The translation was wrong.' }];
+    const result = selectSceneEvidence([record({ cues })], position, 'What is happening at this moment?');
+    const text = result.map(item => item.text).join('\n');
+    expect(text).not.toContain('UPLOADER');
+    expect(text).toContain('(SAM) Did you turn the subtitles on? [door opens]');
+    expect(text).toContain('The translation was wrong.');
+  });
+  it('fills recap space with substantive exchanges across time and reserves the current end', () => {
+    const cues = Array.from({ length: 60 }, (_, i) => ({ start: i * 30, end: i * 30 + 4,
+      text: i % 3 === 0 ? `EXCHANGE_${i}: We have to change our plans because the bridge is closed. Take the ferry instead.` : 'Okay.' }));
+    const result = selectSceneEvidence([record({ cues })], { ...position, seconds: 1800 }, 'What happened so far?', [], 2500);
+    const serialized = JSON.stringify(result);
+    expect(serialized.length).toBeLessThanOrEqual(2500);
+    expect(serialized.length).toBeGreaterThan(2200);
+    for (const [start, end] of [[0, 450], [450, 900], [900, 1350], [1350, 1800]]) {
+      expect(result.some(item => item.start >= start && item.start < end && item.text.includes('EXCHANGE_'))).toBe(true);
+    }
+    expect(result.at(-1)?.end).toBe(1774);
+  });
+  it('prioritizes the recent exchange over a distant passage for a scene question', () => {
+    const rows = [record({ id: 'old', cues: [{ start: 1, end: 5, text: 'The key opens the vault.' }] }),
+      record({ id: 'current', cues: [{ start: 90, end: 95, text: '(SAM) We have to get out now.' }] })];
+    const result = selectSceneEvidence(rows, position, 'What is happening right now with the key?', [], 180);
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toContain('get out now');
   });
   it('bounds conversation size and excludes future turns from the actual model prompt', () => {
     const history = Array.from({ length: 6 }, (_, i) => message({ id: String(i), answer: 'A'.repeat(9000),

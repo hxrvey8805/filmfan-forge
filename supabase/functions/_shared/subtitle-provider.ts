@@ -52,7 +52,9 @@ export async function loadSubtitleFile(position: Omit<ViewingPosition, 'seconds'
     const link = (await download.json()).link;
     if (typeof link !== 'string' || !link.startsWith('https://')) throw new SubtitleProviderError('provider_error', 'link');
     const file = await request(link, {}, 'file');
-    const cues = parseSubtitles(await file.text());
+    const text = await file.text();
+    let cues;
+    try { cues = parseSubtitles(text); } catch { throw new SubtitleProviderError('provider_error', 'parse'); }
     if (!cues.length) throw new SubtitleProviderError('provider_error', 'parse');
     return { fileId, cues };
   } catch (error) {
