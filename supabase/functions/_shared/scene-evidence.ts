@@ -127,8 +127,10 @@ export function selectSceneEvidence(records: SubtitleRecord[], position: Viewing
       other.season === item.season && other.episode === item.episode &&
       other.start <= item.end + 12 && other.end >= item.start - 12);
   });
+  // Long exchanges must not crowd out the early setup in a recap. Reserve two
+  // early packets as well as the recent end, still under the same hard budget.
   const sources = intent === 'scene' ? [local, relevant, neighbours, overview] :
-    intent === 'recap' ? [local.slice(0, 2), overview, relevant, local, neighbours] : [relevant, neighbours, local, overview];
+    intent === 'recap' ? [prefix.slice(0, 2), local.slice(0, 2), overview, relevant, local, neighbours] : [relevant, neighbours, local, overview];
   const selected: Evidence[] = [];
   const used = new Set<string>();
   let size = 2;
