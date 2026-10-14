@@ -9,7 +9,7 @@ const record = (overrides: Partial<SubtitleRecord> = {}): SubtitleRecord => ({ i
 const message = (overrides: Partial<Conversation> = {}): Conversation => ({ id: 'safe', title_id: 1,
   media_type: 'tv', season_number: 1, episode_number: 2, position_seconds: 90, companion_version: 2,
   question: 'Why did Sam hide the key?', answer: 'The key is hidden.', context: '', timestamp: '00:01:30',
-  created_at: '2026-10-14T00:00:00Z', ...overrides });
+  created_at: '2026-10-14T00:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('timestamped scene retrieval', () => {
   it('filters crossing cues, later episodes, other titles and legacy caches before ranking', () => {
@@ -126,6 +126,6 @@ describe('timestamped scene retrieval', () => {
     expect(memory.length).toBeGreaterThan(0);
     const prompts = buildPrompts('Why?', position, selectSceneEvidence([record()], position, 'Why?'), history);
     expect(prompts.user).not.toContain('FUTURESECRET');
-    expect(JSON.parse(prompts.user).nearbyEvidenceIds).toEqual(['one:90000']);
+    expect(prompts.data.nearbyEvidenceIds).toEqual(['P1']);
   });
 });
