@@ -2,12 +2,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   COMPANION_VERSION, conversationMemory, formatTimestamp,
-  parseTimestamp, questionIntent, safeEvidence,
+  parseTimestamp,
   type Conversation, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
 
 import { checkedAnswer } from "../_shared/answer.ts";
 import { groqGenerator } from "../_shared/groq.ts";
+import { selectSceneEvidence, subtitleSearchText } from "../_shared/scene-evidence.ts";
+
+import { assertSubtitlePreparation, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -30,13 +33,17 @@ async function ensureCurrentSubtitles(db: SupabaseClient, position: ViewingPosit
   if (existing.data?.length) return;
   // Prepare only this episode, not every preceding episode during a question.
   try {
-    await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-subtitles`, {
+    const prepared = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-subtitles`, {
       method: 'POST', headers: { Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ tmdbId: position.tmdbId, mediaType: position.mediaType,
         seasonNumber: position.seasonNumber, episodeNumber: position.episodeNumber }),
       signal: AbortSignal.timeout(45000),
     });
-  } catch { /* Fail closed below if the cache is still unavailable. */ }
+    await assertSubtitlePreparation(prepared);
+  } catch (error) {
+    if (error instanceof SubtitleProviderError) throw error;
+    throw new SubtitleProviderError('provider_error', 'prepare');
+  }
 }
 
 async function embedQuestion(text: string): Promise<number[] | null> {
@@ -55,42 +62,21 @@ async function embedQuestion(text: string): Promise<number[] | null> {
 }
 
 async function retrieve(db: SupabaseClient, position: ViewingPosition, question: string, memory: Conversation[]) {
-  const searchText = [...memory.slice(-2).map(row => `${row.question}\n${row.answer}`), question].join('\n');
-  const embedding = await embedQuestion(searchText);
-  const intent = questionIntent(question);
-  const [recent, relevant, beginning] = await Promise.all([
-    // This may overlap the boundary, so ONLY safeEvidence's completed raw cues
-    // enter the prompt. Never send the chunk's unfiltered content.
+  const searchText = subtitleSearchText(question, memory, position);
+  const embedding = await embedQuestion(question);
+  const [prefix, relevant] = await Promise.all([
+    // Rank the permitted prefix at cue level, including the boundary chunk.
+    // Future cues are removed before excerpts, keyword scoring, or sampling.
     currentChunks(db, position).lte('start_seconds', position.seconds)
-      .order('start_seconds', { ascending: false }).limit(intent === 'scene' ? 4 : 6),
+      .order('start_seconds', { ascending: true }).limit(1000),
     db.rpc('match_companion_chunks', { p_tmdb_id: position.tmdbId, p_media_type: position.mediaType,
       p_current_season: position.seasonNumber ?? 0, p_current_episode: position.episodeNumber ?? 0,
       p_max_seconds: position.seconds, p_question: searchText, p_embedding: embedding }),
-    currentChunks(db, position).lte('start_seconds', position.seconds)
-      .order('start_seconds', { ascending: true }).limit(intent === 'recap' ? 200 : 2),
   ]);
-  if (recent.error || beginning.error) throw recent.error || beginning.error;
+  if (prefix.error) throw prefix.error;
   if (relevant.error) throw relevant.error;
-  const chronological = (beginning.data ?? []) as unknown as SubtitleRecord[];
-  // Recaps sample across the permitted prefix, preserving its beginning and end.
-  const overview = intent === 'recap' && chronological.length > 14
-    ? Array.from({ length: 14 }, (_, i) => chronological[Math.round(i * (chronological.length - 1) / 13)])
-    : chronological;
-  // Mix nearby, relevant and overview chunks so a bounded prompt still includes
-  // earlier context instead of filling its entire budget with the newest cues.
-  const sources = [recent.data ?? [], relevant.data ?? [], overview];
-  const prioritized = Array.from({ length: Math.max(...sources.map(rows => rows.length)) }, (_, i) =>
-    sources.flatMap(rows => rows[i] ? [rows[i]] : [])).flat() as unknown as SubtitleRecord[];
-  const selected: SubtitleRecord[] = [];
-  const seen = new Set<string>();
-  let budget = 0;
-  for (const record of prioritized) {
-    const safe = safeEvidence([record], position)[0];
-    if (!safe || seen.has(record.id)) continue;
-    if (budget + safe.text.length > 12000) continue;
-    selected.push(record); seen.add(record.id); budget += safe.text.length;
-  }
-  return safeEvidence(selected, position);
+  return selectSceneEvidence([...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[],
+    position, question, memory);
 }
 
 serve(async req => {
