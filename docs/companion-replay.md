@@ -14,7 +14,19 @@ deno run --env-file=/private/groq.env --allow-env=GROQ_API_KEY \
   scripts/companion-replay.ts /private/audit/input.json /private/audit/result-live.json --live
 ```
 
-## 14 October 2026 evaluation
+## Current answer flow
+
+The writer receives readable chronological passages with short request-local citation IDs. Each claim is a short, standalone statement with its own qualifications. The checker receives the entire selected evidence context, not just the passages chosen by the writer, and must check every claim individually.
+
+Only explicitly supported claims can be returned, and only when the checker finds that those claims alone make a useful, coherent answer. The server maps their aliases back to the original citations. Incomplete, contradictory or boundary-failing verdicts are rejected outright.
+
+An unusable draft or insufficient answer gets at most one fresh rewrite and another independent check. The rewrite uses the same permitted evidence and memory, plus fixed issue-category guidance; rejected prose and checker explanations are never fed into it. There are at most four model calls, and provider failures propagate without publishing an unchecked draft. A retry can increase latency or encounter the provider's free-tier rate limit.
+
+Conversation memory includes only saved `answered` turns from the same permitted scope. Failed answers remain visible in chat but cannot prime the next answer. Overlong replies are omitted from prompt memory instead of being cut mid-qualification. Retrieval and generation both enforce the viewing boundary.
+
+The model is unchanged. These code changes passed local regression, type and lint checks; no further live model evaluation was run, as requested. Historical results below do not establish the quality of this revised flow. Backend deployment is separate.
+
+## Earlier 14 October 2026 evaluation
 
 Direct calls used `openai/gpt-oss-120b`, with exported production dialogue and empty history. These are local model evaluations, not tests of a deployed backend or reconstructions of the complete historical requests.
 
@@ -33,4 +45,4 @@ Direct calls used `openai/gpt-oss-120b`, with exported production dialogue and e
 - Withhold unsupported answers; a safe refusal still fails answer usefulness when sufficient evidence exists.
 - Verify on the deployed backend separately. A GitHub merge or local replay is not deployment evidence.
 
-This change retains retrieval and diagnostic improvements only. It does not claim the companion's answer quality is fixed or change the model, reasoning setting, verification contract, secrets or schema.
+Those earlier changes retained retrieval and diagnostic improvements only. The current flow above supersedes the earlier verification contract; it does not change the model, reasoning setting, secrets or schema.

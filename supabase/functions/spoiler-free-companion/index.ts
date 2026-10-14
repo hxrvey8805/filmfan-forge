@@ -114,7 +114,8 @@ serve(async req => {
       return json({ answer: prior.data.answer, conversation: prior.data, usedCoins: 0 });
     }
     let historyQuery = userDb.from('ai_conversations').select('*').eq('title_id', tmdbId)
-      .eq('media_type', mediaType).eq('companion_version', COMPANION_VERSION).lte('position_seconds', seconds);
+      .eq('media_type', mediaType).eq('companion_version', COMPANION_VERSION)
+      .eq('answer_status', 'answered').lte('position_seconds', seconds);
     if (mediaType === 'tv') historyQuery = historyQuery.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
     const historyResult = await historyQuery.order('created_at', { ascending: false }).limit(30);
     if (historyResult.error) throw historyResult.error;

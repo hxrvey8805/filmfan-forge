@@ -46,10 +46,11 @@ if (mode === '--live') {
     return response;
   });
   try {
-    result = await checkedAnswer(input.question, input.position, evidence, history, async (system, user, maxTokens) => {
-      requests.push({ phase: generations.length ? 'verifier' : 'writer', system, user, maxTokens });
+    result = await checkedAnswer(input.question, input.position, evidence, history, async (system, user, maxTokens, purpose) => {
+      const phase = purpose ?? 'unknown';
+      requests.push({ phase, system, user, maxTokens });
       const response = await generate(system, user, maxTokens);
-      generations.push({ phase: generations.length ? 'verifier' : 'writer', response });
+      generations.push({ phase, response });
       return response;
     }, event => checks.push(event));
   } catch (failure) {
