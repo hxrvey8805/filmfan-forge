@@ -19,16 +19,49 @@ const history = input.history ?? [];
 const evidence = selectSceneEvidence(input.records, input.position, input.question, history);
 const prompts = buildPrompts(input.question, input.position, evidence, history);
 const checks: AnswerDiagnostics[] = [];
+const generations: { phase: string; response: unknown }[] = [];
+const requests: { phase: string; system: string; user: string; maxTokens: number }[] = [];
+const usage: unknown[] = [];
+const requestConfigs: unknown[] = [];
+const providerFailures: { status: number; code: string | null }[] = [];
+let error: string | null = null;
 let result = null;
 if (mode === '--live') {
   const key = Deno.env.get('GROQ_API_KEY');
   if (!key) throw new Error('Set the existing GROQ_API_KEY in your environment before a live replay.');
-  result = await checkedAnswer(input.question, input.position, evidence, history, groqGenerator(key), event => checks.push(event));
+  const generate = groqGenerator(key, async (url, options) => {
+    const body = JSON.parse(options && 'body' in options && typeof options.body === 'string' ? options.body : '{}');
+    requestConfigs.push({ model: body.model, reasoningEffort: body.reasoning_effort,
+      responseFormat: body.response_format?.type, maxCompletionTokens: body.max_completion_tokens });
+    const response = await fetch(url, options);
+    if (response.ok) {
+      const body = await response.clone().json();
+      usage.push(body.usage ?? null);
+    } else {
+      // Keep diagnostic codes only; provider bodies may echo input or reasoning.
+      const body = await response.clone().json().catch(() => null);
+      const code = body?.error?.code;
+      providerFailures.push({ status: response.status, code: typeof code === 'string' && /^[a-z_]{1,80}$/.test(code) ? code : null });
+    }
+    return response;
+  });
+  try {
+    result = await checkedAnswer(input.question, input.position, evidence, history, async (system, user, maxTokens) => {
+      requests.push({ phase: generations.length ? 'verifier' : 'writer', system, user, maxTokens });
+      const response = await generate(system, user, maxTokens);
+      generations.push({ phase: generations.length ? 'verifier' : 'writer', response });
+      return response;
+    }, event => checks.push(event));
+  } catch (failure) {
+    error = failure instanceof Error ? failure.message : 'Replay failed';
+  }
 }
 await Deno.writeTextFile(outputPath, JSON.stringify({
   mode: mode === '--live' ? 'live-model-replay' : 'retrieval-only', model: COMPANION_MODEL,
   note: 'Reconstructed from the input export, not a captured historical request. Missing history or retrieved records are not recreated.',
-  question: input.question, position: input.position, evidence, prompts, checks, result,
+  question: input.question, position: input.position, evidence, prompts, checks, requests, requestConfigs,
+  generations, usage, providerFailures, error, result,
 }, null, 2));
 console.log(JSON.stringify({ mode: mode ?? 'retrieval-only', passages: evidence.length,
-  evidenceChars: JSON.stringify(evidence).length, checks, outputPath }));
+  evidenceChars: JSON.stringify(evidence).length, checks, providerFailures, error, outputPath }));
+if (error) Deno.exit(1);

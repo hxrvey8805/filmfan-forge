@@ -62,6 +62,16 @@ describe('timestamped scene retrieval', () => {
     expect(subtitleSearchText('What is happening right now?', [], position)).toBe('');
     expect(subtitleSearchText('What is happening at this moment, based on the dialogue?', [], position)).toBe('');
   });
+  it('retains the first two passages even when larger exchanges compete for recap space', () => {
+    const cues = [{ start: 1, end: 4, text: 'EARLIEST_AVAILABLE' },
+      { start: 30, end: 34, text: 'EARLY_CONTEXT: This message is for my family.' },
+      ...Array.from({ length: 38 }, (_, i) => ({ start: 60 + i * 30, end: 64 + i * 30,
+        text: `Later exchange ${i}. We need to change our plans and discuss a different route.` }))];
+    const result = selectSceneEvidence([record({ cues })], { ...position, seconds: 1250 }, 'Recap so far', [], 2500);
+    expect(result[0].text).toBe('EARLIEST_AVAILABLE');
+    expect(result[1].text).toContain('EARLY_CONTEXT');
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(2500);
+  });
   it('keeps the entire permitted prefix when it fits, even beyond 14 passages', () => {
     const cues = Array.from({ length: 35 }, (_, i) => ({ start: i * 20, end: i * 20 + 3, text: `Event_${i}.` }));
     const result = selectSceneEvidence([record({ cues })], { ...position, seconds: 700 }, 'Recap so far');
