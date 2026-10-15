@@ -62,6 +62,9 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
     const choice = result?.choices?.[0];
     if (result?.error || choice?.error) throw new Error(failureMessage);
     if (choice?.message?.tool_calls?.length || choice?.message?.annotations?.length) throw new Error(failureMessage);
+    if (choice?.finish_reason === 'content_filter') {
+      throw new Error('The AI provider blocked this request, so I could not verify an answer. You have not been charged.');
+    }
     if (choice?.finish_reason !== 'stop') throw new Error('The answer was incomplete. Please try again.');
     // Never recover a draft from reasoning, tool calls, or prose around JSON.
     const content = choice?.message?.content;

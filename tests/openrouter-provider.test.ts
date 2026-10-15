@@ -41,9 +41,14 @@ describe('OpenRouter companion transport', () => {
     } finally { log.mockRestore(); }
   });
 
-  it.each(['length', 'content_filter', 'tool_calls', 'error'])('rejects %s even when the content is valid JSON', async reason => {
+  it.each(['length', 'tool_calls', 'error'])('rejects %s even when the content is valid JSON', async reason => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{"supported":true}', reason));
     await expect(openRouterGenerator('test-key', request)('System', 'Question', 900)).rejects.toThrow('incomplete');
+  });
+  it('distinguishes provider filtering from truncation and never publishes or retries the blocked answer', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{"supported":true}', 'content_filter'));
+    await expect(openRouterGenerator('test-key', request)('System', 'Question', 900)).rejects.toThrow('AI provider blocked');
+    expect(request).toHaveBeenCalledOnce();
   });
 
   it.each([null, '', 'not JSON', '<think>future detail</think>{"supported":true}',
@@ -104,7 +109,7 @@ describe('OpenRouter companion transport', () => {
     const request = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(completion(JSON.stringify({ status: 'answered', claims: [claim] })))
       .mockResolvedValueOnce(completion(JSON.stringify({ withinBoundary: true, sufficient: true,
-        checks: [{ index: 0, supported: true, issue: 'none', reason: 'Sam explicitly asks this.' }] })));
+        checks: [{ index: 0, supported: true, issue: 'none', basis: 'entailed', reason: 'Sam explicitly asks this.', support: [{ evidenceId: 'P1', quote: 'Keep this letter sealed.' }] }] })));
     const result = await checkedAnswer('Why?', position, [safe,
       { ...safe, id: 'future', end: 31, text: 'FUTURE_CUE' },
       { ...safe, id: 'other-episode', episode: episode + 1, text: 'OTHER_EPISODE_CUE' }], [memory,

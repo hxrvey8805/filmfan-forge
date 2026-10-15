@@ -30,8 +30,8 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
     // Include the complete selected context, not just the writer's chosen
     // excerpts: surrounding dialogue can contradict a plausible paraphrase.
     const verdict = await generate(VERIFICATION_PROMPT,
-      JSON.stringify({ question, position, evidence: prompts.data.evidence, claims: draft.claims }), 900, 'verifier');
-    const selection = verifiedSelection(verdict, draft.claims.length);
+      JSON.stringify({ question, position, evidence: prompts.data.evidence, claims: draft.claims }), 1800, 'verifier');
+    const selection = verifiedSelection(verdict, draft.claims, prompts.data.evidence);
     if (!selection) { report('verification_invalid', draft.claims.length); return null; }
     if (selection.sufficient && selection.indexes.length) {
       const claims = selection.indexes.map(index => draft.claims[index]);

@@ -25,6 +25,7 @@ const requests: { phase: string; system: string; user: string; maxTokens: number
 const usage: unknown[] = [];
 const requestConfigs: unknown[] = [];
 const providerFailures: { status: number; code: string | null }[] = [];
+const completions: { status: number; finishReason: string | null; hasError: boolean }[] = [];
 let error: string | null = null;
 let result = null;
 if (mode === '--live') {
@@ -39,6 +40,10 @@ if (mode === '--live') {
     if (response.ok) {
       const body = await response.clone().json().catch(() => null);
       usage.push(body?.usage ?? null);
+      const finishReason = body?.choices?.[0]?.finish_reason;
+      completions.push({ status: response.status,
+        finishReason: typeof finishReason === 'string' && /^[a-z_]{1,40}$/.test(finishReason) ? finishReason : null,
+        hasError: Boolean(body?.error || body?.choices?.[0]?.error) });
     } else {
       // Keep diagnostic codes only; provider bodies may echo input or reasoning.
       const body = await response.clone().json().catch(() => null);
@@ -63,7 +68,7 @@ await Deno.writeTextFile(outputPath, JSON.stringify({
   mode: mode === '--live' ? 'live-model-replay' : 'retrieval-only', model: OPENROUTER_MODEL,
   note: 'Reconstructed from the input export, not a captured historical request. Missing history or retrieved records are not recreated.',
   question: input.question, position: input.position, evidence, prompts, checks, requests, requestConfigs,
-  generations, usage, providerFailures, error, result,
+  generations, usage, providerFailures, completions, error, result,
 }, null, 2));
 console.log(JSON.stringify({ mode: mode ?? 'retrieval-only', passages: evidence.length,
   evidenceChars: JSON.stringify(evidence).length, checks, providerFailures, error, outputPath }));

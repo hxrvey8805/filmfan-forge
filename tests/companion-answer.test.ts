@@ -6,7 +6,7 @@ const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1,
 const evidence: Evidence[] = [{ id: 'letter', season: 1, episode: 2, start: 10, end: 12, text: '[00:00:10] (SAM) Keep this letter sealed.' }];
 const claim = { text: 'Sam has asked for the letter to stay sealed.', evidenceIds: ['P1'] };
 const draft = { status: 'answered', claims: [claim] };
-const check = { index: 0, supported: true, issue: 'none', reason: 'Sam explicitly asks for the letter to stay sealed.' };
+const check = { index: 0, supported: true, issue: 'none', basis: 'entailed', reason: 'Sam explicitly asks for the letter to stay sealed.', support: [{ evidenceId: 'P1', quote: 'Keep this letter sealed.' }] };
 const pass = { withinBoundary: true, sufficient: true, checks: [check] };
 const reject = { withinBoundary: true, sufficient: false, checks: [{ ...check, supported: false, issue: 'speaker', reason: 'The speaker is unestablished.' }] };
 const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media_type: 'tv', season_number: 1, episode_number: 2,
@@ -14,6 +14,37 @@ const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media
   timestamp: '00:00:20', created_at: '2026-10-13T12:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('answer generation and independent verification', () => {
+  it('allows only whitespace differences when checking a continuous supporting quotation', async () => {
+    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
+    const rows = [{ ...evidence[0], text: '(SAM) Keep this\nletter sealed.' }];
+    expect((await checkedAnswer('What did Sam ask?', position, rows, [], generate))?.answer).toBe(claim.text);
+  });
+  it('rejects a quotation stitched across omitted dialogue even without ellipses', async () => {
+    const generate = vi.fn().mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce({ ...pass, checks: [{ ...check,
+        support: [{ evidenceId: 'P1', quote: 'Keep this letter sealed.' }] }] });
+    const rows = [{ ...evidence[0], text: '(SAM) Keep this\nother dialogue that changes the meaning\nletter sealed.' }];
+    expect(await checkedAnswer('What did Sam ask?', position, rows, [], generate)).toBeNull();
+  });
+  it.each([
+    { basis: 'plausible' },
+    { support: [] },
+    { support: [{ evidenceId: 'P1', quote: 'He opens the letter.' }] },
+    { support: [{ evidenceId: 'P2', quote: 'Keep this letter sealed.' }] },
+    { support: [{ evidenceId: 'P1', quote: 'Keep … sealed.' }] },
+  ])('rejects a positive verdict without exact, entailed support from the cited passage (%j)', async invalid => {
+    const generate = vi.fn().mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce({ ...pass, checks: [{ ...check, ...invalid }] });
+    expect(await checkedAnswer('Why?', position, evidence, [], generate)).toBeNull();
+  });
+  it('does not let a bare exclamation prove that a plan succeeded', async () => {
+    const row = { ...evidence[0], text: 'Yes! Okay. Thank you.' };
+    const generate = vi.fn().mockResolvedValueOnce({ status: 'answered', claims: [
+      { text: 'The plan worked and everyone is relieved.', evidenceIds: ['P1'] }] })
+      .mockResolvedValueOnce({ ...pass, checks: [{ ...check,
+        support: [{ evidenceId: 'P1', quote: 'Yes! Okay. Thank you.' }] }] });
+    expect(await checkedAnswer('What happened?', position, [row], [], generate)).toBeNull();
+  });
   it('uses permitted memory only for references and maps short citations back to real evidence', async () => {
     const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
     const result = await checkedAnswer('Why?', position, evidence, [history(),

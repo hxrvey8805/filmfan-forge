@@ -16,8 +16,27 @@ describe('subtitle import reliability', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({ 'User-Agent': 'CineGeek v1.0' });
     expect(fetcher.mock.calls[2][1]?.headers).toBeUndefined();
+    expect(JSON.parse(fetcher.mock.calls[1][1]!.body as string)).toEqual({ file_id: 42, sub_format: 'srt' });
     const params = new URL(String(fetcher.mock.calls[0][0])).searchParams;
     expect([...params.keys()]).toEqual([...params.keys()].sort());
+  });
+  it('decodes a UTF-16 BOM without moving or merging cue times', async () => {
+    const text = '\uFEFF1\r\n00:00:01,500 --> 00:00:02,750\r\n(SAM) Stay here.';
+    const bytes = new Uint8Array(text.length * 2);
+    for (let i = 0; i < text.length; i++) { bytes[i * 2] = text.charCodeAt(i) & 255; bytes[i * 2 + 1] = text.charCodeAt(i) >> 8; }
+    const fetcher = mock().mockResolvedValueOnce(response({ link: 'https://files.example/test' }))
+      .mockResolvedValueOnce(new Response(bytes));
+    await expect(loadSubtitleFile(position, 'secret', fetcher)).resolves.toMatchObject({
+      cues: [{ start: 1.5, end: 2.75, text: '(SAM) Stay here.' }],
+    });
+  });
+  it('reports safe parsing categories without exposing the file or download URL', async () => {
+    const fetcher = mock().mockResolvedValueOnce(response({ link: 'https://files.example/PRIVATE' }))
+      .mockResolvedValueOnce(new Response('[Script Info]\nPRIVATE DIALOGUE'));
+    await expect(loadSubtitleFile(position, 'secret', fetcher)).rejects.toMatchObject({
+      reason: 'provider_error', stage: 'parse', detail: 'unsupported_format',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
   });
   it('does not download a wrong movie or episode', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ data: [{ attributes: {

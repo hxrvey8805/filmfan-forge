@@ -15,6 +15,18 @@ const message = (overrides: Partial<Conversation> = {}): Conversation => ({
 });
 
 describe('subtitle parsing and exact timestamps', () => {
+  it('reads decimal precision, padded timing lines and WebVTT voices without shifting the boundary', () => {
+    const text = 'WEBVTT\n\nNOTE provider note\nNot a scene\n\nclip\n  00:01.5 --> 00:02.75 align:start\n<v Sam>Stay here.</v>\n\n00:02.751 --> 00:03.000\nLater dialogue.';
+    const cues = parseSubtitles(text);
+    expect(cues).toEqual([{ start: 1.5, end: 2.75, text: '(Sam) Stay here.' },
+      { start: 2.751, end: 3, text: 'Later dialogue.' }]);
+    const row = record({ cues });
+    expect(safeEvidence([row], { ...position, seconds: 2.75 })[0].text).not.toContain('Later dialogue');
+  });
+  it.each(['[Script Info]\nDialogue: unknown timing', '{100}{200}Unknown frame rate', '<html>Unavailable</html>'])(
+    'rejects an unconverted or non-subtitle response without inventing its timing', text => {
+      expect(() => parseSubtitles(text)).toThrow('unsupported_format');
+    });
   const srt = '1\n00:00:10,250 --> 00:00:12,500\n[door opens] <i>Hello.</i>\n\n2\n00:00:20,000 --> 00:00:22,000\n(SAM) Stay here.\n\n3\n00:00:40,000 --> 00:00:42,000\nFuture reveal.';
   it('normalizes CRLF, CR and BOM without collapsing later cues into the first', () => {
     const expected = parseSubtitles(srt);

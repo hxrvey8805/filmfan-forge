@@ -51,7 +51,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: true, chunksStored: rows.length }), { headers });
   } catch (error) {
     if (error instanceof SubtitleProviderError) {
-      console.error('Subtitle provider failed', { reason: error.reason, stage: error.stage, status: error.status });
+      console.error('Subtitle provider failed', { reason: error.reason, stage: error.stage, status: error.status, detail: error.detail });
       return new Response(JSON.stringify({ error: error.message, reason: error.reason }), { status: 503, headers });
     }
     console.error('Subtitle ingestion failed', error instanceof Error ? error.message : 'database error');
