@@ -7,8 +7,8 @@ import {
 } from "../_shared/companion.ts";
 
 import { checkedAnswer } from "../_shared/answer.ts";
-import { companionGenerator } from "../_shared/companion-provider.ts";
-import { selectSceneEvidence, subtitleSearchText } from "../_shared/scene-evidence.ts";
+import { companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
+import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 
 import { assertSubtitlePreparation, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
 
@@ -59,8 +59,8 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
   ]);
   if (prefix.error) throw prefix.error;
   if (relevant.error) throw relevant.error;
-  return selectSceneEvidence([...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[],
-    position, question, memory);
+  return selectSceneContext([...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[],
+    position, question, memory, companionEvidenceBudget(name => Deno.env.get(name)));
 }
 
 serve(async req => {
@@ -105,13 +105,13 @@ serve(async req => {
     if (historyResult.error) throw historyResult.error;
     const memory = conversationMemory((historyResult.data ?? []) as Conversation[], position);
     await ensureCurrentSubtitles(db, position);
-    const evidence = await retrieve(db, position, question.trim(), memory);
+    const { evidence, coverage } = await retrieve(db, position, question.trim(), memory);
     let checked = null;
     if (evidence.length) {
       const generate = companionGenerator(name => Deno.env.get(name));
       checked = await checkedAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
-          evidenceChars: JSON.stringify(evidence).length }));
+          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage.omittedPassages }), coverage);
     }
     const answer = checked?.answer ?? (evidence.length
       ? `I can’t establish that from the dialogue available up to ${formatTimestamp(seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`

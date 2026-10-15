@@ -14,6 +14,30 @@ const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media
   timestamp: '00:00:20', created_at: '2026-10-13T12:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('answer generation and independent verification', () => {
+  it('rebuilds an invented named attribution and still permits a useful anonymous explanation', async () => {
+    const rows = [{ ...evidence[0], text: '[00:00:10] The letter must stay sealed.' }];
+    const wrong = { status: 'answered', claims: [{ text: 'Mira says to keep the letter sealed.', evidenceIds: ['P1'] }] };
+    const good = { status: 'answered', claims: [{ text: 'A speaker says the letter must remain sealed.', evidenceIds: ['P1'] }] };
+    const generate = vi.fn().mockResolvedValueOnce(wrong).mockResolvedValueOnce(good).mockResolvedValueOnce(pass);
+    expect((await checkedAnswer('What do we know about Mira?', position, rows, [], generate))?.answer).toBe(good.claims[0].text);
+    expect(generate.mock.calls.map(call => call[3])).toEqual(['writer', 'writer', 'verifier']);
+    expect(generate.mock.calls[1][0]).toContain('Do not infer a role or identity');
+    expect(generate.mock.calls[2][1]).not.toContain(wrong.claims[0].text);
+  });
+  it('passes bounded omission metadata to both stages without leaking extra fields or future intervals', async () => {
+    const coverage = { providedPassages: 2, selectedPassages: 1, omittedPassages: 1,
+      omittedRanges: [{ season: 1, episode: 2, start: 1, end: 3, text: 'PRIVATE_EXTRA_FIELD' }] };
+    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
+    await checkedAnswer('Why?', position, evidence, [], generate, undefined, coverage);
+    expect(generate.mock.calls[0][1]).toContain('"omittedPassages":1');
+    expect(JSON.parse(generate.mock.calls[1][1]).coverage.omittedRanges).toEqual([{ season: 1, episode: 2, start: 1, end: 3 }]);
+    expect(JSON.stringify(generate.mock.calls)).not.toContain('PRIVATE_EXTRA_FIELD');
+    const later = { ...coverage, omittedRanges: [{ season: 1, episode: 3, start: 1, end: 3 }] };
+    const next = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
+    await checkedAnswer('Why?', position, evidence, [], next, undefined, later);
+    expect(JSON.parse(next.mock.calls[1][1])).not.toHaveProperty('coverage');
+    expect(next.mock.calls[0][1]).toContain('Retrieval coverage: Unknown');
+  });
   it('does not publish an overlong scene answer even if a model ignores the two-claim limit', async () => {
     const generate = vi.fn().mockResolvedValue({ ...draft, claims: [claim, claim, claim] });
     expect(await checkedAnswer('What is happening at this moment?', position, evidence, [], generate)).toBeNull();

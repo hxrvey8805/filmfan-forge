@@ -6,7 +6,7 @@ The companion can use `dots-studio/dots-3-note-preview:free` through OpenRouter,
 
 The [OpenRouter model listing](https://openrouter.ai/dots-studio/dots-3-note-preview:free) currently has zero input/output prices and a **31 December 2026** retirement date. The [endpoint metadata](https://openrouter.ai/api/v1/models/dots-studio/dots-3-note-preview:free/endpoints) advertises JSON output and reasoning. The model is [Apache 2.0 licensed](https://huggingface.co/dots-studio/dots3-note-prev/blob/main/README.md); [AtlasCloud's API integration terms](https://www.atlascloud.ai/acceptable-use) allow end-user applications that add substantial functionality. CineGeek adds timestamp-gated evidence retrieval, scoped memory and independent claim verification; it does not expose a raw model API.
 
-The adapter pins the free model and provider, sets maximum prompt/completion/request prices to zero, and disables provider fallbacks, tools and plugins. It requests JSON and parses only a complete final object. Truncated output, tool calls, source annotations, malformed JSON and provider failures cannot publish an unchecked answer. Provider errors are sanitized and never include credentials or echoed questions. A request times out after at most 45 seconds, with a shared 90-second budget for all writer/checker/repair calls. Provider failures are not automatically retried.
+The adapter pins the free model and provider, sets maximum prompt/completion/request prices to zero, and disables provider fallbacks, tools and plugins. It requests JSON and parses only a complete final object. Truncated output, tool calls, source annotations, malformed JSON and provider failures cannot publish an unchecked answer. Provider errors are sanitized and never include credentials or echoed questions. All writer/checker/repair calls share one 90-second budget; each call gets only the time remaining. Provider failures are not automatically retried.
 
 Before activation, confirm that the OpenRouter workspace does not enforce locked-on plugins or paid account defaults. Explicitly disabling plugins in a request does not override an account-level “Prevent overrides” rule. Do not turn on billing, purchase credits or weaken privacy preferences. Keep keys in backend secrets or a private local env file outside Git (mode 0600), never a `VITE_` variable.
 
@@ -17,6 +17,8 @@ The question and subtitle-ingestion paths no longer call paid OpenAI embeddings.
 The previous Nemotron free endpoint was removed from the integration because its linked NVIDIA API Trial Terms exclude public production use. It is not a fallback.
 
 ## Deployment
+
+**The current caption/context repair is held in draft. Do not merge or deploy it until the original questions pass a fresh live evaluation, including rewind and episode-switch checks.** The provider activation steps below describe the earlier connection. The current repair also requires `20261015153000_caption_context_revision.sql` alongside both edge functions: subtitle revision 3 excludes older caption caches while preserving conversation version 2. Do not use the earlier migration-free deployment instruction unchanged for this repair.
 
 1. Merge the reviewed change to GitHub main so Lovable syncs the source.
 2. Store `OPENROUTER_API_KEY` in CineGeek's Cloud secrets; never paste it into Lovable chat or commit it.
@@ -36,6 +38,8 @@ Suggested deployment-only instruction, **send only when build-credit use is auth
 
 Input JSON contains `question`, `position`, `records` and optional `history`, using the shared companion types. Without `--live`, the script writes retrieval and the writer prompt. With `--live`, it uses the same OpenRouter adapter as the backend and saves writer/checker requests, final JSON responses, token usage, safe provider error codes and the answer or refusal. It never saves credentials, raw provider error bodies or model reasoning. Errors preserve the partial audit and exit with a nonzero status. Live replay is opt-in and should only run when requested.
 
+The OpenRouter path and replay use a 16,000-character serialized evidence budget; the legacy Groq path retains its 8,500-character cap. Both report counts and bounded timestamp ranges for omitted passages to the writer and checker. This measures selection from the supplied caption records, not source completeness or alignment with the viewer's playback edition. The source is filtered at each cue's end time before selection. Increasing the budget never increases the viewing boundary.
+
 ```sh
 deno run --allow-read=/private/audit --allow-write=/private/audit \
   scripts/companion-replay.ts /private/audit/input.json /private/audit/result.json
@@ -52,9 +56,19 @@ The writer receives only permitted chronological passages with short request-loc
 
 There is at most one fresh rewrite and another independent check, using the same permitted evidence and memory plus fixed issue-category guidance. Rejected prose and checker explanations never become evidence. Provider failures propagate without publishing an unchecked draft.
 
+Before verification, deterministic grounding checks reject a named question subject absent from its cited passages and named speech without an explicit cited speaker label. A name called aloud is not a speaker label. The writer may still explain an unlabeled conversation anonymously. These are necessary grounding conditions, not a general entity resolver or proof that every remaining claim is true. The semantic verifier remains required.
+
 Memory includes only saved `answered` turns from the same permitted scope. Failed answers remain visible in chat but cannot prime the next answer. Overlong replies are omitted instead of being cut mid-qualification. Retrieval and generation both enforce the viewing boundary, and the UI rejects stale responses after rewind, title/episode/account changes. Timestamp-only inputs are preserved.
 
-Offline tests cover the provider requests, free-only routing, quota failures and the real writer/checker request bodies after rewind or episode switches. They do not establish model answer quality or guarantee that a model will never hallucinate. No live model questions were run for this provider change, as requested. Deployment status is reported separately.
+Offline tests cover the provider requests, free-only routing, quota failures and the real writer/checker request bodies after rewind or episode switches. They do not establish model answer quality or guarantee that a model will never hallucinate. Deployment status is reported separately.
+
+## 15 October offline follow-up
+
+The saved Social Network input at 05:00 contained 177 completed cues. Its full serialized evidence was 8,632 characters: only 132 over the legacy cap. Whole-passage selection consequently dropped the 03:48.02–04:55.45 exchange, leaving four passages and an incomplete explanation context. The OpenRouter budget now retains all five passages, including that exchange. The saved Breaking Bad S1E1 27:13 recap likewise retains all 17 supplied passages (15,625 characters), compared with nine under the old cap. These measurements use saved exports, not a newly captured production request.
+
+Offline rechecks reject both captured Breaking Bad scene verdicts that accepted invented cleanup action, plus the saved Gladiator and Social Network drafts with unsupported named attribution. Captured checker verdicts are always evaluated against their original request-local passage aliases, never aliases generated by a new retrieval run. The six original input fixtures pass retrieval/boundary checks; the rewind fixture intentionally omits some irrelevant earlier-episode excerpts while retaining the current episode prefix. Later history is absent after rewind and episode switch.
+
+No model API calls were made for this follow-up. These are rejection and retrieval results, **not successful new answers**. The earlier live recap was provider-filtered, The Social Network checker timed out, Gladiator verification was incomplete, and the scene answer still invented activity before the final guards. The larger context and new grounding rules must pass fresh live quality and latency checks after the free allowance resets. Subtitle edition/timing alignment also remains unverified.
 
 ## Earlier 14 October 2026 evaluation
 
@@ -75,4 +89,4 @@ Direct calls used `openai/gpt-oss-120b`, with exported production dialogue and e
 - Withhold unsupported answers; a safe refusal still fails answer usefulness when sufficient evidence exists.
 - Verify on the deployed backend separately. A GitHub merge or local replay is not deployment evidence.
 
-Those earlier experiments retained retrieval and diagnostic improvements only. The current flow above supersedes the earlier verification contract. Switching the deployed provider still requires the explicit backend setting described above; no database migration is needed.
+Those earlier experiments retained retrieval and diagnostic improvements only. The current flow above supersedes the earlier verification contract. Switching only the provider requires its explicit backend setting; the subsequent caption revision repair additionally needs the migration described in the deployment hold above.

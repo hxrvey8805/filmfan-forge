@@ -1,19 +1,20 @@
 import { buildPrompts, evidenceLabel, permittedEvidence, validateDraft,
-  type Conversation, type Evidence, type ViewingPosition } from './companion.ts';
+  type Conversation, type Evidence, type EvidenceCoverage, type ViewingPosition } from './companion.ts';
 import { repairInstruction, verificationEvidence, verifiedSelection, VERIFICATION_PROMPT, type VerificationIssue } from './verification.ts';
+import { draftGroundingIssues } from './draft-grounding.ts';
 
 export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier') => Promise<unknown>;
 
-export type AnswerCheckStage = 'no_evidence' | 'draft_invalid' | 'draft_insufficient' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial';
+export type AnswerCheckStage = 'no_evidence' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
 
 export async function checkedAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
-  observe: (event: AnswerDiagnostics) => void = () => {}) {
+  observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage) {
   const permitted = permittedEvidence(evidence, position);
   let attempts = 0;
   const report = (stage: AnswerCheckStage, claimCount = 0) => observe({ stage, evidenceCount: permitted.length, claimCount, attempts });
   if (!permitted.length) { report('no_evidence'); return null; }
-  const prompts = buildPrompts(question, position, permitted, history);
+  const prompts = buildPrompts(question, position, permitted, history, coverage);
   const aliases = new Map(prompts.data.evidence.map((item, index) => [item.id, permitted[index]]));
   let issues: VerificationIssue[] = [];
   // One fresh rewrite at most. Never send a rejected draft or checker prose to
@@ -28,10 +29,15 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
       if (attempt === 0) { issues = draft ? ['relevance'] : ['citation']; continue; }
       report(draft ? 'draft_insufficient' : 'draft_invalid'); return null;
     }
+    const groundingIssues = draftGroundingIssues(question, draft, prompts.data.evidence);
+    if (groundingIssues.length) {
+      if (attempt === 0) { issues = groundingIssues; continue; }
+      report('draft_ungrounded', draft.claims.length); return null;
+    }
     // Include the complete selected context, not just the writer's chosen
     // excerpts: surrounding dialogue can contradict a plausible paraphrase.
     const verdict = await generate(VERIFICATION_PROMPT,
-      JSON.stringify({ question, position, evidence: verificationEvidence(prompts.data.evidence), claims: draft.claims }), 900, 'verifier');
+      JSON.stringify({ question, position, coverage: prompts.data.coverage, evidence: verificationEvidence(prompts.data.evidence), claims: draft.claims }), 900, 'verifier');
     const selection = verifiedSelection(verdict, draft.claims, prompts.data.evidence);
     if (!selection) { report('verification_invalid', draft.claims.length); return null; }
     if (selection.sufficient && selection.indexes.length) {

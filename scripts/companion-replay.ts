@@ -4,7 +4,7 @@
 // This uses the same OpenRouter adapter as the companion; it never writes conversations.
 // Keep exports and outputs outside Git: they can contain dialogue and private conversations.
 import { buildPrompts, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion.ts';
-import { selectSceneEvidence } from '../supabase/functions/_shared/scene-evidence.ts';
+import { selectSceneContext, OPENROUTER_EVIDENCE_BUDGET } from '../supabase/functions/_shared/scene-evidence.ts';
 import { checkedAnswer, type AnswerDiagnostics } from '../supabase/functions/_shared/answer.ts';
 import { OPENROUTER_MODEL, openRouterGenerator } from '../supabase/functions/_shared/openrouter.ts';
 
@@ -17,8 +17,8 @@ const input = JSON.parse(await Deno.readTextFile(inputPath)) as {
   question: string; position: ViewingPosition; records: SubtitleRecord[]; history?: Conversation[];
 };
 const history = input.history ?? [];
-const evidence = selectSceneEvidence(input.records, input.position, input.question, history);
-const prompts = buildPrompts(input.question, input.position, evidence, history);
+const { evidence, coverage } = selectSceneContext(input.records, input.position, input.question, history, OPENROUTER_EVIDENCE_BUDGET);
+const prompts = buildPrompts(input.question, input.position, evidence, history, coverage);
 const checks: AnswerDiagnostics[] = [];
 const generations: { phase: string; response: unknown }[] = [];
 const requests: { phase: string; system: string; user: string; maxTokens: number }[] = [];
@@ -63,7 +63,7 @@ if (mode === '--live') {
       const response = await generate(system, user, maxTokens);
       generations.push({ phase, response });
       return response;
-    }, event => checks.push(event));
+    }, event => checks.push(event), coverage);
   } catch (failure) {
     error = failure instanceof Error ? failure.message : 'Replay failed';
   }
@@ -71,7 +71,7 @@ if (mode === '--live') {
 await Deno.writeTextFile(outputPath, JSON.stringify({
   mode: mode === '--live' ? 'live-model-replay' : 'retrieval-only', model: OPENROUTER_MODEL,
   note: 'Reconstructed from the input export, not a captured historical request. Missing history or retrieved records are not recreated.',
-  question: input.question, position: input.position, evidence, prompts, checks, requests, requestConfigs,
+  question: input.question, position: input.position, evidence, coverage, prompts, checks, requests, requestConfigs,
   generations, usage, providerFailures, completions, error, result,
 }, null, 2));
 console.log(JSON.stringify({ mode: mode ?? 'retrieval-only', passages: evidence.length,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPrompts, chunkCues, promptConversation, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion';
-import { selectSceneEvidence, subtitleSearchText } from '../supabase/functions/_shared/scene-evidence';
+import { selectSceneContext, selectSceneEvidence, subtitleSearchText, OPENROUTER_EVIDENCE_BUDGET } from '../supabase/functions/_shared/scene-evidence';
 
 const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1, episodeNumber: 2, seconds: 100 };
 const record = (overrides: Partial<SubtitleRecord> = {}): SubtitleRecord => ({ id: 'one', tmdb_id: 1,
@@ -12,6 +12,31 @@ const message = (overrides: Partial<Conversation> = {}): Conversation => ({ id: 
   created_at: '2026-10-14T00:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('timestamped scene retrieval', () => {
+  it('keeps a dense short conversation intact on the OpenRouter budget instead of dropping its middle', () => {
+    const cues = Array.from({ length: 170 }, (_, i) => ({ start: i * 1.7, end: i * 1.7 + 1.6,
+      text: `TURN_${i}: We are discussing the disagreement and its immediate context.` }));
+    const rows = [record({ cues: [...cues, { start: 299, end: 300.001, text: 'FUTURE_CONTINUATION' }] })];
+    const selected = selectSceneContext(rows, { ...position, seconds: 300 }, 'What caused the disagreement?', [], OPENROUTER_EVIDENCE_BUDGET);
+    expect(JSON.stringify(selected.evidence).length).toBeGreaterThan(8500);
+    expect(JSON.stringify(selected.evidence).length).toBeLessThanOrEqual(OPENROUTER_EVIDENCE_BUDGET);
+    for (const cue of cues) expect(selected.evidence.some(item => item.text.includes(cue.text))).toBe(true);
+    expect(selected.coverage.omittedPassages).toBe(0);
+    expect(JSON.stringify(selected)).not.toContain('FUTURE_CONTINUATION');
+    const limited = selectSceneContext(rows, { ...position, seconds: 300 }, 'What caused the disagreement?', [], 8500);
+    expect(limited.coverage.omittedPassages).toBeGreaterThan(0);
+    expect(limited.coverage.omittedRanges.length).toBeGreaterThan(0);
+    for (const range of limited.coverage.omittedRanges) expect(range.end).toBeLessThanOrEqual(300);
+  });
+  it('reports only permitted omissions after rewinding or switching episodes', () => {
+    const cues = Array.from({ length: 40 }, (_, i) => ({ start: i * 10, end: i * 10 + 3, text: `Discussion ${i} about an important decision.` }));
+    const rows = [record({ cues }), record({ id: 'future-episode', episode_number: 3, cues })];
+    const context = selectSceneContext(rows, { ...position, seconds: 100 }, 'Recap so far', [], 350);
+    expect(context.coverage.omittedPassages).toBeGreaterThan(0);
+    expect(context.coverage.providedPassages).toBe(context.coverage.selectedPassages + context.coverage.omittedPassages);
+    expect(context.coverage.omittedRanges.every(item => item.episode === 2 && item.end <= 100)).toBe(true);
+    const switched = selectSceneContext(rows, { ...position, episodeNumber: 1 }, 'Recap so far', [], 350);
+    expect(switched).toEqual({ evidence: [], coverage: { providedPassages: 0, selectedPassages: 0, omittedPassages: 0, omittedRanges: [] } });
+  });
   it('filters crossing cues, later episodes, other titles and legacy caches before ranking', () => {
     const rows = [record({ cues: [{ start: 90, end: 100, text: 'SAFE key' }, { start: 99, end: 100.001, text: 'FUTURE key' }] }),
       record({ id: 'later', episode_number: 3 }), record({ id: 'title', tmdb_id: 2 }), record({ id: 'legacy', ingestion_version: 1 })];
