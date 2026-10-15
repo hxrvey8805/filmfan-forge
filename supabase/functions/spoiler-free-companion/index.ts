@@ -2,8 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   COMPANION_VERSION, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
-  parseTimestamp,
-  type Conversation, type SubtitleRecord, type ViewingPosition,
+  parseTimestamp, unavailableMemoryReply,
+  type Conversation, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
 
 import { checkedAnswer } from "../_shared/answer.ts";
@@ -104,16 +104,21 @@ serve(async req => {
     const historyResult = await historyQuery.order('created_at', { ascending: false }).limit(30);
     if (historyResult.error) throw historyResult.error;
     const memory = conversationMemory((historyResult.data ?? []) as Conversation[], position);
-    await ensureCurrentSubtitles(db, position);
-    const { evidence, coverage } = await retrieve(db, position, question.trim(), memory);
+    const memoryReply = unavailableMemoryReply(question.trim(), position, memory);
+    let evidence: Evidence[] = [];
+    let coverage: EvidenceCoverage | undefined;
+    if (!memoryReply) {
+      await ensureCurrentSubtitles(db, position);
+      ({ evidence, coverage } = await retrieve(db, position, question.trim(), memory));
+    }
     let checked = null;
     if (evidence.length) {
       const generate = companionGenerator(name => Deno.env.get(name));
       checked = await checkedAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
-          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage.omittedPassages }), coverage);
+          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage);
     }
-    const answer = checked?.answer ?? (evidence.length
+    const answer = memoryReply ?? checked?.answer ?? (evidence.length
       ? `I can’t establish that from the dialogue available up to ${formatTimestamp(seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`
       : `I don’t have reliable dialogue available up to ${formatTimestamp(seconds)} for this title yet. I can’t give a grounded answer at this point.`);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;

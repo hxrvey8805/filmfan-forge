@@ -246,6 +246,15 @@ export function promptConversation(history: Conversation[], position: ViewingPos
   return selected.reverse();
 }
 
+export function unavailableMemoryReply(question: string, position: ViewingPosition, history: Conversation[]): string | null {
+  // Explicit assistant-memory references need an available assistant answer.
+  // Never substitute a guess from story dialogue after that answer was filtered
+  // out by a rewind, episode/title switch, failure status or prompt-size limit.
+  const referencesAnswer = /\b(?:your|the)\s+(?:last|previous|earlier)\s+(?:answer|reply|response)\b|\b(?:you (?:said|mentioned)|you told me)\s+(?:earlier|before|last time)\b/i.test(question);
+  if (!referencesAnswer || promptConversation(history, position).some(turn => turn.answer?.trim())) return null;
+  return `I don’t have a previous answer available for this ${position.mediaType === 'tv' ? 'episode' : 'movie'} at ${formatTimestamp(position.seconds)}. I can help with a fresh question using only what’s available up to this point.`;
+}
+
 export interface GroundedDraft { status: 'answered' | 'insufficient_evidence'; claims: { text: string; evidenceIds: string[] }[] }
 export function validateDraft(value: unknown, evidence: Evidence[]): GroundedDraft | null {
   if (!value || typeof value !== 'object') return null;

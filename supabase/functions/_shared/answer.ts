@@ -1,11 +1,11 @@
-import { buildPrompts, evidenceLabel, permittedEvidence, validateDraft,
+import { buildPrompts, evidenceLabel, permittedEvidence, unavailableMemoryReply, validateDraft,
   type Conversation, type Evidence, type EvidenceCoverage, type ViewingPosition } from './companion.ts';
 import { repairInstruction, verificationEvidence, verifiedSelection, VERIFICATION_PROMPT, type VerificationIssue } from './verification.ts';
 import { draftGroundingIssues } from './draft-grounding.ts';
 
 export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier') => Promise<unknown>;
 
-export type AnswerCheckStage = 'no_evidence' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial';
+export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
 
 export async function checkedAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
@@ -13,6 +13,7 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
   const permitted = permittedEvidence(evidence, position);
   let attempts = 0;
   const report = (stage: AnswerCheckStage, claimCount = 0) => observe({ stage, evidenceCount: permitted.length, claimCount, attempts });
+  if (unavailableMemoryReply(question, position, history)) { report('memory_unavailable'); return null; }
   if (!permitted.length) { report('no_evidence'); return null; }
   const prompts = buildPrompts(question, position, permitted, history, coverage);
   const aliases = new Map(prompts.data.evidence.map((item, index) => [item.id, permitted[index]]));

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { checkedAnswer } from '../supabase/functions/_shared/answer';
-import type { Conversation, Evidence, ViewingPosition } from '../supabase/functions/_shared/companion';
+import { unavailableMemoryReply, type Conversation, type Evidence, type ViewingPosition } from '../supabase/functions/_shared/companion';
 
 const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1, episodeNumber: 2, seconds: 30 };
 const evidence: Evidence[] = [{ id: 'letter', season: 1, episode: 2, start: 10, end: 12, text: '[00:00:10] (SAM) Keep this letter sealed.' }];
@@ -14,6 +14,36 @@ const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media
   timestamp: '00:00:20', created_at: '2026-10-13T12:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('answer generation and independent verification', () => {
+  it.each([
+    { name: 'no history', rows: [] }, { name: 'later timestamp', rows: [history({ position_seconds: 31 })] },
+    { name: 'other episode', rows: [history({ episode_number: 3 })] },
+    { name: 'other title', rows: [history({ title_id: 2 })] },
+    { name: 'failed answer', rows: [history({ answer_status: 'insufficient_evidence' })] },
+    { name: 'legacy answer', rows: [history({ companion_version: 1 })] },
+    { name: 'overlong omitted answer', rows: [history({ answer: 'x'.repeat(1001) })] },
+  ])('does not invent a reminder when the referenced assistant answer is unavailable: $name', async ({ rows }) => {
+    const question = 'Remind me where they decided to park the RV in your last answer.';
+    const generate = vi.fn().mockResolvedValue(draft), observe = vi.fn();
+    expect(await checkedAnswer(question, position, evidence, rows, generate, observe)).toBeNull();
+    expect(generate).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledWith({ stage: 'memory_unavailable', evidenceCount: 1, claimCount: 0, attempts: 0 });
+    const reply = unavailableMemoryReply(question, position, rows);
+    expect(reply).toContain('previous answer');
+    expect(reply).toContain('00:00:30');
+    expect(reply).not.toMatch(/RV|SAFE_ANSWER|letter/);
+  });
+  it('still verifies a follow-up when an eligible prior answer exists', async () => {
+    const question = 'Explain your previous answer about the letter.';
+    expect(unavailableMemoryReply(question, position, [history()])).toBeNull();
+    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
+    expect((await checkedAnswer(question, position, evidence, [history()], generate))?.answer).toBe(claim.text);
+    expect(generate).toHaveBeenCalledTimes(2);
+  });
+  it('does not classify ordinary story questions as references to assistant memory', () => {
+    for (const question of ['What did they say earlier?', 'What happened last time?', 'What is happening at this moment?']) {
+      expect(unavailableMemoryReply(question, position, [])).toBeNull();
+    }
+  });
   it('rebuilds an invented named attribution and still permits a useful anonymous explanation', async () => {
     const rows = [{ ...evidence[0], text: '[00:00:10] The letter must stay sealed.' }];
     const wrong = { status: 'answered', claims: [{ text: 'Mira says to keep the letter sealed.', evidenceIds: ['P1'] }] };

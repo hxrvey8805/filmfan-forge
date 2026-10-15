@@ -3,7 +3,7 @@
 // Add --live and --allow-env=OPENROUTER_API_KEY --allow-net=openrouter.ai for private evaluation.
 // This uses the same OpenRouter adapter as the companion; it never writes conversations.
 // Keep exports and outputs outside Git: they can contain dialogue and private conversations.
-import { buildPrompts, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion.ts';
+import { buildPrompts, unavailableMemoryReply, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion.ts';
 import { selectSceneContext, OPENROUTER_EVIDENCE_BUDGET } from '../supabase/functions/_shared/scene-evidence.ts';
 import { checkedAnswer, type AnswerDiagnostics } from '../supabase/functions/_shared/answer.ts';
 import { OPENROUTER_MODEL, openRouterGenerator } from '../supabase/functions/_shared/openrouter.ts';
@@ -17,6 +17,7 @@ const input = JSON.parse(await Deno.readTextFile(inputPath)) as {
   question: string; position: ViewingPosition; records: SubtitleRecord[]; history?: Conversation[];
 };
 const history = input.history ?? [];
+const memoryReply = unavailableMemoryReply(input.question, input.position, history);
 const { evidence, coverage } = selectSceneContext(input.records, input.position, input.question, history, OPENROUTER_EVIDENCE_BUDGET);
 const prompts = buildPrompts(input.question, input.position, evidence, history, coverage);
 const checks: AnswerDiagnostics[] = [];
@@ -29,7 +30,11 @@ const completions: { status: number; finishReason: string | null; hasError: bool
   parsed: boolean; elapsedMs: number; contentType: string | null; aborted: boolean }[] = [];
 let error: string | null = null;
 let result = null;
-if (mode === '--live') {
+if (mode === '--live' && memoryReply) {
+  // This production guard must work without credentials or network access.
+  result = await checkedAnswer(input.question, input.position, evidence, history,
+    async () => { throw new Error('Unavailable memory must not call the AI.'); }, event => checks.push(event), coverage);
+} else if (mode === '--live') {
   const key = Deno.env.get('OPENROUTER_API_KEY');
   if (!key) throw new Error('Set OPENROUTER_API_KEY privately before a live replay.');
   const generate = openRouterGenerator(key, async (url, options) => {
@@ -69,9 +74,9 @@ if (mode === '--live') {
   }
 }
 await Deno.writeTextFile(outputPath, JSON.stringify({
-  mode: mode === '--live' ? 'live-model-replay' : 'retrieval-only', model: OPENROUTER_MODEL,
+  mode: mode === '--live' ? (memoryReply ? 'memory-guard-replay' : 'live-model-replay') : 'retrieval-only', model: OPENROUTER_MODEL,
   note: 'Reconstructed from the input export, not a captured historical request. Missing history or retrieved records are not recreated.',
-  question: input.question, position: input.position, evidence, coverage, prompts, checks, requests, requestConfigs,
+  question: input.question, position: input.position, evidence, coverage, memoryReply, prompts, checks, requests, requestConfigs,
   generations, usage, providerFailures, completions, error, result,
 }, null, 2));
 console.log(JSON.stringify({ mode: mode ?? 'retrieval-only', passages: evidence.length,
