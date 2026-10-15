@@ -42,9 +42,23 @@ export async function loadSubtitleFile(position: Omit<ViewingPosition, 'seconds'
     }
   }
   try {
-    const search = await request(`https://api.opensubtitles.com/api/v1/subtitles?${subtitleSearchParams(position)}`,
+    const params = subtitleSearchParams(position);
+    params.set('hearing_impaired', 'only');
+    params.set('machine_translated', 'exclude');
+    params.set('ai_translated', 'exclude');
+    params.sort();
+    const search = await request(`https://api.opensubtitles.com/api/v1/subtitles?${params}`,
       { headers: apiHeaders }, 'search');
-    const fileId = selectSubtitleFile((await search.json()).data, position);
+    let fileId = selectSubtitleFile((await search.json()).data, position);
+    // Search SDH explicitly so popular dialogue-only files cannot push caption
+    // tracks off the first results page. Fall back only when no eligible SDH
+    // exists, never on a provider failure or quota error. Still one download.
+    if (!fileId) {
+      params.set('hearing_impaired', 'include');
+      const fallback = await request(`https://api.opensubtitles.com/api/v1/subtitles?${params}`,
+        { headers: apiHeaders }, 'search');
+      fileId = selectSubtitleFile((await fallback.json()).data, position);
+    }
     if (!fileId) return null;
     // One download per import: do not exhaust a daily quota by retrying POSTs.
     const download = await request('https://api.opensubtitles.com/api/v1/download', {

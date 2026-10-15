@@ -1,4 +1,4 @@
-import { conversationMemory, permittedCues, questionIntent,
+import { conversationMemory, formatTimestamp, permittedCues, questionIntent,
   type Conversation, type Cue, type Evidence, type SubtitleRecord, type ViewingPosition } from './companion.ts';
 
 const stopWords = new Set(('a an the and or of to in on at by for with about from up until so far what whats is are was were ' +
@@ -53,7 +53,7 @@ function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence
       result.push({ id: `${first.record.id}:${Math.round(first.cue.start * 1000)}`,
         season: first.record.season_number, episode: first.record.episode_number,
         start: first.cue.start, end: Math.max(...group.map(row => row.cue.end)),
-        text: group.map(row => row.cue.text).join('\n') });
+        text: group.map(({ cue }) => `[${formatTimestamp(cue.start)}] ${cue.text}`).join('\n') });
       group = []; chars = 0;
     };
     for (const row of rows) {
@@ -65,8 +65,8 @@ function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence
       // Storage chunks are not scene boundaries. Keep adjacent turns together,
       // including sentence continuations, but never bridge a long silent gap.
       const continuing = previous && /(?:\.\.\.|…|[,;:—-])$/.test(previous.text.trim());
-      const maxDuration = continuing ? 120 : 90;
-      const maxText = continuing ? 1500 : 1200;
+      const maxDuration = continuing ? 150 : 120;
+      const maxText = continuing ? 1800 : 1500;
       if (previous && (cue.start - previous.end > 12 ||
           cue.start - group[0].cue.start > maxDuration || chars + cue.text.length + 1 > maxText)) flush();
       group.push(row); chars += cue.text.length + 1;
@@ -81,7 +81,7 @@ function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence
 // later rounds, so an arbitrary sample count cannot leave usable space empty.
 function overviewOrder(prefix: Evidence[], maxChars: number): Evidence[] {
   if (!prefix.length) return [];
-  const bins = Math.min(8, Math.max(1, Math.floor(maxChars / 2000)), prefix.length);
+  const bins = Math.min(8, Math.max(1, Math.floor(maxChars / 600)), prefix.length);
   const start = prefix[0].start;
   const duration = Math.max(1, prefix.at(-1)!.end - start);
   const buckets: Evidence[][] = Array.from({ length: bins }, () => []);

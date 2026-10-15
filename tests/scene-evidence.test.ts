@@ -4,7 +4,7 @@ import { selectSceneEvidence, subtitleSearchText } from '../supabase/functions/_
 
 const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1, episodeNumber: 2, seconds: 100 };
 const record = (overrides: Partial<SubtitleRecord> = {}): SubtitleRecord => ({ id: 'one', tmdb_id: 1,
-  media_type: 'tv', season_number: 1, episode_number: 2, ingestion_version: 2,
+  media_type: 'tv', season_number: 1, episode_number: 2, ingestion_version: 3,
   cues: [{ start: 90, end: 99, text: '(SAM) The key is in the drawer. [door opens]' }], ...overrides });
 const message = (overrides: Partial<Conversation> = {}): Conversation => ({ id: 'safe', title_id: 1,
   media_type: 'tv', season_number: 1, episode_number: 2, position_seconds: 90, companion_version: 2,
@@ -17,7 +17,7 @@ describe('timestamped scene retrieval', () => {
       record({ id: 'later', episode_number: 3 }), record({ id: 'title', tmdb_id: 2 }), record({ id: 'legacy', ingestion_version: 1 })];
     const result = selectSceneEvidence(rows, position, 'Where is the key?');
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ start: 90, end: 100, text: 'SAFE key' });
+    expect(result[0]).toMatchObject({ start: 90, end: 100, text: '[00:01:30] SAFE key' });
   });
   it('has no future dialogue at every rewind point and preserves sound/speaker labels', () => {
     const cues = Array.from({ length: 80 }, (_, i) => ({ start: i * 4, end: i * 4 + 3.5, text: `(SAM) [noise] CUE_${i}_END` }));
@@ -68,7 +68,7 @@ describe('timestamped scene retrieval', () => {
       ...Array.from({ length: 38 }, (_, i) => ({ start: 60 + i * 30, end: 64 + i * 30,
         text: `Later exchange ${i}. We need to change our plans and discuss a different route.` }))];
     const result = selectSceneEvidence([record({ cues })], { ...position, seconds: 1250 }, 'Recap so far', [], 2500);
-    expect(result[0].text).toBe('EARLIEST_AVAILABLE');
+    expect(result[0].text).toBe('[00:00:01] EARLIEST_AVAILABLE');
     expect(result[1].text).toContain('EARLY_CONTEXT');
     expect(JSON.stringify(result).length).toBeLessThanOrEqual(2500);
   });
@@ -83,7 +83,7 @@ describe('timestamped scene retrieval', () => {
         { start: 99, end: 100.001, text: 'FUTURE_IDENTITY' }] })];
     const result = selectSceneEvidence(rows, position, 'What do we know about the leader so far?');
     expect(result).toHaveLength(1);
-    expect(result[0].text).toBe('The first thing I will do when...\n...I take over is thank her.');
+    expect(result[0].text).toBe('[00:01:20] The first thing I will do when...\n[00:01:25] ...I take over is thank her.');
     expect(result[0].end).toBe(89);
     // Same timeline in a different episode must not become the same exchange.
     expect(selectSceneEvidence([...rows, record({ id: 'old', episode_number: 1 })], position, 'Explain')).toHaveLength(2);

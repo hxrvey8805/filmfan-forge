@@ -30,19 +30,22 @@ beforeAll(async () => {
   ]) await pg.exec(migration(name));
   await pg.exec(migration('20251122155759_92f1d8ce-3bf2-4992-ba51-366d73fa76f8').split('-- Migration 2:')[0]);
   await pg.exec(migration('20261013120000_companion_evidence_and_memory'));
+  await pg.exec(migration('20261015153000_caption_context_revision'));
   await pg.exec('GRANT SELECT, INSERT ON public.ai_conversations TO authenticated');
   const fixtures = [
-    ['tv', 1, 1, 800, 810, 'previous', 2],
-    ['tv', 1, 2, 10, 20, 'safe', 2],
-    ['tv', 1, 2, 25, 30, 'exact', 2],
-    ['tv', 1, 2, 29, 30.001, 'crossing', 2],
-    ['tv', 1, 2, 40, 45, 'future', 2],
-    ['tv', 1, 3, 0, 5, 'nextEpisode', 2],
-    ['tv', 2, 1, 0, 5, 'nextSeason', 2],
+    ['tv', 1, 1, 800, 810, 'previous', 3],
+    ['tv', 1, 2, 10, 20, 'safe', 3],
+    ['tv', 1, 2, 25, 30, 'exact', 3],
+    ['tv', 1, 2, 29, 30.001, 'crossing', 3],
+    ['tv', 1, 2, 40, 45, 'future', 3],
+    ['tv', 1, 3, 0, 5, 'nextEpisode', 3],
+    ['tv', 2, 1, 0, 5, 'nextSeason', 3],
     ['tv', 1, 2, 1, 2, 'legacy', 1],
-    ['movie', null, null, 10, 20, 'movieSafe', 2],
-    ['movie', null, null, 29, 30.001, 'movieCrossing', 2],
-    ['movie', null, null, 40, 45, 'movieFuture', 2],
+    ['tv', 1, 2, 1, 2, 'oldCacheTail', 2],
+    ['movie', null, null, 1, 2, 'oldMovieCache', 2],
+    ['movie', null, null, 10, 20, 'movieSafe', 3],
+    ['movie', null, null, 29, 30.001, 'movieCrossing', 3],
+    ['movie', null, null, 40, 45, 'movieFuture', 3],
   ];
   for (const [i, [type, season, episode, start, end, label, version]] of fixtures.entries()) {
     await pg.query(`INSERT INTO subtitle_chunks(tmdb_id, media_type, season_number, episode_number,

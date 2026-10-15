@@ -8,6 +8,16 @@ const response = (body: unknown, status = 200) => new Response(JSON.stringify(bo
 const mock = () => vi.fn<typeof fetch>().mockResolvedValueOnce(response({ data: [result] }));
 
 describe('subtitle import reliability', () => {
+  it('falls back to plain subtitles only when the SDH search has no eligible file', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ data: [] }))
+      .mockResolvedValueOnce(response({ data: [result] }))
+      .mockResolvedValueOnce(response({ link: 'https://files.example/test' }))
+      .mockResolvedValueOnce(new Response('1\n00:00:01,000 --> 00:00:02,000\nHello.'));
+    expect((await loadSubtitleFile(position, 'secret', fetcher))?.fileId).toBe(42);
+    expect(new URL(String(fetcher.mock.calls[0][0])).searchParams.get('hearing_impaired')).toBe('only');
+    expect(new URL(String(fetcher.mock.calls[1][0])).searchParams.get('hearing_impaired')).toBe('include');
+    expect(fetcher.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
+  });
   it('fetches one matching file, identifies the app, and keeps credentials off the file request', async () => {
     const fetcher = mock().mockResolvedValueOnce(response({ link: 'https://files.example/test' }))
       .mockResolvedValueOnce(new Response('1\n00:00:01,000 --> 00:00:02,000\n(SAM) Hello.'));
@@ -18,6 +28,8 @@ describe('subtitle import reliability', () => {
     expect(fetcher.mock.calls[2][1]?.headers).toBeUndefined();
     expect(JSON.parse(fetcher.mock.calls[1][1]!.body as string)).toEqual({ file_id: 42, sub_format: 'srt' });
     const params = new URL(String(fetcher.mock.calls[0][0])).searchParams;
+    expect(params.get('hearing_impaired')).toBe('only');
+    expect(params.get('ai_translated')).toBe('exclude');
     expect([...params.keys()]).toEqual([...params.keys()].sort());
   });
   it('decodes a UTF-16 BOM without moving or merging cue times', async () => {
@@ -39,11 +51,11 @@ describe('subtitle import reliability', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
   it('does not download a wrong movie or episode', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ data: [{ attributes: {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response({ data: [{ attributes: {
       ...result.attributes, feature_details: { feature_type: 'Movie', tmdb_id: 99 },
     } }] }));
     await expect(loadSubtitleFile(position, 'secret', fetcher)).resolves.toBeNull();
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it.each([[406, { remaining: 0 }, 'quota_exceeded'], [406, {}, 'provider_error'],
     [429, {}, 'rate_limited'], [500, { message: 'PRIVATE' }, 'provider_error']] as const)('classifies provider status %i without retrying downloads', async (status, body, reason) => {

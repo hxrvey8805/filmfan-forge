@@ -43,7 +43,9 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
           messages: [{ role: 'system', content: `${system}\nReturn exactly one JSON object. No Markdown fences, commentary, or thinking text.` },
             { role: 'user', content: user }],
         }),
-        signal: AbortSignal.timeout(Math.min(45000, remainingMs)),
+        // Verification can take longer than drafting. Share the existing
+        // total budget instead of aborting a valid second call at 45 seconds.
+        signal: AbortSignal.timeout(remainingMs),
       });
     } catch {
       // Transport errors can contain URLs or headers; never surface them.
@@ -59,6 +61,7 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
         : failureMessage);
     }
     const result = await response.json().catch(() => null);
+    if (!result || !Array.isArray(result.choices) || !result.choices.length) throw new Error(failureMessage);
     const choice = result?.choices?.[0];
     if (result?.error || choice?.error) throw new Error(failureMessage);
     if (choice?.message?.tool_calls?.length || choice?.message?.annotations?.length) throw new Error(failureMessage);

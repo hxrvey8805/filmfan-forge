@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
-  COMPANION_VERSION, conversationMemory, formatTimestamp,
+  COMPANION_VERSION, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
   parseTimestamp,
   type Conversation, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
@@ -22,7 +22,7 @@ const columns = 'id, tmdb_id, media_type, season_number, episode_number, ingesti
 
 function currentChunks(db: SupabaseClient, position: ViewingPosition) {
   let query = db.from('subtitle_chunks').select(columns).eq('tmdb_id', position.tmdbId)
-    .eq('media_type', position.mediaType).eq('ingestion_version', COMPANION_VERSION);
+    .eq('media_type', position.mediaType).eq('ingestion_version', SUBTITLE_VERSION);
   if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
   return query;
 }

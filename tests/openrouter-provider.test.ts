@@ -66,7 +66,7 @@ describe('OpenRouter companion transport', () => {
     })));
     await expect(openRouterGenerator('test-key', failed)('System', 'Question', 900)).rejects.toThrow('Unable to generate');
     const malformed = vi.fn<typeof fetch>().mockResolvedValue(new Response('not a completion'));
-    await expect(openRouterGenerator('test-key', malformed)('System', 'Question', 900)).rejects.toThrow('incomplete');
+    await expect(openRouterGenerator('test-key', malformed)('System', 'Question', 900)).rejects.toThrow('Unable to generate');
   });
 
   it('rejects an empty key before any request', () => {
@@ -109,7 +109,7 @@ describe('OpenRouter companion transport', () => {
     const request = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(completion(JSON.stringify({ status: 'answered', claims: [claim] })))
       .mockResolvedValueOnce(completion(JSON.stringify({ withinBoundary: true, sufficient: true,
-        checks: [{ index: 0, supported: true, issue: 'none', basis: 'entailed', reason: 'Sam explicitly asks this.', support: [{ evidenceId: 'P1', quote: 'Keep this letter sealed.' }] }] })));
+        checks: [{ index: 0, supported: true, issue: 'none', basis: 'entailed', reason: 'Sam explicitly asks this.', sources: ['P1:1'] }] })));
     const result = await checkedAnswer('Why?', position, [safe,
       { ...safe, id: 'future', end: 31, text: 'FUTURE_CUE' },
       { ...safe, id: 'other-episode', episode: episode + 1, text: 'OTHER_EPISODE_CUE' }], [memory,

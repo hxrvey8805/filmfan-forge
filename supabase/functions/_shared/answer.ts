@@ -1,6 +1,6 @@
 import { buildPrompts, evidenceLabel, permittedEvidence, validateDraft,
   type Conversation, type Evidence, type ViewingPosition } from './companion.ts';
-import { repairInstruction, verifiedSelection, VERIFICATION_PROMPT, type VerificationIssue } from './verification.ts';
+import { repairInstruction, verificationEvidence, verifiedSelection, VERIFICATION_PROMPT, type VerificationIssue } from './verification.ts';
 
 export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier') => Promise<unknown>;
 
@@ -22,7 +22,8 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
   for (let attempt = 0; attempt < 2; attempt++) {
     attempts++;
     const system = attempt === 0 ? prompts.system : `${prompts.system}\n${repairInstruction(issues)}`;
-    const draft = validateDraft(await generate(system, prompts.user, 1500, 'writer'), prompts.data.evidence);
+    const candidate = validateDraft(await generate(system, prompts.user, 1500, 'writer'), prompts.data.evidence);
+    const draft = candidate && candidate.claims.length <= prompts.maxClaims ? candidate : null;
     if (!draft || draft.status !== 'answered') {
       if (attempt === 0) { issues = draft ? ['relevance'] : ['citation']; continue; }
       report(draft ? 'draft_insufficient' : 'draft_invalid'); return null;
@@ -30,7 +31,7 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
     // Include the complete selected context, not just the writer's chosen
     // excerpts: surrounding dialogue can contradict a plausible paraphrase.
     const verdict = await generate(VERIFICATION_PROMPT,
-      JSON.stringify({ question, position, evidence: prompts.data.evidence, claims: draft.claims }), 1800, 'verifier');
+      JSON.stringify({ question, position, evidence: verificationEvidence(prompts.data.evidence), claims: draft.claims }), 900, 'verifier');
     const selection = verifiedSelection(verdict, draft.claims, prompts.data.evidence);
     if (!selection) { report('verification_invalid', draft.claims.length); return null; }
     if (selection.sufficient && selection.indexes.length) {

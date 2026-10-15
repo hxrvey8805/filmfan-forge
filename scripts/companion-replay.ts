@@ -25,7 +25,8 @@ const requests: { phase: string; system: string; user: string; maxTokens: number
 const usage: unknown[] = [];
 const requestConfigs: unknown[] = [];
 const providerFailures: { status: number; code: string | null }[] = [];
-const completions: { status: number; finishReason: string | null; hasError: boolean }[] = [];
+const completions: { status: number; finishReason: string | null; hasError: boolean;
+  parsed: boolean; elapsedMs: number; contentType: string | null; aborted: boolean }[] = [];
 let error: string | null = null;
 let result = null;
 if (mode === '--live') {
@@ -36,6 +37,7 @@ if (mode === '--live') {
     requestConfigs.push({ model: body.model, reasoningEnabled: body.reasoning?.enabled,
       excludesReasoning: body.reasoning?.exclude, maxTokens: body.max_tokens,
       provider: body.provider, plugins: body.plugins });
+    const started = Date.now();
     const response = await fetch(url, options);
     if (response.ok) {
       const body = await response.clone().json().catch(() => null);
@@ -43,7 +45,9 @@ if (mode === '--live') {
       const finishReason = body?.choices?.[0]?.finish_reason;
       completions.push({ status: response.status,
         finishReason: typeof finishReason === 'string' && /^[a-z_]{1,40}$/.test(finishReason) ? finishReason : null,
-        hasError: Boolean(body?.error || body?.choices?.[0]?.error) });
+        hasError: Boolean(body?.error || body?.choices?.[0]?.error), parsed: body !== null,
+        elapsedMs: Date.now() - started, contentType: response.headers.get('content-type'),
+        aborted: Boolean(options && 'signal' in options && options.signal?.aborted) });
     } else {
       // Keep diagnostic codes only; provider bodies may echo input or reasoning.
       const body = await response.clone().json().catch(() => null);

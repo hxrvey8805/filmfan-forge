@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { chunkCues, COMPANION_VERSION, formatTimestamp } from "../_shared/companion.ts";
+import { chunkCues, SUBTITLE_VERSION, formatTimestamp } from "../_shared/companion.ts";
 import { loadSubtitleFile, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
 
 const headers = { 'Content-Type': 'application/json' };
@@ -19,7 +19,7 @@ serve(async (req) => {
     }
     const db = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey);
     let existing = db.from('subtitle_chunks').select('id').eq('tmdb_id', tmdbId)
-      .eq('media_type', mediaType).eq('ingestion_version', COMPANION_VERSION);
+      .eq('media_type', mediaType).eq('ingestion_version', SUBTITLE_VERSION);
     if (mediaType === 'tv') existing = existing.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
     const cached = await existing.limit(1);
     if (cached.error) throw cached.error;
@@ -37,8 +37,8 @@ serve(async (req) => {
       episode_number: mediaType === 'tv' ? episodeNumber : null,
       chunk_index: index, start_seconds: cues[0].start, end_seconds: Math.max(...cues.map(cue => cue.end)),
       content: cues.map(cue => `[${formatTimestamp(cue.start)}] ${cue.text}`).join('\n'),
-      cues, ingestion_version: COMPANION_VERSION, source_file_id: fileId,
-      cache_key: `${mediaType}:${tmdbId}:${seasonNumber ?? 0}:${episodeNumber ?? 0}:${COMPANION_VERSION}:${index}`,
+      cues, ingestion_version: SUBTITLE_VERSION, source_file_id: fileId,
+      cache_key: `${mediaType}:${tmdbId}:${seasonNumber ?? 0}:${episodeNumber ?? 0}:${SUBTITLE_VERSION}:${index}`,
       embedding: null as number[] | null,
     }));
     // Timestamp and keyword retrieval need no paid embedding service.

@@ -6,7 +6,7 @@ const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1,
 const evidence: Evidence[] = [{ id: 'letter', season: 1, episode: 2, start: 10, end: 12, text: '[00:00:10] (SAM) Keep this letter sealed.' }];
 const claim = { text: 'Sam has asked for the letter to stay sealed.', evidenceIds: ['P1'] };
 const draft = { status: 'answered', claims: [claim] };
-const check = { index: 0, supported: true, issue: 'none', basis: 'entailed', reason: 'Sam explicitly asks for the letter to stay sealed.', support: [{ evidenceId: 'P1', quote: 'Keep this letter sealed.' }] };
+const check = { index: 0, supported: true, issue: 'none', basis: 'entailed', reason: 'Sam explicitly asks for the letter to stay sealed.', sources: ['P1:1'] };
 const pass = { withinBoundary: true, sufficient: true, checks: [check] };
 const reject = { withinBoundary: true, sufficient: false, checks: [{ ...check, supported: false, issue: 'speaker', reason: 'The speaker is unestablished.' }] };
 const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media_type: 'tv', season_number: 1, episode_number: 2,
@@ -14,25 +14,25 @@ const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media
   timestamp: '00:00:20', created_at: '2026-10-13T12:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('answer generation and independent verification', () => {
-  it('allows only whitespace differences when checking a continuous supporting quotation', async () => {
-    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
-    const rows = [{ ...evidence[0], text: '(SAM) Keep this\nletter sealed.' }];
-    expect((await checkedAnswer('What did Sam ask?', position, rows, [], generate))?.answer).toBe(claim.text);
+  it('does not publish an overlong scene answer even if a model ignores the two-claim limit', async () => {
+    const generate = vi.fn().mockResolvedValue({ ...draft, claims: [claim, claim, claim] });
+    expect(await checkedAnswer('What is happening at this moment?', position, evidence, [], generate)).toBeNull();
+    expect(generate.mock.calls.map(call => call[3])).toEqual(['writer', 'writer']);
+    expect(generate.mock.calls[0][0]).toContain('at most 2 claims');
   });
-  it('rejects a quotation stitched across omitted dialogue even without ellipses', async () => {
-    const generate = vi.fn().mockResolvedValueOnce(draft)
-      .mockResolvedValueOnce({ ...pass, checks: [{ ...check,
-        support: [{ evidenceId: 'P1', quote: 'Keep this letter sealed.' }] }] });
-    const rows = [{ ...evidence[0], text: '(SAM) Keep this\nother dialogue that changes the meaning\nletter sealed.' }];
-    expect(await checkedAnswer('What did Sam ask?', position, rows, [], generate)).toBeNull();
+  it('gives the checker stable source-line IDs without asking it to recopy quotations', async () => {
+    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce({ ...pass,
+      checks: [{ ...check, sources: ['P1:1', 'P1:2'] }] });
+    const rows = [{ ...evidence[0], text: '[00:00:10] (SAM) Keep this\n[00:00:11] letter sealed.' }];
+    expect((await checkedAnswer('What did Sam ask?', position, rows, [], generate))?.answer).toBe(claim.text);
+    expect(JSON.parse(generate.mock.calls[1][1]).evidence[0].lines).toEqual([
+      { id: 'P1:1', text: '[00:00:10] (SAM) Keep this' }, { id: 'P1:2', text: '[00:00:11] letter sealed.' }]);
   });
   it.each([
-    { basis: 'plausible' },
-    { support: [] },
-    { support: [{ evidenceId: 'P1', quote: 'He opens the letter.' }] },
-    { support: [{ evidenceId: 'P2', quote: 'Keep this letter sealed.' }] },
-    { support: [{ evidenceId: 'P1', quote: 'Keep … sealed.' }] },
-  ])('rejects a positive verdict without exact, entailed support from the cited passage (%j)', async invalid => {
+    { basis: 'plausible' }, { sources: [] }, { sources: undefined },
+    { sources: ['P1:99'] }, { sources: ['P2:1'] }, { sources: ['P1:1', 'P1:1'] },
+    { sources: [{ id: 'P1:1' }] },
+  ])('rejects a positive verdict without valid, entailed support from the cited passage (%j)', async invalid => {
     const generate = vi.fn().mockResolvedValueOnce(draft)
       .mockResolvedValueOnce({ ...pass, checks: [{ ...check, ...invalid }] });
     expect(await checkedAnswer('Why?', position, evidence, [], generate)).toBeNull();
@@ -42,7 +42,28 @@ describe('answer generation and independent verification', () => {
     const generate = vi.fn().mockResolvedValueOnce({ status: 'answered', claims: [
       { text: 'The plan worked and everyone is relieved.', evidenceIds: ['P1'] }] })
       .mockResolvedValueOnce({ ...pass, checks: [{ ...check,
-        support: [{ evidenceId: 'P1', quote: 'Yes! Okay. Thank you.' }] }] });
+        sources: ['P1:1'] }] });
+    expect(await checkedAnswer('What happened?', position, [row], [], generate)).toBeNull();
+  });
+  it('rejects invented visual actions even when the checker approves sound-only citations', async () => {
+    const row = { ...evidence[0], text: '[00:00:10] [FOOTSTEPS]\n[00:00:11] [WOMAN GASPS]' };
+    const generate = vi.fn().mockResolvedValueOnce({ status: 'answered', claims: [
+      { text: 'She runs away and gasps from exhaustion.', evidenceIds: ['P1'] }] })
+      .mockResolvedValueOnce({ ...pass, checks: [{ ...check, sources: ['P1:1', 'P1:2'] }] });
+    expect(await checkedAnswer('What happened?', position, [row], [], generate)).toBeNull();
+  });
+  it('can return literal sound captions without inventing an activity or cause', async () => {
+    const row = { ...evidence[0], text: '[00:00:10] [FOOTSTEPS]\n[00:00:11] [WOMAN GASPS]' };
+    const literal = 'Captions: [FOOTSTEPS]; [WOMAN GASPS]';
+    const generate = vi.fn().mockResolvedValueOnce({ status: 'answered', claims: [{ text: literal, evidenceIds: ['P1'] }] })
+      .mockResolvedValueOnce({ ...pass, checks: [{ ...check, sources: ['P1:1', 'P1:2'] }] });
+    expect((await checkedAnswer('What happened?', position, [row], [], generate))?.answer).toBe(literal);
+  });
+  it('does not let a proposed task plus later noises prove the task is being carried out', async () => {
+    const row = { ...evidence[0], text: '[00:00:10] After we finish repairing this,\n[00:00:11] [METAL CLATTERS]\n[00:00:12] [MAN GROANS]' };
+    const generate = vi.fn().mockResolvedValueOnce({ status: 'answered', claims: [
+      { text: 'They are repairing the machine, as indicated by the metal clattering and groaning.', evidenceIds: ['P1'] }] })
+      .mockResolvedValueOnce({ ...pass, checks: [{ ...check, sources: ['P1:1', 'P1:2', 'P1:3'] }] });
     expect(await checkedAnswer('What happened?', position, [row], [], generate)).toBeNull();
   });
   it('uses permitted memory only for references and maps short citations back to real evidence', async () => {
@@ -62,7 +83,8 @@ describe('answer generation and independent verification', () => {
     expect(verifier).not.toHaveProperty('conversation');
     expect(JSON.stringify(verifier)).not.toContain('SAFE_ANSWER');
     expect(verifier.claims).toEqual(draft.claims);
-    expect(verifier.evidence).toEqual([{ ...evidence[0], id: 'P1' }]);
+    expect(verifier.evidence[0]).toMatchObject({ id: 'P1', lines: [{ id: 'P1:1', text: evidence[0].text }] });
+    expect(verifier.evidence[0]).not.toHaveProperty('text');
     expect(JSON.stringify(generate.mock.calls)).not.toMatch(/FUTURE_ANSWER|NEXT_EPISODE|OTHER_EPISODE_THREAD|UNVERIFIED_LEGACY|FAILED_ANSWER/);
   });
   it('keeps a useful verified subset and removes rejected prose and citations', async () => {
@@ -95,7 +117,7 @@ describe('answer generation and independent verification', () => {
     const unrelated = { ...evidence[0], id: 'context', text: '(SAM) I changed my mind.' };
     const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
     await checkedAnswer('Why?', position, [...evidence, unrelated], [], generate);
-    expect(JSON.parse(generate.mock.calls[1][1]).evidence.map((item: Evidence) => item.text)).toEqual([evidence[0].text, unrelated.text]);
+    expect(JSON.parse(generate.mock.calls[1][1]).evidence.flatMap((item: { lines: { text: string }[] }) => item.lines.map(line => line.text))).toEqual([evidence[0].text, unrelated.text]);
   });
   it('rebuilds once using fixed issue hints, never the rejected draft or verifier prose', async () => {
     const badDraft = { ...draft, claims: [{ ...claim, text: 'UNSAFE_DRAFT' }] };

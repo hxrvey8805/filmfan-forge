@@ -5,7 +5,7 @@ import { buildPrompts, chunkCues, conversationMemory, formatTimestamp, parseSubt
 
 const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1, episodeNumber: 2, seconds: 30 };
 const record = (overrides: Partial<SubtitleRecord> = {}): SubtitleRecord => ({
-  id: 'current', tmdb_id: 1, media_type: 'tv', season_number: 1, episode_number: 2, ingestion_version: 2,
+  id: 'current', tmdb_id: 1, media_type: 'tv', season_number: 1, episode_number: 2, ingestion_version: 3,
   cues: [{ start: 20, end: 25, text: 'The letter is sealed.' }, { start: 29, end: 31, text: 'FUTURE_REVEAL' }], ...overrides,
 });
 const message = (overrides: Partial<Conversation> = {}): Conversation => ({
@@ -15,6 +15,26 @@ const message = (overrides: Partial<Conversation> = {}): Conversation => ({
 });
 
 describe('subtitle parsing and exact timestamps', () => {
+  const ass = '[Script Info]\nTitle: Test\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n';
+  it('reads ASS caption rows, sound cues and speaker names without an assumed frame rate', () => {
+    const cues = parseSubtitles(ass +
+      'Comment: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Not dialogue\n' +
+      'Dialogue: 0,0:00:01.50,0:00:02.75,Default,Sam,0,0,0,,{\\an4\\pos(308,362)}Stay here, please.\n' +
+      'Dialogue: 0,0:00:01.50,0:00:02.75,Default,Unknown,0,0,0,,{\\i1}[engine\\Nstarts]{\\i0}\n' +
+      'Dialogue: 0,0:00:01.50,0:00:02.76,Default,,0,0,0,,FUTURE_CUE\n' +
+      'Dialogue: 0,0:00:01.50,0:00:02.75,Default,,0,0,0,,{\\p1}m 0 0 l 10 10{\\p0}\n');
+    expect(cues).toEqual([{ start: 1.5, end: 2.75, text: '(Sam) Stay here, please. [engine starts]' },
+      { start: 1.5, end: 2.76, text: 'FUTURE_CUE' }]);
+    expect(safeEvidence([record({ cues })], { ...position, seconds: 2.75 })[0].text).not.toContain('FUTURE');
+  });
+  it.each([
+    'Dialogue: 0,0:00:03.00,0:00:02.00,Default,,0,0,0,,Reversed',
+    'Dialogue: 0,0:99:01.00,0:99:02.00,Default,,0,0,0,,Invalid clock',
+    'Dialogue: 0,0:00:01,0:00:02,Default,,0,0,0,,Missing fraction',
+    'Format: Start, End, Text, Name\nDialogue: 0:00:01.00,0:00:02.00,Ambiguous,Sam',
+  ])('fails closed on ambiguous ASS timing or fields (%s)', event => {
+    expect(() => parseSubtitles(ass + event)).toThrow();
+  });
   it('reads decimal precision, padded timing lines and WebVTT voices without shifting the boundary', () => {
     const text = 'WEBVTT\n\nNOTE provider note\nNot a scene\n\nclip\n  00:01.5 --> 00:02.75 align:start\n<v Sam>Stay here.</v>\n\n00:02.751 --> 00:03.000\nLater dialogue.';
     const cues = parseSubtitles(text);
@@ -69,7 +89,8 @@ describe('evidence boundaries', () => {
   });
   it('rejects future episodes/seasons, unrelated titles, and legacy caches', () => {
     const rows = [record({ id: 'next', episode_number: 3 }), record({ id: 'season', season_number: 2 }),
-      record({ id: 'other', tmdb_id: 2 }), record({ id: 'legacy', ingestion_version: 1 })];
+      record({ id: 'other', tmdb_id: 2 }), record({ id: 'legacy', ingestion_version: 1 }),
+      record({ id: 'old-plain-cache', ingestion_version: 2 })];
     expect(safeEvidence(rows, position)).toEqual([]);
   });
   it('supports movies with null season/episode and rejects TV records', () => {
