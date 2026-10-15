@@ -31,7 +31,7 @@ export function isSubtitleCredit(text: string): boolean {
     /^(?:sync(?:hroni[sz]ation)?|translation)\s+(?:and\s+corrections?\s+)?by\s+\S+/i.test(text.trim());
 }
 
-function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence[] {
+function packets(records: SubtitleRecord[], position: ViewingPosition, focusRecent: boolean): Evidence[] {
   const scopes = new Map<string, { record: SubtitleRecord; cue: Cue }[]>();
   const seen = new Set<string>();
   for (const record of records) {
@@ -71,7 +71,14 @@ function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence
       const continuing = previous && /(?:\.\.\.|…|[,;:—-])$/.test(previous.text.trim());
       const maxDuration = continuing ? 150 : 120;
       const maxText = continuing ? 1800 : 1500;
-      if (previous && (cue.start - previous.end > 12 ||
+      // A retrieval packet is not a scene. Keep the newest completed cues in
+      // their own packet for "now" questions so an earlier dispute does not
+      // inherit a recent sound cue's timestamp. Keep the earlier context too.
+      const recentBoundary = Math.max(0, position.seconds - 30);
+      const entersRecentWindow = focusRecent && current({ season: row.record.season_number,
+        episode: row.record.episode_number }, position) &&
+        group.length > 0 && group[0].cue.start < recentBoundary && cue.start >= recentBoundary;
+      if (previous && (entersRecentWindow || cue.start - previous.end > 12 ||
           cue.start - group[0].cue.start > maxDuration || chars + cue.text.length + 1 > maxText)) flush();
       group.push(row); chars += cue.text.length + 1;
     }
@@ -100,7 +107,7 @@ function overviewOrder(prefix: Evidence[], maxChars: number): Evidence[] {
 
 const chronological = (a: Evidence, b: Evidence) => (a.season ?? 0) - (b.season ?? 0) ||
   (a.episode ?? 0) - (b.episode ?? 0) || a.start - b.start;
-const current = (item: Evidence, position: ViewingPosition) => position.mediaType === 'movie' ||
+const current = (item: Pick<Evidence, 'season' | 'episode'>, position: ViewingPosition) => position.mediaType === 'movie' ||
   (item.season === position.seasonNumber && item.episode === position.episodeNumber);
 
 export function nearbyEvidence(evidence: Evidence[], position: ViewingPosition): Evidence[] {
@@ -114,7 +121,8 @@ export function selectSceneEvidence(records: SubtitleRecord[], position: Viewing
 
 export function selectSceneContext(records: SubtitleRecord[], position: ViewingPosition,
   question: string, history: Conversation[] = [], maxChars = DEFAULT_EVIDENCE_BUDGET): SceneContext {
-  const all = packets(records, position);
+  const intent = questionIntent(question);
+  const all = packets(records, position, intent === 'scene');
   const finish = (evidence: Evidence[]): SceneContext => {
     const selected = new Set(evidence.map(item => item.id));
     const omitted = all.filter(item => !selected.has(item.id));
@@ -131,7 +139,6 @@ export function selectSceneContext(records: SubtitleRecord[], position: ViewingP
       omittedPassages: omitted.length, omittedRanges: ranges.slice(0, 12) } };
   };
   if (!all.length) return finish([]);
-  const intent = questionIntent(question);
   const local = nearbyEvidence(all, position).sort((a, b) => b.end - a.end);
   // Old dialogue cannot establish what a silent, much later scene is showing.
   if (intent === 'scene' && !local.length) return finish([]);

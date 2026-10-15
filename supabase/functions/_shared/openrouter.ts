@@ -9,7 +9,7 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
   // One generator serves a complete answer, including verification/repair.
   // Keep all model calls within one budget, leaving time for subtitle import.
   const deadline = Date.now() + 90000;
-  return async (system, user, maxTokens) => {
+  return async (system, user, maxTokens, purpose, format) => {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) throw new Error(failureMessage);
     let response: Response;
@@ -36,10 +36,14 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
           ],
           tools: [],
           tool_choice: 'none',
-          reasoning: { enabled: true, exclude: true },
-          max_tokens: maxTokens + 4096,
-          // JSON mode controls shape; the claim checker still controls publication.
-          response_format: { type: 'json_object' },
+          // The fast draft is untrusted. Keep reasoning enabled for the check:
+          // direct-mode checks approved invented actions in the saved replays.
+          // This is a total completion limit, not a separate reasoning cap.
+          reasoning: { enabled: purpose === 'verifier', exclude: true },
+          max_tokens: maxTokens + (purpose === 'verifier' ? 6144 : 0),
+          // Native constraints avoid malformed line IDs; runtime validation and
+          // the evidence check still decide whether an answer can be published.
+          response_format: format ?? { type: 'json_object' },
           messages: [{ role: 'system', content: `${system}\nReturn exactly one JSON object. No Markdown fences, commentary, or thinking text.` },
             { role: 'user', content: user }],
         }),

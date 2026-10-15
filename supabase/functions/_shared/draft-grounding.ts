@@ -4,8 +4,11 @@ import type { VerificationIssue } from './verification.ts';
 const genericSubjects = new Set(('a an the what whats why how who which where when is are do does did can could ' +
   'would should tell explain describe remind please i we you he she it they his her their its this that these those ' +
   'one another someone anyone everyone nobody both neither each').split(' '));
+const sentenceWords = new Set(('at after before during earlier later meanwhile here there now then this these those ' +
+  'in on for from by with without as but and or so yet however instead also only even finally captions i').split(' '));
 const normalized = (text: string) => text.normalize('NFKC').toLocaleLowerCase('en');
-const words = (text: string) => new Set(normalized(text).match(/[\p{L}\p{N}]+/gu) ?? []);
+const token = (text: string) => normalized(text).replaceAll('’', "'").replace(/'s$/, '');
+const words = (text: string) => new Set((text.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? []).map(token));
 const capitals = (text: string) => text.match(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu) ?? [];
 const speechVerbs = '(?:says|said|states|stated|tells|told|asks|asked|declares|declared|insists|insisted|expects|expected|argues|argued|claims|claimed|believes|believed|suspects|suspected|replies|replied|responds|responded|announces|announced|addresses|addressed|speaks|spoke)';
 const namedSpeech = new RegExp(`(?<![\\p{L}\\p{N}])([\\p{Lu}][\\p{L}\\p{M}'’\\-]*(?: [\\p{Lu}][\\p{L}\\p{M}'’\\-]*)?)\\s+(?:${speechVerbs}|(?:is|was)\\s+[^.!?]{1,60}\\bwho\\s+${speechVerbs})\\b`, 'gu');
@@ -14,13 +17,23 @@ const namedSpeech = new RegExp(`(?<![\\p{L}\\p{N}])([\\p{Lu}][\\p{L}\\p{M}'’\\
 // A name in the question cannot identify an unlabeled speaker in an unrelated
 // exchange. These checks run before either writer draft reaches the verifier.
 export function draftGroundingIssues(question: string, draft: GroundedDraft, evidence: Evidence[]): VerificationIssue[] {
-  const questionNames = [...new Set(capitals(question).map(normalized))].filter(name => !genericSubjects.has(name));
+  const questionNames = [...new Set(capitals(question).map(token))].filter(name => !genericSubjects.has(name));
   const byId = new Map(evidence.map(item => [item.id, item]));
+  // Names already present in the permitted source stay names even at the start
+  // of an answer sentence. Their appearance in one scene cannot label speakers
+  // in a different, uncited exchange.
+  const sourceNames = new Set(evidence.flatMap(item => capitals(item.text).map(token)));
   const issues = new Set<VerificationIssue>();
   for (const claim of draft.claims) {
     const cited = claim.evidenceIds.map(id => byId.get(id)?.text ?? '').join('\n');
     const citedWords = words(cited), claimWords = words(claim.text);
     if (questionNames.some(name => claimWords.has(name) && !citedWords.has(name))) issues.add('identity');
+    for (const match of claim.text.matchAll(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu)) {
+      const name = token(match[0]);
+      if (genericSubjects.has(name) || sentenceWords.has(name)) continue;
+      const sentenceStart = !claim.text.slice(0, match.index).trim() || /[.!?]\s*$/.test(claim.text.slice(0, match.index));
+      if ((!sentenceStart || sourceNames.has(name) || /^[A-Z]{2,}$/.test(match[0])) && !citedWords.has(name)) issues.add('identity');
+    }
     // A name being called or mentioned is not a speaker label. Preserve real
     // labels from SDH/WebVTT; never propagate a guessed name across passages.
     for (const match of claim.text.matchAll(namedSpeech)) {

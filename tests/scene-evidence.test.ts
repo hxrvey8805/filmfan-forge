@@ -12,6 +12,43 @@ const message = (overrides: Partial<Conversation> = {}): Conversation => ({ id: 
   created_at: '2026-10-14T00:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('timestamped scene retrieval', () => {
+  it('separates an earlier proposal from the latest cues without dropping either or admitting a crossing cue', () => {
+    const point = { ...position, seconds: 100 };
+    const cues = [
+      { start: 60, end: 64, text: 'We will start the engine.' },
+      { start: 68, end: 70, text: 'Try again.' },
+      { start: 70, end: 74, text: '[ENGINE REVS]' },
+      { start: 80, end: 82, text: '[CHEERING]' },
+      { start: 90, end: 95, text: '[RUSTLING]' },
+      { start: 99, end: 100.001, text: 'FUTURE_SPEAKER' },
+    ];
+    const context = selectSceneContext([record({ cues })], point, 'What is happening right now?');
+    expect(context.evidence).toHaveLength(2);
+    expect(context.evidence[0].text).toContain('start the engine');
+    expect(context.evidence[0].text).not.toContain('ENGINE REVS');
+    expect(context.evidence[1]).toMatchObject({ start: 70, end: 95 });
+    expect(context.evidence[1].text).not.toContain('Try again');
+    expect(context.coverage.omittedPassages).toBe(0);
+    const prompt = buildPrompts('What is happening right now?', point, context.evidence, [], context.coverage);
+    expect(prompt.data.moment).toEqual({ windowStart: 70, recentEvidenceIds: ['P2'] });
+    expect(prompt.user).not.toContain('FUTURE_SPEAKER');
+    // Recompute the window after rewind; neither the later sound nor its ID
+    // survives into the new prompt. Exact completed-cue boundaries still apply.
+    const rewind = { ...point, seconds: 73.999 };
+    const earlier = selectSceneContext([record({ cues })], rewind, 'What is happening right now?');
+    const earlierPrompt = buildPrompts('What is happening right now?', rewind, earlier.evidence, []);
+    expect(earlierPrompt.user).not.toMatch(/ENGINE REVS|CHEERING|RUSTLING|FUTURE_SPEAKER/);
+    expect(earlierPrompt.data.moment?.windowStart).toBeCloseTo(43.999);
+  });
+  it('never labels an earlier episode as the current moment even when its local timestamp is recent', () => {
+    const rows = [record(), record({ id: 'previous', episode_number: 1 })];
+    const context = selectSceneContext(rows, position, 'What is happening now?');
+    const prompt = buildPrompts('What is happening right now?', position, context.evidence, []);
+    expect(prompt.data.moment?.recentEvidenceIds).toEqual(['P2']);
+    const switched = { ...position, episodeNumber: 1 };
+    const other = selectSceneContext(rows, switched, 'What is happening right now?');
+    expect(other.evidence.every(item => item.episode === 1)).toBe(true);
+  });
   it('keeps a dense short conversation intact on the OpenRouter budget instead of dropping its middle', () => {
     const cues = Array.from({ length: 170 }, (_, i) => ({ start: i * 1.7, end: i * 1.7 + 1.6,
       text: `TURN_${i}: We are discussing the disagreement and its immediate context.` }));

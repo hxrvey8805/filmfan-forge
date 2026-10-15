@@ -18,13 +18,13 @@ describe('OpenRouter companion transport', () => {
     const body = JSON.parse(options!.body as string);
     expect(body).toMatchObject({ model: 'dots-studio/dots-3-note-preview:free', stream: false,
       provider: { only: ['atlas-cloud/fp8'], allow_fallbacks: false, require_parameters: true, max_price: { prompt: 0, completion: 0, request: 0 } },
-      tools: [], tool_choice: 'none', reasoning: { enabled: true, exclude: true } });
+      tools: [], tool_choice: 'none', reasoning: { enabled: false, exclude: true } });
     expect(body.plugins).toContainEqual({ id: 'web', enabled: false });
     expect(body.plugins).toContainEqual({ id: 'response-healing', enabled: false });
     expect(body.plugins.every((plugin: { enabled: boolean }) => plugin.enabled === false)).toBe(true);
     expect(body).not.toHaveProperty('models');
     expect(body.response_format).toEqual({ type: 'json_object' });
-    expect(body.max_tokens).toBeGreaterThan(900);
+    expect(body.max_tokens).toBe(900);
     expect(body.messages[1]).toEqual({ role: 'user', content: 'Permitted dialogue' });
   });
 
@@ -125,6 +125,18 @@ describe('OpenRouter companion transport', () => {
     expect(JSON.stringify(bodies[0])).toContain('SAFE_MEMORY');
     expect(JSON.stringify(bodies)).not.toMatch(/FUTURE_|OTHER_EPISODE_|OTHER_TITLE_|FAILED_MEMORY|UNVERIFIED_REASONING/);
     expect(JSON.stringify(bodies[1])).not.toContain('SAFE_MEMORY');
+    const writerSchema = bodies[0].response_format.json_schema;
+    const checkerSchema = bodies[1].response_format.json_schema;
+    expect(bodies[0].response_format.type).toBe('json_schema');
+    expect(writerSchema.strict).toBe(true);
+    expect(writerSchema.schema.properties.claims.items.properties.evidenceIds.items.enum).toEqual(['P1']);
+    expect(writerSchema.schema.properties.claims.items.properties.text.maxLength).toBe(260);
+    expect(checkerSchema.schema.properties.checks.items.properties.sources.items.enum).toEqual(['P1:1']);
+    expect(checkerSchema.schema.properties.checks.minItems).toBe(1);
+    expect(checkerSchema.schema.properties.checks.maxItems).toBe(1);
+    expect(bodies[0].reasoning).toEqual({ enabled: false, exclude: true });
+    expect(bodies[1].reasoning).toEqual({ enabled: true, exclude: true });
+    expect(bodies[1].max_tokens).toBe(1800 + 6144);
   });
 
   it('withholds the writer draft if the verifier hits the free quota', async () => {

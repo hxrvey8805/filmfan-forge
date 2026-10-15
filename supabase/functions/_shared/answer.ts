@@ -2,8 +2,9 @@ import { buildPrompts, evidenceLabel, permittedEvidence, unavailableMemoryReply,
   type Conversation, type Evidence, type EvidenceCoverage, type ViewingPosition } from './companion.ts';
 import { repairInstruction, verificationEvidence, verifiedSelection, VERIFICATION_PROMPT, type VerificationIssue } from './verification.ts';
 import { draftGroundingIssues } from './draft-grounding.ts';
+import { writerFormat, verifierFormat, type AnswerFormat } from './answer-schema.ts';
 
-export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier') => Promise<unknown>;
+export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier', format?: AnswerFormat) => Promise<unknown>;
 
 export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
@@ -24,8 +25,8 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
   for (let attempt = 0; attempt < 2; attempt++) {
     attempts++;
     const system = attempt === 0 ? prompts.system : `${prompts.system}\n${repairInstruction(issues)}`;
-    const candidate = validateDraft(await generate(system, prompts.user, 1500, 'writer'), prompts.data.evidence);
-    const draft = candidate && candidate.claims.length <= prompts.maxClaims ? candidate : null;
+    const candidate = validateDraft(await generate(system, prompts.user, 1500, 'writer', writerFormat(prompts.data.evidence, prompts.maxClaims)), prompts.data.evidence);
+    const draft = candidate && candidate.claims.length <= prompts.maxClaims && candidate.claims.every(claim => claim.text.length <= 260) ? candidate : null;
     if (!draft || draft.status !== 'answered') {
       if (attempt === 0) { issues = draft ? ['relevance'] : ['citation']; continue; }
       report(draft ? 'draft_insufficient' : 'draft_invalid'); return null;
@@ -38,7 +39,8 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
     // Include the complete selected context, not just the writer's chosen
     // excerpts: surrounding dialogue can contradict a plausible paraphrase.
     const verdict = await generate(VERIFICATION_PROMPT,
-      JSON.stringify({ question, position, coverage: prompts.data.coverage, evidence: verificationEvidence(prompts.data.evidence), claims: draft.claims }), 900, 'verifier');
+      JSON.stringify({ question, position, intent: prompts.data.intent, moment: prompts.data.moment,
+        coverage: prompts.data.coverage, evidence: verificationEvidence(prompts.data.evidence), claims: draft.claims }), 1800, 'verifier', verifierFormat(prompts.data.evidence, draft.claims.length));
     const selection = verifiedSelection(verdict, draft.claims, prompts.data.evidence);
     if (!selection) { report('verification_invalid', draft.claims.length); return null; }
     if (selection.sufficient && selection.indexes.length) {

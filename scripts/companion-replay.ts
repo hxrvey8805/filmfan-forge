@@ -25,7 +25,7 @@ const generations: { phase: string; response: unknown }[] = [];
 const requests: { phase: string; system: string; user: string; maxTokens: number }[] = [];
 const usage: unknown[] = [];
 const requestConfigs: unknown[] = [];
-const providerFailures: { status: number; code: string | null }[] = [];
+const providerFailures: { status: number; code: string | null; category: string }[] = [];
 const completions: { status: number; finishReason: string | null; hasError: boolean;
   parsed: boolean; elapsedMs: number; contentType: string | null; aborted: boolean }[] = [];
 let error: string | null = null;
@@ -41,6 +41,7 @@ if (mode === '--live' && memoryReply) {
     const body = JSON.parse(options && 'body' in options && typeof options.body === 'string' ? options.body : '{}');
     requestConfigs.push({ model: body.model, reasoningEnabled: body.reasoning?.enabled,
       excludesReasoning: body.reasoning?.exclude, maxTokens: body.max_tokens,
+      responseFormat: body.response_format?.type, schemaName: body.response_format?.json_schema?.name,
       provider: body.provider, plugins: body.plugins });
     const started = Date.now();
     const response = await fetch(url, options);
@@ -57,15 +58,23 @@ if (mode === '--live' && memoryReply) {
       // Keep diagnostic codes only; provider bodies may echo input or reasoning.
       const body = await response.clone().json().catch(() => null);
       const code = body?.error?.code;
-      providerFailures.push({ status: response.status, code: typeof code === 'string' && /^[a-z_]{1,80}$/.test(code) ? code : null });
+      // Classify locally; never save or print raw provider prose, which may
+      // echo subtitles, questions or credentials. Categories are fixed strings.
+      const diagnostic = JSON.stringify(body?.error ?? {}).toLowerCase();
+      const category = /response_format|json.?schema|structured.output/.test(diagnostic) ? 'schema' :
+        /context.length|context.window|max_tokens|token.limit/.test(diagnostic) ? 'token_limit' :
+        /rate.limit|quota|daily.limit/.test(diagnostic) ? 'quota' :
+        /content.filter|moderation|content.policy/.test(diagnostic) ? 'provider_filter' :
+        /no.endpoints|unavailable|overloaded/.test(diagnostic) ? 'unavailable' : 'unknown';
+      providerFailures.push({ status: response.status, code: typeof code === 'string' && /^[a-z_]{1,80}$/.test(code) ? code : null, category });
     }
     return response;
   });
   try {
-    result = await checkedAnswer(input.question, input.position, evidence, history, async (system, user, maxTokens, purpose) => {
+    result = await checkedAnswer(input.question, input.position, evidence, history, async (system, user, maxTokens, purpose, format) => {
       const phase = purpose ?? 'unknown';
       requests.push({ phase, system, user, maxTokens });
-      const response = await generate(system, user, maxTokens);
+      const response = await generate(system, user, maxTokens, purpose, format);
       generations.push({ phase, response });
       return response;
     }, event => checks.push(event), coverage);

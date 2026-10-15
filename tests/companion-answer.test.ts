@@ -14,6 +14,34 @@ const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media
   timestamp: '00:00:20', created_at: '2026-10-13T12:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('answer generation and independent verification', () => {
+  it('rejects a named identity absent from the checker proof even when it occurs elsewhere in the cited passage', async () => {
+    const rows = [{ ...evidence[0], text: '[00:00:10] Sam!\n[00:00:11] The letter is sealed.' }];
+    const wrong = { status: 'answered', claims: [{ text: 'Sam sealed the letter.', evidenceIds: ['P1'] }] };
+    const verdict = { ...pass, checks: [{ ...check, sources: ['P1:2'] }] };
+    const generate = vi.fn().mockResolvedValueOnce(wrong).mockResolvedValueOnce(verdict)
+      .mockResolvedValueOnce(wrong).mockResolvedValueOnce(verdict);
+    expect(await checkedAnswer('What happened?', position, rows, [], generate)).toBeNull();
+  });
+  it('gives the checker the same explicit current-window boundary as the writer', async () => {
+    const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
+    await checkedAnswer('What is happening right now?', position, evidence, [], generate);
+    const request = JSON.parse(generate.mock.calls[1][1]);
+    expect(request.intent).toBe('scene');
+    expect(request.moment).toEqual({ windowStart: 0, recentEvidenceIds: ['P1'] });
+    expect(generate.mock.calls[0][1]).toContain(JSON.stringify(request.moment));
+  });
+  it('keeps unchecked model metadata out of the verifier even if the provider ignores its schema', async () => {
+    const generate = vi.fn().mockResolvedValueOnce({ ...draft, futureSummary: 'UNTRUSTED_TOP_LEVEL',
+      claims: [{ ...claim, unsupportedContext: 'UNTRUSTED_CLAIM_FIELD' }] }).mockResolvedValueOnce(pass);
+    expect((await checkedAnswer('Why?', position, evidence, [], generate))?.answer).toBe(claim.text);
+    expect(JSON.stringify(generate.mock.calls[1])).not.toMatch(/UNTRUSTED_/);
+  });
+  it('rebuilds compound overlong prose before spending a verifier call', async () => {
+    const generate = vi.fn().mockResolvedValueOnce({ ...draft, claims: [{ ...claim, text: 'x'.repeat(261) }] })
+      .mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
+    expect((await checkedAnswer('Why?', position, evidence, [], generate))?.answer).toBe(claim.text);
+    expect(generate.mock.calls.map(call => call[3])).toEqual(['writer', 'writer', 'verifier']);
+  });
   it.each([
     { name: 'no history', rows: [] }, { name: 'later timestamp', rows: [history({ position_seconds: 31 })] },
     { name: 'other episode', rows: [history({ episode_number: 3 })] },
@@ -143,7 +171,7 @@ describe('answer generation and independent verification', () => {
   });
   it('keeps a useful verified subset and removes rejected prose and citations', async () => {
     const rows = [...evidence, { ...evidence[0], id: 'other', text: 'Other dialogue.' }];
-    const mixed = { status: 'answered', claims: [claim, { text: 'UNSUPPORTED_DETAIL', evidenceIds: ['P2'] }] };
+    const mixed = { status: 'answered', claims: [claim, { text: 'unsupported_detail', evidenceIds: ['P2'] }] };
     const verdict = { withinBoundary: true, sufficient: true, checks: [
       { index: 1, supported: false, issue: 'inference', reason: 'No evidence for this detail.' }, check] };
     const generate = vi.fn().mockResolvedValueOnce(mixed).mockResolvedValueOnce(verdict);
@@ -174,7 +202,7 @@ describe('answer generation and independent verification', () => {
     expect(JSON.parse(generate.mock.calls[1][1]).evidence.flatMap((item: { lines: { text: string }[] }) => item.lines.map(line => line.text))).toEqual([evidence[0].text, unrelated.text]);
   });
   it('rebuilds once using fixed issue hints, never the rejected draft or verifier prose', async () => {
-    const badDraft = { ...draft, claims: [{ ...claim, text: 'UNSAFE_DRAFT' }] };
+    const badDraft = { ...draft, claims: [{ ...claim, text: 'unsafe_draft' }] };
     const badCheck = { ...reject, checks: [{ ...reject.checks[0], reason: 'REJECTED_PRIVATE_DETAIL' }] };
     const generate = vi.fn().mockResolvedValueOnce(badDraft).mockResolvedValueOnce(badCheck)
       .mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
@@ -182,7 +210,7 @@ describe('answer generation and independent verification', () => {
     expect(generate.mock.calls.map(call => call[3])).toEqual(['writer', 'verifier', 'writer', 'verifier']);
     expect(generate.mock.calls[2][1]).toBe(generate.mock.calls[0][1]);
     expect(generate.mock.calls[2][0]).toContain('Distinguish the caller');
-    expect(JSON.stringify(generate.mock.calls.slice(2))).not.toMatch(/UNSAFE_DRAFT|REJECTED_PRIVATE_DETAIL/);
+    expect(JSON.stringify(generate.mock.calls.slice(2))).not.toMatch(/unsafe_draft|REJECTED_PRIVATE_DETAIL/);
   });
   it('does not return a supported but insufficient fragment or loop indefinitely', async () => {
     const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce({ ...pass, sufficient: false })

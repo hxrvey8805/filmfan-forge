@@ -20,17 +20,17 @@ The previous Nemotron free endpoint was removed from the integration because its
 
 **The current caption/context repair is held in draft. Do not merge or deploy it until the original questions pass a fresh live evaluation, including rewind and episode-switch checks.** The provider activation steps below describe the earlier connection. The current repair also requires `20261015153000_caption_context_revision.sql` alongside both edge functions: subtitle revision 3 excludes older caption caches while preserving conversation version 2. Do not use the earlier migration-free deployment instruction unchanged for this repair.
 
-1. Merge the reviewed change to GitHub main so Lovable syncs the source.
-2. Store `OPENROUTER_API_KEY` in CineGeek's Cloud secrets; never paste it into Lovable chat or commit it.
-3. Deploy **both** `spoiler-free-companion` and `process-subtitles`, including their shared imports. This also deploys the already-merged retrieval and memory repairs. No database migration or frontend change is needed.
+1. Only after the acceptance gate passes, merge the reviewed change to GitHub main so Lovable syncs the source.
+2. Apply `20261015153000_caption_context_revision.sql` and confirm subtitle revision 3 is available. Preserve `OPENROUTER_API_KEY` in CineGeek's Cloud secrets; never paste it into Lovable chat or commit it.
+3. Deploy **both** `spoiler-free-companion` and `process-subtitles`, including their shared imports. Deploy the reviewed frontend history changes as well. The caption revision migration is required for this repair.
 4. Set `COMPANION_AI_PROVIDER=openrouter` after both functions are deployed. Adding the API key alone does not activate the provider.
 5. Confirm function deployment versions/status before claiming the public companion has switched. GitHub sync and frontend Publish alone are not backend deployment evidence.
 
 Lovable's managed Cloud project is not a user-owned Supabase CLI project. The current documented deployment flow uses the Lovable agent and consumes build credits. Do not trigger it under a no-Lovable-credits constraint; obtain explicit permission for a narrowly scoped deployment or use a separately authorized backend migration. Secrets can be staged through the UI without an AI build request.
 
-Suggested deployment-only instruction, **send only when build-credit use is authorized**:
+Suggested deployment-only instruction, **send only after the release gate passes and build-credit use is authorized**:
 
-> Deploy `process-subtitles` and `spoiler-free-companion` from current GitHub main, including all `_shared` imports. Preserve source exactly. No migrations, model questions, subtitle downloads, frontend edits, or additional AI features. Report deployment success/version for both. Do not print secrets. The OpenRouter key is stored separately in Cloud secrets; activation uses `COMPANION_AI_PROVIDER=openrouter` after both functions are deployed.
+> Apply `20261015153000_caption_context_revision.sql`, then deploy `process-subtitles` and `spoiler-free-companion` from the reviewed GitHub main, including all `_shared` imports and the reviewed frontend changes. Preserve source exactly. No model questions, subtitle downloads or additional AI features. Report the migration result and deployment success/version for both functions. Do not print secrets. The OpenRouter key is stored separately in Cloud secrets; activation uses `COMPANION_AI_PROVIDER=openrouter` after both functions are deployed.
 
 ## Offline checks and replay
 
@@ -56,7 +56,11 @@ The writer receives only permitted chronological passages with short request-loc
 
 There is at most one fresh rewrite and another independent check, using the same permitted evidence and memory plus fixed issue-category guidance. Rejected prose and checker explanations never become evidence. Provider failures propagate without publishing an unchecked draft.
 
-Before verification, deterministic grounding checks reject a named question subject absent from its cited passages and named speech without an explicit cited speaker label. A name called aloud is not a speaker label. The writer may still explain an unlabeled conversation anonymously. These are necessary grounding conditions, not a general entity resolver or proof that every remaining claim is true. The semantic verifier remains required.
+Before verification, deterministic grounding checks reject a named question subject absent from its cited passages, capitalized name/acronym candidates absent from their citations, and named speech without an explicit cited speaker label. The same checks also apply to the actual lines selected by the checker, rather than accepting a name elsewhere in the broader passage as proof. Possessive and curly-apostrophe forms are normalized. A name called aloud is not a speaker label. The writer may still explain an unlabeled conversation anonymously. These are necessary grounding conditions, not a general entity resolver or proof that every remaining claim is true. The semantic verifier remains required.
+
+For current-moment questions, retrieval splits packets at the start of the last 30 seconds of completed captions, while retaining the earlier dialogue as background. Both writer and checker receive the same explicit recent-window IDs. The window is not a detected scene boundary. Cue-end clipping still occurs before splitting, and the window is rebuilt after a rewind or episode switch.
+
+OpenRouter receives strict JSON schemas with only request-local passage/line IDs and bounded claim counts (two scene, six recap, three explanation; 260 characters each). Unknown draft fields are stripped before verification even if the provider ignores the schema. Format validity is not entailment. The draft uses direct generation, while the verifier retains reasoning with a larger total completion allowance; the shared 90-second deadline still applies. The direct-verifier experiment was rejected because it approved unsupported claims. This candidate configuration remains under the release hold: neither schema enforcement nor a positive model verdict establishes answer quality.
 
 Memory includes only saved `answered` turns from the same permitted scope. Failed answers remain visible in chat but cannot prime the next answer. Overlong replies are omitted instead of being cut mid-qualification. Retrieval and generation both enforce the viewing boundary, and the UI rejects stale responses after rewind, title/episode/account changes. Timestamp-only inputs are preserved.
 
@@ -86,6 +90,23 @@ Free access accepted all 15 model requests for six replays of candidate commit `
 | Switch to S1E1 at 05:00 | Later history/cues remain excluded and the model returns insufficient evidence. |
 
 After that evaluation, both exact boundary questions pass the deterministic memory guard with no network or credential permissions and zero model calls. This is not a fresh model-quality result or deployment confirmation. The automated suite passes 182 tests, including available-memory follow-ups, unavailable-memory variants, ordinary story questions, UI transitions and database charging. The four content questions remain release failures; keep the PR in draft and do not deploy.
+
+## 15 October continuation: current-window and proof checks
+
+The schema/direct-generation experiment returned valid JSON quickly, but its direct verifier approved unsupported visual events, identities and chronology. It is **not** a quality pass. A separate source-first drafting probe also invented details and was not integrated; its verifier response was provider-filtered. The retained candidate uses reasoning for verification and adds deterministic checks against the actual selected proof lines. The same free route remains pinned. No main-branch update or deployment occurred.
+
+| Original case | Latest candidate result |
+| --- | --- |
+| Breaking Bad S1E2, 05:00 | The latest caption window is now a separate seventh packet, starting at 04:32.397. All permitted earlier context remains. Both drafts still inferred actions/causes or lacked their claimed support; the answer was withheld. Usefulness fails. |
+| The Social Network, 05:00 | All five passages remain available. The model still misstates the dispute and its chronology. The checker selected proof outside one claim's citations or without its named identities; deterministic checks withheld the answer despite positive model checks. Usefulness fails. |
+| Gladiator, 15:00 | The first draft still substitutes a different character for Maximus. The replacement still makes unsupported speaker/successor attribution, and its proof does not establish the identity. Withheld. The supplied plain captions cannot establish the requested personal relationship reliably. |
+| Breaking Bad S1E1, 27:13 | All 17 passages remain available. The latest request received HTTP 400 before a draft; one diagnostic retry also returned 400 without a recognized safe error category. The cause is unresolved, and this is not a content-quality pass. No automatic retry/fallback was added. |
+| Rewind to S1E2 03:15 | Exact question passes the deterministic unavailable-memory guard without network or credentials. Filtered future history never enters the prompt or answer. |
+| Switch to S1E1 05:00 | Exact question passes the same guard without network or credentials. The other episode's answer is unavailable. |
+
+Across the format experiment, source-first probe, latest four content replays and one diagnostic retry, 22 model requests were attempted. Twenty returned usage records, all with cost zero; the two HTTP 400 requests returned no usage. No 429 occurred. These are saved-input replays, not tests of the published website. Subtitle/playback-edition alignment remains unverified, and the two plain-caption fixtures were not replaced with newly downloaded SDH tracks.
+
+Validation: 191 automated tests, production build, Deno checks, scoped ESLint, and the six-input/four-captured-failure offline regression pass. Added coverage includes recent/background packet separation, exact boundary and episode transitions, removal of untrusted draft fields, schema IDs, proof-level identity checks, and possessive/accented names. This establishes those implementation behaviors, **not useful new model answers**. Keep the PR in draft until all original questions pass manual evidence review and the deployment gate is explicitly cleared.
 
 ## Earlier 14 October 2026 evaluation
 
