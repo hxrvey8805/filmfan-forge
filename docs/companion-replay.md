@@ -1,20 +1,40 @@
-# Companion replay and release checks
+# Companion provider, deployment and replay
 
-`scripts/companion-replay.ts` runs the shared retrieval, writer and checker against an exported subtitle prefix. It does not call Lovable or write production conversations. Use exports with individual cues already clipped to the intended viewing point, and keep exports, keys and results outside Git.
+## Free OpenRouter connection
 
-Input JSON contains `question`, `position`, `records` and optional `history`, using the shared companion types. Without `--live`, the script writes retrieval and the writer prompt. With `--live`, it calls Nemotron 3 Ultra's free OpenRouter endpoint for private evaluation and saves the actual writer/checker requests, final JSON responses, token usage, safe provider error codes, and the returned answer or refusal. It never saves credentials, provider response bodies or model reasoning. Errors preserve the partial audit and exit with a nonzero status.
+The companion can use `dots-studio/dots-3-note-preview:free` through OpenRouter, pinned to `atlas-cloud/fp8`. Set the backend secrets `OPENROUTER_API_KEY` and `COMPANION_AI_PROVIDER=openrouter` to activate it after deploying the code. Until the explicit provider setting is present, the existing Groq configuration is used. An OpenRouter failure or missing key never triggers a provider fallback. `COMPANION_AI_PROVIDER=groq` is the explicit rollback.
 
-## Nemotron setup and release restriction
+The [OpenRouter model listing](https://openrouter.ai/dots-studio/dots-3-note-preview:free) currently has zero input/output prices and a **31 December 2026** retirement date. The [endpoint metadata](https://openrouter.ai/api/v1/models/dots-studio/dots-3-note-preview:free/endpoints) advertises JSON output and reasoning. The model is [Apache 2.0 licensed](https://huggingface.co/dots-studio/dots3-note-prev/blob/main/README.md); [AtlasCloud's API integration terms](https://www.atlascloud.ai/acceptable-use) allow end-user applications that add substantial functionality. CineGeek adds timestamp-gated evidence retrieval, scoped memory and independent claim verification; it does not expose a raw model API.
 
-The private replay uses `nvidia/nemotron-3-ultra-550b-a55b:free`, pinned to NVIDIA with zero maximum token/request prices, no provider fallbacks, no tools and explicitly disabled plugins. An empty plugin array would inherit account defaults. Before any live replay, use a workspace with plugins disabled: OpenRouter's account-level “Prevent overrides” setting can override request-level disabling. Keep billing off. The public edge function still uses Groq. The private adapter lives under `scripts/lib` to avoid an accidental production switch.
+The adapter pins the free model and provider, sets maximum prompt/completion/request prices to zero, and disables provider fallbacks, tools and plugins. It requests JSON and parses only a complete final object. Truncated output, tool calls, source annotations, malformed JSON and provider failures cannot publish an unchecked answer. Provider errors are sanitized and never include credentials or echoed questions. A request times out after at most 45 seconds, with a shared 90-second budget for all writer/checker/repair calls. Provider failures are not automatically retried.
 
-The [OpenRouter model page](https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b:free) explicitly applies the [NVIDIA API Trial Terms](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Sections 1.2–1.4 limit this endpoint to internal trial/evaluation and exclude production use. Do not enable this free endpoint for the public companion. A production-serving arrangement would need different terms and separate authorization for any cost. No production deployment or model-quality evaluation is claimed by this change.
+Before activation, confirm that the OpenRouter workspace does not enforce locked-on plugins or paid account defaults. Explicitly disabling plugins in a request does not override an account-level “Prevent overrides” rule. Do not turn on billing, purchase credits or weaken privacy preferences. Keep keys in backend secrets or a private local env file outside Git (mode 0600), never a `VITE_` variable.
 
-Keep `OPENROUTER_API_KEY` in a private file outside Git (mode 0600) or a server secret, never a `VITE_` variable. Do not submit confidential information or personal data to this free endpoint; NVIDIA's model page discloses collection of prompts and outputs for service improvement. Do not override account privacy preferences to force a request through. Free requests are limited to 50/day without credit purchases; failures count too. The adapter does not automatically retry provider failures or enable billing.
+The free account allowance is currently 50 model requests/day without credit purchases. A checked answer uses two calls, or up to four with one rewrite; all users share the account quota. Rate-limit failures produce an unavailable message, never a paid fallback. Free access and availability can change; the pinned route must fail rather than silently start charging. This is a limited temporary service, not an unlimited or permanent free tier.
 
-This endpoint supports reasoning but does not support `response_format`. The system instruction requests JSON; only complete final JSON objects enter the existing claim and checker validators. Reasoning text and incomplete or malformed responses cannot be published. Reasoning and visible output share a bounded completion budget. Each request has a 90-second timeout; answer quality and latency remain unmeasured for this integration.
+The question and subtitle-ingestion paths no longer call paid OpenAI embeddings. Retrieval uses timestamp and keyword ranking with a null query vector. Existing vectors are harmless and need no migration. Subtitle-provider download quotas and existing hosting limits still apply; this integration does not purchase or upgrade them.
 
-Live replay is opt-in and should only run when requested. No live AI questions were run for this provider change.
+The previous Nemotron free endpoint was removed from the integration because its linked NVIDIA API Trial Terms exclude public production use. It is not a fallback.
+
+## Deployment
+
+1. Merge the reviewed change to GitHub main so Lovable syncs the source.
+2. Store `OPENROUTER_API_KEY` in CineGeek's Cloud secrets; never paste it into Lovable chat or commit it.
+3. Deploy **both** `spoiler-free-companion` and `process-subtitles`, including their shared imports. This also deploys the already-merged retrieval and memory repairs. No database migration or frontend change is needed.
+4. Set `COMPANION_AI_PROVIDER=openrouter` after both functions are deployed. Adding the API key alone does not activate the provider.
+5. Confirm function deployment versions/status before claiming the public companion has switched. GitHub sync and frontend Publish alone are not backend deployment evidence.
+
+Lovable's managed Cloud project is not a user-owned Supabase CLI project. The current documented deployment flow uses the Lovable agent and consumes build credits. Do not trigger it under a no-Lovable-credits constraint; obtain explicit permission for a narrowly scoped deployment or use a separately authorized backend migration. Secrets can be staged through the UI without an AI build request.
+
+Suggested deployment-only instruction, **send only when build-credit use is authorized**:
+
+> Deploy `process-subtitles` and `spoiler-free-companion` from current GitHub main, including all `_shared` imports. Preserve source exactly. No migrations, model questions, subtitle downloads, frontend edits, or additional AI features. Report deployment success/version for both. Do not print secrets. The OpenRouter key is stored separately in Cloud secrets; activation uses `COMPANION_AI_PROVIDER=openrouter` after both functions are deployed.
+
+## Offline checks and replay
+
+`scripts/companion-replay.ts` uses the shared retrieval, writer and checker against an exported subtitle prefix. It does not call Lovable or write production conversations. Use exports with individual cues clipped to the intended viewing point, and keep exports, keys and results outside Git.
+
+Input JSON contains `question`, `position`, `records` and optional `history`, using the shared companion types. Without `--live`, the script writes retrieval and the writer prompt. With `--live`, it uses the same OpenRouter adapter as the backend and saves writer/checker requests, final JSON responses, token usage, safe provider error codes and the answer or refusal. It never saves credentials, raw provider error bodies or model reasoning. Errors preserve the partial audit and exit with a nonzero status. Live replay is opt-in and should only run when requested.
 
 ```sh
 deno run --allow-read=/private/audit --allow-write=/private/audit \
@@ -26,17 +46,15 @@ deno run --env-file=/private/openrouter.env --allow-env=OPENROUTER_API_KEY \
   scripts/companion-replay.ts /private/audit/input.json /private/audit/result-live.json --live
 ```
 
-## Current answer flow
+## Answer and memory boundaries
 
-The writer receives readable chronological passages with short request-local citation IDs. Each claim is a short, standalone statement with its own qualifications. The checker receives the entire selected evidence context, not just the passages chosen by the writer, and must check every claim individually.
+The writer receives only permitted chronological passages with short request-local citation IDs. Each claim is a short, standalone statement with its own qualifications. The checker receives the entire selected evidence context and checks every claim individually. Only explicitly supported claims can be returned, and only when those claims alone form a useful, coherent answer. Incomplete, contradictory or boundary-failing verdicts are rejected.
 
-Only explicitly supported claims can be returned, and only when the checker finds that those claims alone make a useful, coherent answer. The server maps their aliases back to the original citations. Incomplete, contradictory or boundary-failing verdicts are rejected outright.
+There is at most one fresh rewrite and another independent check, using the same permitted evidence and memory plus fixed issue-category guidance. Rejected prose and checker explanations never become evidence. Provider failures propagate without publishing an unchecked draft.
 
-An unusable draft or insufficient answer gets at most one fresh rewrite and another independent check. The rewrite uses the same permitted evidence and memory, plus fixed issue-category guidance; rejected prose and checker explanations are never fed into it. There are at most four model calls, and provider failures propagate without publishing an unchecked draft. A retry can increase latency or encounter the provider's free-tier rate limit.
+Memory includes only saved `answered` turns from the same permitted scope. Failed answers remain visible in chat but cannot prime the next answer. Overlong replies are omitted instead of being cut mid-qualification. Retrieval and generation both enforce the viewing boundary, and the UI rejects stale responses after rewind, title/episode/account changes. Timestamp-only inputs are preserved.
 
-Conversation memory includes only saved `answered` turns from the same permitted scope. Failed answers remain visible in chat but cannot prime the next answer. Overlong replies are omitted from prompt memory instead of being cut mid-qualification. Retrieval and generation both enforce the viewing boundary.
-
-The public model is unchanged; the private replay now targets Nemotron. The underlying answer and memory changes passed local regression, type and lint checks; no further live model evaluation was run, as requested. Historical results below do not establish the quality of this revised flow or the new model. Backend deployment is separate.
+Offline tests cover the provider requests, free-only routing, quota failures and the real writer/checker request bodies after rewind or episode switches. They do not establish model answer quality or guarantee that a model will never hallucinate. No live model questions were run for this provider change, as requested. Deployment status is reported separately.
 
 ## Earlier 14 October 2026 evaluation
 
@@ -57,4 +75,4 @@ Direct calls used `openai/gpt-oss-120b`, with exported production dialogue and e
 - Withhold unsupported answers; a safe refusal still fails answer usefulness when sufficient evidence exists.
 - Verify on the deployed backend separately. A GitHub merge or local replay is not deployment evidence.
 
-Those earlier changes retained retrieval and diagnostic improvements only. The current flow above supersedes the earlier verification contract. The private Nemotron adapter does not change production secrets, the public model or the database schema.
+Those earlier experiments retained retrieval and diagnostic improvements only. The current flow above supersedes the earlier verification contract. Switching the deployed provider still requires the explicit backend setting described above; no database migration is needed.

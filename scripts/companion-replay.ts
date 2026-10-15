@@ -1,12 +1,12 @@
 // Replay an exported, permitted subtitle prefix without saving or charging a conversation.
 // deno run --allow-read --allow-write scripts/companion-replay.ts input.json output.json
 // Add --live and --allow-env=OPENROUTER_API_KEY --allow-net=openrouter.ai for private evaluation.
-// Nemotron's free endpoint is trial-only; this script does not switch production.
+// This uses the same OpenRouter adapter as the companion; it never writes conversations.
 // Keep exports and outputs outside Git: they can contain dialogue and private conversations.
 import { buildPrompts, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion.ts';
 import { selectSceneEvidence } from '../supabase/functions/_shared/scene-evidence.ts';
 import { checkedAnswer, type AnswerDiagnostics } from '../supabase/functions/_shared/answer.ts';
-import { NEMOTRON_MODEL, nemotronGenerator } from './lib/nemotron.ts';
+import { OPENROUTER_MODEL, openRouterGenerator } from '../supabase/functions/_shared/openrouter.ts';
 
 const [inputPath, outputPath, mode] = Deno.args;
 if (!inputPath || !outputPath || (mode && mode !== '--live')) {
@@ -30,9 +30,9 @@ let result = null;
 if (mode === '--live') {
   const key = Deno.env.get('OPENROUTER_API_KEY');
   if (!key) throw new Error('Set OPENROUTER_API_KEY privately before a live replay.');
-  const generate = nemotronGenerator(key, async (url, options) => {
+  const generate = openRouterGenerator(key, async (url, options) => {
     const body = JSON.parse(options && 'body' in options && typeof options.body === 'string' ? options.body : '{}');
-    requestConfigs.push({ model: body.model, reasoningEffort: body.reasoning?.effort,
+    requestConfigs.push({ model: body.model, reasoningEnabled: body.reasoning?.enabled,
       excludesReasoning: body.reasoning?.exclude, maxTokens: body.max_tokens,
       provider: body.provider, plugins: body.plugins });
     const response = await fetch(url, options);
@@ -60,7 +60,7 @@ if (mode === '--live') {
   }
 }
 await Deno.writeTextFile(outputPath, JSON.stringify({
-  mode: mode === '--live' ? 'live-model-replay' : 'retrieval-only', model: NEMOTRON_MODEL,
+  mode: mode === '--live' ? 'live-model-replay' : 'retrieval-only', model: OPENROUTER_MODEL,
   note: 'Reconstructed from the input export, not a captured historical request. Missing history or retrieved records are not recreated.',
   question: input.question, position: input.position, evidence, prompts, checks, requests, requestConfigs,
   generations, usage, providerFailures, error, result,
