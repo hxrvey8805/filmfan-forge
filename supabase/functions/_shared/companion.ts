@@ -1,5 +1,7 @@
 // Pure helpers shared by the edge function, browser history, and regression tests.
-export const COMPANION_VERSION = 2;
+// Older checked answers predate the current grounding contract and must not
+// re-enter visible history, prompt memory, or idempotent request responses.
+export const COMPANION_VERSION = 3;
 export const SUBTITLE_VERSION = 3;
 
 export interface ViewingPosition {
@@ -256,6 +258,14 @@ export function unavailableMemoryReply(question: string, position: ViewingPositi
 }
 
 export interface GroundedDraft { status: 'answered' | 'insufficient_evidence'; claims: { text: string; evidenceIds: string[] }[] }
+export function completeClaim(text: string): boolean {
+  const trimmed = text.trim();
+  // Literal sound captions are deliberately not interpreted as full sentences.
+  if (/^Captions: \[[^\]\r\n]+\](?:; \[[^\]\r\n]+\])*$/.test(trimmed)) return true;
+  // This catches observed split-word/unfinished output, not semantic truth.
+  // The independent checker still assesses whether the sentence is coherent.
+  return /^[\p{Lu}\p{N}“"‘']/u.test(trimmed) && /[.!?][”"'’)]*$/.test(trimmed) && !/\.{2,}[”"'’)]*$/.test(trimmed);
+}
 export function validateDraft(value: unknown, evidence: Evidence[]): GroundedDraft | null {
   if (!value || typeof value !== 'object') return null;
   const draft = value as GroundedDraft;
@@ -263,7 +273,7 @@ export function validateDraft(value: unknown, evidence: Evidence[]): GroundedDra
   if (draft.status !== 'answered' || !Array.isArray(draft.claims) || draft.claims.length < 1 || draft.claims.length > 8) return null;
   const ids = new Set(evidence.map(item => item.id));
   for (const claim of draft.claims) {
-    if (!claim || typeof claim.text !== 'string' || !claim.text.trim() || claim.text.length > 400 || /[\r\n]/.test(claim.text) ||
+    if (!claim || typeof claim.text !== 'string' || !completeClaim(claim.text) || claim.text.length > 400 || /[\r\n]/.test(claim.text) ||
         !Array.isArray(claim.evidenceIds) || !claim.evidenceIds.length || claim.evidenceIds.length > 4 ||
         new Set(claim.evidenceIds).size !== claim.evidenceIds.length ||
         claim.evidenceIds.some(id => !ids.has(id))) return null;

@@ -10,8 +10,17 @@ const normalized = (text: string) => text.normalize('NFKC').toLocaleLowerCase('e
 const token = (text: string) => normalized(text).replaceAll('’', "'").replace(/'s$/, '');
 const words = (text: string) => new Set((text.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? []).map(token));
 const capitals = (text: string) => text.match(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu) ?? [];
-const speechVerbs = '(?:says|said|states|stated|tells|told|asks|asked|declares|declared|insists|insisted|expects|expected|argues|argued|claims|claimed|believes|believed|suspects|suspected|replies|replied|responds|responded|announces|announced|addresses|addressed|speaks|spoke)';
-const namedSpeech = new RegExp(`(?<![\\p{L}\\p{N}])([\\p{Lu}][\\p{L}\\p{M}'’\\-]*(?: [\\p{Lu}][\\p{L}\\p{M}'’\\-]*)?)\\s+(?:${speechVerbs}|(?:is|was)\\s+[^.!?]{1,60}\\bwho\\s+${speechVerbs})\\b`, 'gu');
+const speechVerbs = '(?:says?|said|saying|states?|stated|stating|tells?|told|telling|asks?|asked|asking|' +
+  'declares?|declared|declaring|insists?|insisted|insisting|expects?|expected|expecting|argues?|argued|arguing|' +
+  'claims?|claimed|claiming|believes?|believed|believing|suspects?|suspected|suspecting|replies|replied|replying|' +
+  'responds?|responded|responding|announces?|announced|announcing|addresses|addressed|addressing|speaks?|spoke|spoken|speaking|' +
+  'accuses?|accused|accusing|expresses|expressed|expressing|complains?|complained|complaining|denies|denied|denying|' +
+  'disputes?|disputed|disputing|suggests?|suggested|suggesting|proposes?|proposed|proposing|promises?|promised|promising)';
+// Progressive and perfect forms still attribute speech: "Mira is arguing" and
+// "Mira has complained" need the same label as "Mira says". Saved failures
+// slipped through the old present/past-only check and reversed the speakers.
+const auxiliary = '(?:(?:is|are|was|were|has|have|had|been|being)\\s+){0,3}';
+const namedSpeech = new RegExp(`(?<![\\p{L}\\p{N}])([\\p{Lu}][\\p{L}\\p{M}'’\\-]*(?: [\\p{Lu}][\\p{L}\\p{M}'’\\-]*)?)\\s+(?:${auxiliary}${speechVerbs}|(?:is|was)\\s+[^.!?]{1,60}\\bwho\\s+${speechVerbs})\\b`, 'gu');
 
 // Necessary grounding conditions, not a replacement for semantic verification.
 // A name in the question cannot identify an unlabeled speaker in an unrelated

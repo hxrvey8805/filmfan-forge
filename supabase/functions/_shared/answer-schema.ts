@@ -15,7 +15,10 @@ const format = (name: string, schema: Record<string, unknown>): AnswerFormat => 
 export function writerFormat(evidence: Evidence[], maxClaims: number): AnswerFormat {
   return format('companion_draft', object({ status: { type: 'string', enum: ['answered', 'insufficient_evidence'] },
     claims: { type: 'array', maxItems: maxClaims, items: object({
-      text: { type: 'string', minLength: 1, maxLength: 260, description: 'One short, self-contained fact reported by the supplied captions. Preserve uncertainty.' },
+      // A hard decoding limit can force a sentence to end mid-word and resume
+      // in the next claim. Validate length/completeness after generation; never
+      // truncate a qualification to make an answer fit the schema.
+      text: { type: 'string', minLength: 1, description: 'One complete sentence, at most 260 characters, reported by the supplied captions. Preserve uncertainty.' },
       evidenceIds: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', enum: evidence.map(row => row.id) } },
     }) } }));
 }

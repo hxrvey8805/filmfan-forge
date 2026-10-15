@@ -87,9 +87,12 @@ serve(async req => {
       ...(mediaType === 'tv' ? { seasonNumber, episodeNumber } : {}) };
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const id = requestId ?? crypto.randomUUID();
-    const prior = await userDb.from('ai_conversations').select('*').eq('id', id).eq('companion_version', COMPANION_VERSION).maybeSingle();
+    const prior = await userDb.from('ai_conversations').select('*').eq('id', id).maybeSingle();
     if (prior.error) throw prior.error;
     if (prior.data) {
+      if (prior.data.companion_version !== COMPANION_VERSION) {
+        return json({ error: 'This saved answer predates the companion update. Please ask again.', code: 'answer_version_changed' }, 409);
+      }
       // An ID cannot be reused to retrieve a future or different title's answer.
       if (prior.data.title_id !== tmdbId || prior.data.media_type !== mediaType || prior.data.position_seconds !== seconds ||
           prior.data.season_number !== (position.seasonNumber ?? null) || prior.data.episode_number !== (position.episodeNumber ?? null) || prior.data.question !== question.trim()) {
@@ -124,7 +127,7 @@ serve(async req => {
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
     const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: checked !== null,
       p_conversation: { id, title_id: tmdbId, media_type: mediaType, season_number: position.seasonNumber ?? null,
-        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds),
+        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds), companion_version: COMPANION_VERSION,
         question: question.trim(), answer, context, evidence: checked?.evidence ?? [],
         answer_status: checked ? 'answered' : 'insufficient_evidence' } });
     if (saved.error) {

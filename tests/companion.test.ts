@@ -10,7 +10,7 @@ const record = (overrides: Partial<SubtitleRecord> = {}): SubtitleRecord => ({
 });
 const message = (overrides: Partial<Conversation> = {}): Conversation => ({
   id: 'safe', title_id: 1, media_type: 'tv', season_number: 1, episode_number: 2,
-  position_seconds: 25, companion_version: 2, question: 'What is he holding?', answer: 'A sealed letter.',
+  position_seconds: 25, companion_version: 3, question: 'What is he holding?', answer: 'A sealed letter.',
   context: 'S1E2 @ 00:00:25', timestamp: '00:00:25', created_at: '2026-10-13T12:00:00Z', answer_status: 'answered', ...overrides,
 });
 
@@ -124,6 +124,7 @@ describe('conversation memory and answer validation', () => {
   const rows = [message(), message({ id: 'future', position_seconds: 50, answer: 'FUTURE_ANSWER' }),
     message({ id: 'next', episode_number: 3, answer: 'NEXT_EPISODE' }),
     message({ id: 'other', title_id: 9 }), message({ id: 'legacy', companion_version: 1 }),
+    message({ id: 'retired', companion_version: 2, answer: 'RETIRED_BAD_ANSWER' }),
     message({ id: 'unknown', position_seconds: null })];
   it('rewinding removes future answers from both visible history and model memory', () => {
     expect(safeHistory(rows, position).map(row => row.id)).toEqual(['safe']);
@@ -133,6 +134,7 @@ describe('conversation memory and answer validation', () => {
     expect(serialized).toContain('A sealed letter.');
     expect(serialized).not.toContain('FUTURE_ANSWER');
     expect(serialized).not.toContain('NEXT_EPISODE');
+    expect(serialized).not.toContain('RETIRED_BAD_ANSWER');
   });
   it('switching to an earlier episode gives that episode its own memory', () => {
     const previous = message({ id: 'previous', episode_number: 1, position_seconds: 10 });

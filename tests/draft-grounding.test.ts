@@ -31,6 +31,14 @@ describe('speaker and question-name grounding', () => {
   it('does not treat a name being called as a label for the subsequent speaker', () => {
     expect(draftGroundingIssues('What do we know about Mira?', draft('Mira is a captain who addresses the soldiers.', ['P1']), rows)).toContain('speaker');
   });
+  it.each(['Rowan is arguing for the plan.', 'Rowan has been arguing for the plan.',
+    'Rowan accuses the other speaker of being obsessed.', 'Rowan expresses concern about the plan.',
+    'Rowan has complained about the plan.', 'Rowan denies the allegation.'])(
+  'requires a speaker label for observed attribution variants: %s', text => {
+    expect(draftGroundingIssues('What are they discussing?', draft(text), rows)).toContain('speaker');
+    expect(draftGroundingIssues('What are they discussing?', draft(text),
+      [passage('P2', 'ROWAN: I disagree with the plan.')])).toEqual([]);
+  });
   it('allows useful statements about a mentioned name and an anonymous conversation', () => {
     expect(draftGroundingIssues('What do we know about Mira?', draft('Mira is called by name.', ['P1']), rows)).toEqual([]);
     expect(draftGroundingIssues('What do we know about Mira?', draft('A speaker speculates about the king being ill.'), rows)).toEqual([]);

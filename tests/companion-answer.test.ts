@@ -10,10 +10,20 @@ const check = { index: 0, supported: true, issue: 'none', basis: 'entailed', rea
 const pass = { withinBoundary: true, sufficient: true, checks: [check] };
 const reject = { withinBoundary: true, sufficient: false, checks: [{ ...check, supported: false, issue: 'speaker', reason: 'The speaker is unestablished.' }] };
 const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media_type: 'tv', season_number: 1, episode_number: 2,
-  position_seconds: 20, companion_version: 2, question: 'What letter?', answer: 'SAFE_ANSWER', context: '',
+  position_seconds: 20, companion_version: 3, question: 'What letter?', answer: 'SAFE_ANSWER', context: '',
   timestamp: '00:00:20', created_at: '2026-10-13T12:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('answer generation and independent verification', () => {
+  it('rejects a sentence split across claims before verification instead of joining unchecked fragments', async () => {
+    const split = { status: 'answered', claims: [
+      { text: 'A speaker considers the plan unreal', evidenceIds: ['P1'] },
+      { text: 'istic, but agrees to try it.', evidenceIds: ['P1'] },
+    ] };
+    const generate = vi.fn().mockResolvedValueOnce(split).mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
+    expect((await checkedAnswer('Why?', position, evidence, [], generate))?.answer).toBe(claim.text);
+    expect(generate.mock.calls.map(call => call[3])).toEqual(['writer', 'writer', 'verifier']);
+    expect(JSON.stringify(generate.mock.calls[2])).not.toContain('considers the plan');
+  });
   it('rejects a named identity absent from the checker proof even when it occurs elsewhere in the cited passage', async () => {
     const rows = [{ ...evidence[0], text: '[00:00:10] Sam!\n[00:00:11] The letter is sealed.' }];
     const wrong = { status: 'answered', claims: [{ text: 'Sam sealed the letter.', evidenceIds: ['P1'] }] };
@@ -48,6 +58,7 @@ describe('answer generation and independent verification', () => {
     { name: 'other title', rows: [history({ title_id: 2 })] },
     { name: 'failed answer', rows: [history({ answer_status: 'insufficient_evidence' })] },
     { name: 'legacy answer', rows: [history({ companion_version: 1 })] },
+    { name: 'retired checked answer', rows: [history({ companion_version: 2 })] },
     { name: 'overlong omitted answer', rows: [history({ answer: 'x'.repeat(1001) })] },
   ])('does not invent a reminder when the referenced assistant answer is unavailable: $name', async ({ rows }) => {
     const question = 'Remind me where they decided to park the RV in your last answer.';
@@ -171,7 +182,7 @@ describe('answer generation and independent verification', () => {
   });
   it('keeps a useful verified subset and removes rejected prose and citations', async () => {
     const rows = [...evidence, { ...evidence[0], id: 'other', text: 'Other dialogue.' }];
-    const mixed = { status: 'answered', claims: [claim, { text: 'unsupported_detail', evidenceIds: ['P2'] }] };
+    const mixed = { status: 'answered', claims: [claim, { text: 'An unsupported detail.', evidenceIds: ['P2'] }] };
     const verdict = { withinBoundary: true, sufficient: true, checks: [
       { index: 1, supported: false, issue: 'inference', reason: 'No evidence for this detail.' }, check] };
     const generate = vi.fn().mockResolvedValueOnce(mixed).mockResolvedValueOnce(verdict);
@@ -202,7 +213,7 @@ describe('answer generation and independent verification', () => {
     expect(JSON.parse(generate.mock.calls[1][1]).evidence.flatMap((item: { lines: { text: string }[] }) => item.lines.map(line => line.text))).toEqual([evidence[0].text, unrelated.text]);
   });
   it('rebuilds once using fixed issue hints, never the rejected draft or verifier prose', async () => {
-    const badDraft = { ...draft, claims: [{ ...claim, text: 'unsafe_draft' }] };
+    const badDraft = { ...draft, claims: [{ ...claim, text: 'An unsafe draft.' }] };
     const badCheck = { ...reject, checks: [{ ...reject.checks[0], reason: 'REJECTED_PRIVATE_DETAIL' }] };
     const generate = vi.fn().mockResolvedValueOnce(badDraft).mockResolvedValueOnce(badCheck)
       .mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
@@ -210,7 +221,7 @@ describe('answer generation and independent verification', () => {
     expect(generate.mock.calls.map(call => call[3])).toEqual(['writer', 'verifier', 'writer', 'verifier']);
     expect(generate.mock.calls[2][1]).toBe(generate.mock.calls[0][1]);
     expect(generate.mock.calls[2][0]).toContain('Distinguish the caller');
-    expect(JSON.stringify(generate.mock.calls.slice(2))).not.toMatch(/unsafe_draft|REJECTED_PRIVATE_DETAIL/);
+    expect(JSON.stringify(generate.mock.calls.slice(2))).not.toMatch(/An unsafe draft|REJECTED_PRIVATE_DETAIL/);
   });
   it('does not return a supported but insufficient fragment or loop indefinitely', async () => {
     const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce({ ...pass, sufficient: false })

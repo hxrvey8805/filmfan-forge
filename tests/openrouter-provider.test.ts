@@ -103,7 +103,7 @@ describe('OpenRouter companion transport', () => {
     const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1, episodeNumber: episode, seconds: 30 };
     const safe: Evidence = { id: 'letter', season: 1, episode, start: 10, end: 12, text: '(SAM) Keep this letter sealed.' };
     const memory: Conversation = { id: 'safe', title_id: 1, media_type: 'tv', season_number: 1, episode_number: episode,
-      position_seconds: 20, companion_version: 2, answer_status: 'answered', question: 'What letter?',
+      position_seconds: 20, companion_version: 3, answer_status: 'answered', question: 'What letter?',
       answer: 'SAFE_MEMORY', context: '', timestamp: '00:00:20', created_at: '2026-10-14T12:00:00Z' };
     const claim = { text: 'Sam asks for the letter to stay sealed.', evidenceIds: ['P1'] };
     const request = vi.fn<typeof fetch>()
@@ -130,7 +130,7 @@ describe('OpenRouter companion transport', () => {
     expect(bodies[0].response_format.type).toBe('json_schema');
     expect(writerSchema.strict).toBe(true);
     expect(writerSchema.schema.properties.claims.items.properties.evidenceIds.items.enum).toEqual(['P1']);
-    expect(writerSchema.schema.properties.claims.items.properties.text.maxLength).toBe(260);
+    expect(writerSchema.schema.properties.claims.items.properties.text).not.toHaveProperty('maxLength');
     expect(checkerSchema.schema.properties.checks.items.properties.sources.items.enum).toEqual(['P1:1']);
     expect(checkerSchema.schema.properties.checks.minItems).toBe(1);
     expect(checkerSchema.schema.properties.checks.maxItems).toBe(1);
