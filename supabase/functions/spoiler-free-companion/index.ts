@@ -7,7 +7,7 @@ import {
 } from "../_shared/companion.ts";
 
 import { checkedAnswer } from "../_shared/answer.ts";
-import { groqGenerator } from "../_shared/groq.ts";
+import { companionGenerator } from "../_shared/companion-provider.ts";
 import { selectSceneEvidence, subtitleSearchText } from "../_shared/scene-evidence.ts";
 
 import { assertSubtitlePreparation, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
@@ -46,24 +46,8 @@ async function ensureCurrentSubtitles(db: SupabaseClient, position: ViewingPosit
   }
 }
 
-async function embedQuestion(text: string): Promise<number[] | null> {
-  const key = Deno.env.get('OPENAI_API_KEY');
-  if (!key) return null;
-  try {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'text-embedding-3-small', input: text.slice(0, 8000) }),
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!response.ok) return null;
-    const vector = (await response.json()).data?.[0]?.embedding;
-    return Array.isArray(vector) && vector.length === 1536 ? vector : null;
-  } catch { return null; }
-}
-
 async function retrieve(db: SupabaseClient, position: ViewingPosition, question: string, memory: Conversation[]) {
   const searchText = subtitleSearchText(question, memory, position);
-  const embedding = await embedQuestion(question);
   const [prefix, relevant] = await Promise.all([
     // Rank the permitted prefix at cue level, including the boundary chunk.
     // Future cues are removed before excerpts, keyword scoring, or sampling.
@@ -71,7 +55,7 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
       .order('start_seconds', { ascending: true }).limit(1000),
     db.rpc('match_companion_chunks', { p_tmdb_id: position.tmdbId, p_media_type: position.mediaType,
       p_current_season: position.seasonNumber ?? 0, p_current_episode: position.episodeNumber ?? 0,
-      p_max_seconds: position.seconds, p_question: searchText, p_embedding: embedding }),
+      p_max_seconds: position.seconds, p_question: searchText, p_embedding: null }),
   ]);
   if (prefix.error) throw prefix.error;
   if (relevant.error) throw relevant.error;
@@ -124,9 +108,8 @@ serve(async req => {
     const evidence = await retrieve(db, position, question.trim(), memory);
     let checked = null;
     if (evidence.length) {
-      const key = Deno.env.get('GROQ_API_KEY');
-      if (!key) throw new Error('The companion is temporarily unavailable. Please try again later.');
-      checked = await checkedAnswer(question.trim(), position, evidence, memory, groqGenerator(key),
+      const generate = companionGenerator(name => Deno.env.get(name));
+      checked = await checkedAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
           evidenceChars: JSON.stringify(evidence).length }));
     }

@@ -1,11 +1,12 @@
 // Replay an exported, permitted subtitle prefix without saving or charging a conversation.
 // deno run --allow-read --allow-write scripts/companion-replay.ts input.json output.json
-// Add --live and --allow-env=GROQ_API_KEY --allow-net=api.groq.com to test the current model.
+// Add --live and --allow-env=OPENROUTER_API_KEY --allow-net=openrouter.ai for private evaluation.
+// This uses the same OpenRouter adapter as the companion; it never writes conversations.
 // Keep exports and outputs outside Git: they can contain dialogue and private conversations.
 import { buildPrompts, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion.ts';
 import { selectSceneEvidence } from '../supabase/functions/_shared/scene-evidence.ts';
 import { checkedAnswer, type AnswerDiagnostics } from '../supabase/functions/_shared/answer.ts';
-import { COMPANION_MODEL, groqGenerator } from '../supabase/functions/_shared/groq.ts';
+import { OPENROUTER_MODEL, openRouterGenerator } from '../supabase/functions/_shared/openrouter.ts';
 
 const [inputPath, outputPath, mode] = Deno.args;
 if (!inputPath || !outputPath || (mode && mode !== '--live')) {
@@ -27,16 +28,17 @@ const providerFailures: { status: number; code: string | null }[] = [];
 let error: string | null = null;
 let result = null;
 if (mode === '--live') {
-  const key = Deno.env.get('GROQ_API_KEY');
-  if (!key) throw new Error('Set the existing GROQ_API_KEY in your environment before a live replay.');
-  const generate = groqGenerator(key, async (url, options) => {
+  const key = Deno.env.get('OPENROUTER_API_KEY');
+  if (!key) throw new Error('Set OPENROUTER_API_KEY privately before a live replay.');
+  const generate = openRouterGenerator(key, async (url, options) => {
     const body = JSON.parse(options && 'body' in options && typeof options.body === 'string' ? options.body : '{}');
-    requestConfigs.push({ model: body.model, reasoningEffort: body.reasoning_effort,
-      responseFormat: body.response_format?.type, maxCompletionTokens: body.max_completion_tokens });
+    requestConfigs.push({ model: body.model, reasoningEnabled: body.reasoning?.enabled,
+      excludesReasoning: body.reasoning?.exclude, maxTokens: body.max_tokens,
+      provider: body.provider, plugins: body.plugins });
     const response = await fetch(url, options);
     if (response.ok) {
-      const body = await response.clone().json();
-      usage.push(body.usage ?? null);
+      const body = await response.clone().json().catch(() => null);
+      usage.push(body?.usage ?? null);
     } else {
       // Keep diagnostic codes only; provider bodies may echo input or reasoning.
       const body = await response.clone().json().catch(() => null);
@@ -58,7 +60,7 @@ if (mode === '--live') {
   }
 }
 await Deno.writeTextFile(outputPath, JSON.stringify({
-  mode: mode === '--live' ? 'live-model-replay' : 'retrieval-only', model: COMPANION_MODEL,
+  mode: mode === '--live' ? 'live-model-replay' : 'retrieval-only', model: OPENROUTER_MODEL,
   note: 'Reconstructed from the input export, not a captured historical request. Missing history or retrieved records are not recreated.',
   question: input.question, position: input.position, evidence, prompts, checks, requests, requestConfigs,
   generations, usage, providerFailures, error, result,

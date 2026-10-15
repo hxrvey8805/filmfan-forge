@@ -41,26 +41,7 @@ serve(async (req) => {
       cache_key: `${mediaType}:${tmdbId}:${seasonNumber ?? 0}:${episodeNumber ?? 0}:${COMPANION_VERSION}:${index}`,
       embedding: null as number[] | null,
     }));
-    const embeddingKey = Deno.env.get('OPENAI_API_KEY');
-    if (embeddingKey) {
-      for (let offset = 0; offset < rows.length; offset += 32) {
-        const batch = rows.slice(offset, offset + 32);
-        try {
-          const response = await fetch('https://api.openai.com/v1/embeddings', {
-            method: 'POST', headers: { Authorization: `Bearer ${embeddingKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'text-embedding-3-small', input: batch.map(row => row.content) }),
-            signal: AbortSignal.timeout(8000),
-          });
-          if (response.ok) {
-            for (const item of (await response.json()).data ?? []) {
-              if (Number.isInteger(item.index) && batch[item.index] && item.embedding?.length === 1536) {
-                batch[item.index].embedding = item.embedding;
-              }
-            }
-          }
-        } catch { /* Exact-time and keyword retrieval still work without embeddings. */ }
-      }
-    }
+    // Timestamp and keyword retrieval need no paid embedding service.
     // A single database transaction publishes the entire parsed file. A failed
     // import cannot leave a partially populated cache that looks complete.
     const { error } = await db.from('subtitle_chunks').upsert(rows, {
