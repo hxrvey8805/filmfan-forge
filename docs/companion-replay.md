@@ -118,6 +118,23 @@ The recap's AtlasCloud HTTP 400 was reproduced with native-schema, ordinary JSON
 
 Both exact rewind/switch questions pass with synthetic history advanced to revision 3. This avoids accidentally passing merely because an old history version was excluded. The original questions, captions and future-memory sentinel are unchanged; no credentials or network permission are available during those checks. Separate tests cover retirement of revision-2 history and cached request IDs. All 203 automated tests pass, along with the production build, Deno checks and scoped ESLint. Subtitle/playback edition alignment remains unverified. The four original content cases still have no passing release evaluation, and the published website has not been changed.
 
+## 16 October reset replay
+
+Candidate `dab608a` was replayed against the same four saved content questions after the user reported the free limit had reset. Nine model calls returned HTTP 200 and reported cost zero. The recap returned HTTP 400 before producing a draft. One previously blocked Gemma comparison returned HTTP 429 again. Eleven model requests were attempted in total; no provider settings, account privacy settings, production conversations or deployed code were changed.
+
+| Original case | Result after reset |
+| --- | --- |
+| The Social Network, 05:00 | Still fails: the first draft mixes who makes the complaints and who leaves to study. Its positive verifier also cites outside a claim's own passages. The fresh draft reverses who ends the relationship. Withheld. All five permitted passages are present. |
+| Breaking Bad S1E2, 05:00 | Still no useful answer returned. The engine-start narrative is plausible, but asserts success, intent and celebration from sounds and acknowledgements; the current proof guard rejects both positive verdicts. This does not establish that the described scene could not have happened. |
+| Gladiator, 15:00 | Still fails: the draft answers about another character, turns speculation into fact, and supplies unsupported attribution instead of establishing the requested relationship. Withheld. |
+| Breaking Bad S1E1, 27:13 | All 17 passages remain present; the writer again returns HTTP 400. Cause unresolved. |
+| Rewind to S1E2 03:15 | Pass: no eligible previous answer and no future history in the prompt; no AI calls. |
+| Switch to S1E1 05:00 | Pass: the other episode's answer remains unavailable; no AI calls. |
+
+The boundary fixtures retain revision-3 synthetic future history so they exercise timestamp/episode isolation, not just old-version rejection. The same production retrieval and answer helpers were used, but these are saved-input replays, not published-site tests. Subtitle edition alignment remains unverified. The four content cases still fail the release gate, so keep the PR in draft.
+
+The only code change following this replay corrects the HTTP 429 message to say the free service is rate-limited. A 429 alone does not establish that the user's daily account allowance is exhausted. No automatic retry, paid fallback or new provider was introduced. The 26 transport/answer-boundary tests pass; scoped ESLint and Deno checks pass. The last full suite remains 203 passing tests from `dab608a`.
+
 ## Earlier 14 October 2026 evaluation
 
 Direct calls used `openai/gpt-oss-120b`, with exported production dialogue and empty history. These are local model evaluations, not tests of a deployed backend or reconstructions of the complete historical requests.

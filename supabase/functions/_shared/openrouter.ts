@@ -60,8 +60,10 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
       // 429s, or log provider bodies that may echo questions or credentials.
       console.error('OpenRouter request failed', { status: response.status, model: OPENROUTER_MODEL });
       await response.body?.cancel();
+      // A 429 can come from the serving provider even after the account's
+      // daily allowance resets. Do not claim the user's daily quota is spent.
       throw new Error(response.status === 429
-        ? 'The free AI request limit has been reached. Please try again later.'
+        ? 'The free AI service is currently rate-limited. Please try again later.'
         : failureMessage);
     }
     const result = await response.json().catch(() => null);

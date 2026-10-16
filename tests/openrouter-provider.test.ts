@@ -35,7 +35,7 @@ describe('OpenRouter companion transport', () => {
         status, headers: { 'retry-after': '1' },
       }));
       await expect(openRouterGenerator('test-key', request)('System', 'PRIVATE_QUESTION', 900))
-        .rejects.toThrow(status === 429 ? 'free AI request limit' : 'Unable to generate');
+        .rejects.toThrow(status === 429 ? 'free AI service is currently rate-limited' : 'Unable to generate');
       expect(request).toHaveBeenCalledOnce();
       expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE|test-key/);
     } finally { log.mockRestore(); }
@@ -147,7 +147,7 @@ describe('OpenRouter companion transport', () => {
         .mockResolvedValueOnce(new Response('', { status: 429 }));
       await expect(checkedAnswer('What happened?', { tmdbId: 1, mediaType: 'movie', seconds: 30 },
         [{ id: 'letter', season: null, episode: null, start: 10, end: 12, text: 'The letter is sealed.' }], [],
-        openRouterGenerator('test-key', request))).rejects.toThrow('free AI request limit');
+        openRouterGenerator('test-key', request))).rejects.toThrow('free AI service is currently rate-limited');
       expect(request).toHaveBeenCalledTimes(2);
     } finally { log.mockRestore(); }
   });
