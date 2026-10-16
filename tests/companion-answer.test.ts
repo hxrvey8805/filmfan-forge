@@ -119,7 +119,18 @@ describe('answer generation and independent verification', () => {
     const rows = [{ ...evidence[0], text: '[00:00:10] (SAM) Keep this\n[00:00:11] letter sealed.' }];
     expect((await checkedAnswer('What did Sam ask?', position, rows, [], generate))?.answer).toBe(claim.text);
     expect(JSON.parse(generate.mock.calls[1][1]).evidence[0].lines).toEqual([
-      { id: 'P1:1', text: '[00:00:10] (SAM) Keep this' }, { id: 'P1:2', text: '[00:00:11] letter sealed.' }]);
+      { id: 'P1:1', text: '(SAM) Keep this' }, { id: 'P1:2', text: 'letter sealed.' }]);
+  });
+  it('rebuilds a departure inferred from intent before allowing the checker to approve it', async () => {
+    const rows = [{ ...evidence[0], text: "[00:00:10] We're not dating anymore.\n[00:00:11] I'm going back to my room." }];
+    const wrong = { status: 'answered', claims: [{ text: 'One speaker breaks up with the other and leaves.', evidenceIds: ['P1'] }] };
+    const good = { status: 'answered', claims: [{ text: 'A speaker announces a plan to return to their room.', evidenceIds: ['P1'] }] };
+    const generate = vi.fn().mockResolvedValueOnce(wrong).mockResolvedValueOnce(good)
+      .mockResolvedValueOnce({ ...pass, checks: [{ ...check, sources: ['P1:2'] }] });
+    expect((await checkedAnswer('What happened?', position, rows, [], generate))?.answer).toBe(good.claims[0].text);
+    expect(generate.mock.calls.map(call => call[3])).toEqual(['writer', 'writer', 'verifier']);
+    expect(generate.mock.calls[1][0]).toContain('departure announcement');
+    expect(JSON.stringify(generate.mock.calls.slice(1))).not.toContain(wrong.claims[0].text);
   });
   it.each([
     { basis: 'plausible' }, { sources: [] }, { sources: undefined },
@@ -144,6 +155,13 @@ describe('answer generation and independent verification', () => {
       { text: 'She runs away and gasps from exhaustion.', evidenceIds: ['P1'] }] })
       .mockResolvedValueOnce({ ...pass, checks: [{ ...check, sources: ['P1:1', 'P1:2'] }] });
     expect(await checkedAnswer('What happened?', position, [row], [], generate)).toBeNull();
+  });
+  it('does not let extra substantive context turn noises into a successful outcome', async () => {
+    const row = { ...evidence[0], text: "[00:00:10] You flooded it.\n[00:00:11] It will start.\n[00:00:12] [ENGINE REVS]\n[00:00:13] BOTH: Yes!" };
+    const bad = { status: 'answered', claims: [{ text: 'They eventually succeed as the engine revs and both cheer.', evidenceIds: ['P1'] }] };
+    const generate = vi.fn().mockResolvedValue(bad);
+    expect(await checkedAnswer('What happened?', position, [row], [], generate)).toBeNull();
+    expect(generate.mock.calls.map(call => call[3])).toEqual(['writer', 'writer']);
   });
   it('can return literal sound captions without inventing an activity or cause', async () => {
     const row = { ...evidence[0], text: '[00:00:10] [FOOTSTEPS]\n[00:00:11] [WOMAN GASPS]' };
@@ -176,7 +194,7 @@ describe('answer generation and independent verification', () => {
     expect(verifier).not.toHaveProperty('conversation');
     expect(JSON.stringify(verifier)).not.toContain('SAFE_ANSWER');
     expect(verifier.claims).toEqual(draft.claims);
-    expect(verifier.evidence[0]).toMatchObject({ id: 'P1', lines: [{ id: 'P1:1', text: evidence[0].text }] });
+    expect(verifier.evidence[0]).toMatchObject({ id: 'P1', lines: [{ id: 'P1:1', text: '(SAM) Keep this letter sealed.' }] });
     expect(verifier.evidence[0]).not.toHaveProperty('text');
     expect(JSON.stringify(generate.mock.calls)).not.toMatch(/FUTURE_ANSWER|NEXT_EPISODE|OTHER_EPISODE_THREAD|UNVERIFIED_LEGACY|FAILED_ANSWER/);
   });
@@ -210,7 +228,7 @@ describe('answer generation and independent verification', () => {
     const unrelated = { ...evidence[0], id: 'context', text: '(SAM) I changed my mind.' };
     const generate = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(pass);
     await checkedAnswer('Why?', position, [...evidence, unrelated], [], generate);
-    expect(JSON.parse(generate.mock.calls[1][1]).evidence.flatMap((item: { lines: { text: string }[] }) => item.lines.map(line => line.text))).toEqual([evidence[0].text, unrelated.text]);
+    expect(JSON.parse(generate.mock.calls[1][1]).evidence.flatMap((item: { lines: { text: string }[] }) => item.lines.map(line => line.text))).toEqual(['(SAM) Keep this letter sealed.', unrelated.text]);
   });
   it('rebuilds once using fixed issue hints, never the rejected draft or verifier prose', async () => {
     const badDraft = { ...draft, claims: [{ ...claim, text: 'An unsafe draft.' }] };

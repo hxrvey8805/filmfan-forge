@@ -155,6 +155,27 @@ A public copy of the [Social Network screenplay](https://stanzedicinema.com/wp-c
 
 The helper and 11 synthetic alignment regressions are retained for further data preparation work. No screenplay content, real caption corpus, private question history or credentials are committed. The production evidence path and AI prompts are unchanged. The final suite has **226 passing tests**, with Deno and scoped ESLint passing; the production build passed after the response/UI changes. Neither the limited caption response nor the alignment experiment clears the four outstanding content failures. Keep the release hold.
 
+## 16 October: recap transport and unsupported actions
+
+The recap HTTP 400 was reproduced with the first nine passages; the first four, middle five and final eight succeeded separately. The provider returned only a generic bad-request message, so the exact upstream limit/cause is unconfirmed. A compact full request then succeeded with all 17 passages. `modelCaptionLines` removes only the repeated leading display timestamp on each model-input line. It preserves every caption word, denial, sound label, blank line and line ID; passage time ranges remain explicit. Original evidence and citation timestamps remain intact. Timestamp/episode filtering still happens before formatting. Both writer and verifier use this format and are told not to invent finer timing than the supplied ranges.
+
+Two full-recap writer attempts in the production replay returned HTTP 200. A separate verifier transport probe also returned HTTP 200 with all 17 passages and a manually prepared grounded claim. That probe is **not a generated-answer quality pass**. The generated recap still invented details, including occupations, unseen actions and named roles; preflight checks withheld it. An experimental reasoning-enabled writer on the same free model also produced unsupported drafts and was not adopted.
+
+The new action guard rejects unqualified departures, success/celebration, and selected sound-to-emotion assertions before a draft can reach the checker. It requires a speech/intent qualification in the same clause and prevents an earlier attribution from licensing an appended action such as “says goodbye and leaves.” Literal sound captions remain allowed. The guard is intentionally conservative and covers observed failure classes; it is not a general semantic proof and does not guarantee that every invented action is detected. The independent verifier, source-line checks and manual release gate remain necessary.
+
+All six original questions were replayed from their preserved inputs. The subsequent outcome guard was live-tested on the scene failure; the final sound-to-emotion extension was checked offline against the captured drafts, not presented as another live replay.
+
+| Case | Manual result |
+| --- | --- |
+| Breaking Bad S1E1, 27:13 recap | Transport error no longer reproduced with compact full context; both generated drafts remain unsupported and withheld. Quality fail. |
+| Breaking Bad S1E2, 05:00 scene | Initial compact replay asserted success from engine noises and exclamations, despite a positive model check. After the outcome guard, the live replay withheld the drafts and returned uncharged limited captions. Safe withholding is not a useful full-answer pass. |
+| The Social Network, 05:00 disagreement | Three supported reports of complaints/denials, with no physical departure claim. Still only a partial explanation: it misses the central condescending offer and miscommunication, and repeats terminology corrected later in the captions. Not a full quality pass. |
+| Gladiator, 15:00 relationship | The checker approved an answer about succession and the emperor, but it did not address the requested Maximus relationship. Relevance fail. |
+| Rewind to S1E2 03:15 | Pass: no eligible previous answer, no model calls, no future-memory sentinel in response or prompt conversation. |
+| Switch to S1E1 05:00 | Pass: previous-episode answer excluded, no model calls, no future-memory sentinel in response or prompt conversation. |
+
+The recorded diagnostics/replays used 19 requests: 18 completed responses reported zero cost; the reproduced HTTP 400 supplied no usage. All used the pinned zero-price endpoint. No paid fallback or provider change was introduced. Captured departure, success and excitement drafts are rejected by the final guard in an offline regression. Automated validation: **255 tests pass**, with scoped ESLint and Deno checks passing. These are local saved-input evaluations; edition/playback alignment remains unverified. **The four content cases do not clear the release gate. Do not merge or deploy.**
+
 ## Earlier 14 October 2026 evaluation
 
 Direct calls used `openai/gpt-oss-120b`, with exported production dialogue and empty history. These are local model evaluations, not tests of a deployed backend or reconstructions of the complete historical requests.

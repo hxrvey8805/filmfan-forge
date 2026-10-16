@@ -1,5 +1,6 @@
 import type { Evidence, GroundedDraft } from './companion.ts';
 import type { VerificationIssue } from './verification.ts';
+import { unqualifiedCaptionAction } from './action-grounding.ts';
 
 const genericSubjects = new Set(('a an the what whats why how who which where when is are do does did can could ' +
   'would should tell explain describe remind please i we you he she it they his her their its this that these those ' +
@@ -34,6 +35,7 @@ export function draftGroundingIssues(question: string, draft: GroundedDraft, evi
   const sourceNames = new Set(evidence.flatMap(item => capitals(item.text).map(token)));
   const issues = new Set<VerificationIssue>();
   for (const claim of draft.claims) {
+    if (unqualifiedCaptionAction(claim.text)) issues.add('action');
     const cited = claim.evidenceIds.map(id => byId.get(id)?.text ?? '').join('\n');
     const citedWords = words(cited), claimWords = words(claim.text);
     if (questionNames.some(name => claimWords.has(name) && !citedWords.has(name))) issues.add('identity');
