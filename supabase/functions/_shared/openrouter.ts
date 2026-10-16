@@ -9,7 +9,7 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
   // One generator serves a complete answer, including verification/repair.
   // Keep all model calls within one budget, leaving time for subtitle import.
   const deadline = Date.now() + 90000;
-  return async (system, user, maxTokens) => {
+  return async (system, user, maxTokens, purpose, format) => {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) throw new Error(failureMessage);
     let response: Response;
@@ -36,14 +36,20 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
           ],
           tools: [],
           tool_choice: 'none',
-          reasoning: { enabled: true, exclude: true },
-          max_tokens: maxTokens + 4096,
-          // JSON mode controls shape; the claim checker still controls publication.
-          response_format: { type: 'json_object' },
+          // The fast draft is untrusted. Keep reasoning enabled for the check:
+          // direct-mode checks approved invented actions in the saved replays.
+          // This is a total completion limit, not a separate reasoning cap.
+          reasoning: { enabled: purpose === 'verifier', exclude: true },
+          max_tokens: maxTokens + (purpose === 'verifier' ? 6144 : 0),
+          // Native constraints avoid malformed line IDs; runtime validation and
+          // the evidence check still decide whether an answer can be published.
+          response_format: format ?? { type: 'json_object' },
           messages: [{ role: 'system', content: `${system}\nReturn exactly one JSON object. No Markdown fences, commentary, or thinking text.` },
             { role: 'user', content: user }],
         }),
-        signal: AbortSignal.timeout(Math.min(45000, remainingMs)),
+        // Verification can take longer than drafting. Share the existing
+        // total budget instead of aborting a valid second call at 45 seconds.
+        signal: AbortSignal.timeout(remainingMs),
       });
     } catch {
       // Transport errors can contain URLs or headers; never surface them.
@@ -54,14 +60,20 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
       // 429s, or log provider bodies that may echo questions or credentials.
       console.error('OpenRouter request failed', { status: response.status, model: OPENROUTER_MODEL });
       await response.body?.cancel();
+      // A 429 can come from the serving provider even after the account's
+      // daily allowance resets. Do not claim the user's daily quota is spent.
       throw new Error(response.status === 429
-        ? 'The free AI request limit has been reached. Please try again later.'
+        ? 'The free AI service is currently rate-limited. Please try again later.'
         : failureMessage);
     }
     const result = await response.json().catch(() => null);
+    if (!result || !Array.isArray(result.choices) || !result.choices.length) throw new Error(failureMessage);
     const choice = result?.choices?.[0];
     if (result?.error || choice?.error) throw new Error(failureMessage);
     if (choice?.message?.tool_calls?.length || choice?.message?.annotations?.length) throw new Error(failureMessage);
+    if (choice?.finish_reason === 'content_filter') {
+      throw new Error('The AI provider blocked this request, so I could not verify an answer. You have not been charged.');
+    }
     if (choice?.finish_reason !== 'stop') throw new Error('The answer was incomplete. Please try again.');
     // Never recover a draft from reasoning, tool calls, or prose around JSON.
     const content = choice?.message?.content;

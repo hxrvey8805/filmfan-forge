@@ -32,7 +32,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {
 const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1, episodeNumber: 2, seconds: 60 };
 const row = (overrides = {}): CompanionMessage => ({
   id: 'safe', title_id: 1, media_type: 'tv', season_number: 1, episode_number: 2,
-  position_seconds: 20, companion_version: 2, question: 'What is he holding?', answer: 'A letter.',
+  position_seconds: 20, companion_version: 3, question: 'What is he holding?', answer: 'A letter.',
   context: 'S1E2', timestamp: '00:00:20', created_at: '2026-10-13T12:00:00Z', evidence: [], answer_status: 'answered', ...overrides,
 });
 function deferred<T>() {
@@ -55,6 +55,22 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('companion history and in-flight responses', () => {
+  it('hides previously checked answers from the retired pipeline even at an eligible timestamp', async () => {
+    mock.load.mockResolvedValue({ data: [row(), row({ id: 'retired', companion_version: 2, answer: 'OLD_BAD_ANSWER' })], error: null });
+    const hook = await mount();
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+  });
+  it('uses a new request ID after the server rejects an old cached answer version', async () => {
+    mock.invoke.mockResolvedValueOnce({ error: { context: { json: async () => ({
+      error: 'This saved answer predates the companion update. Please ask again.', code: 'answer_version_changed',
+    }) } } }).mockResolvedValueOnce({ data: { conversation: row() }, error: null });
+    const hook = await mount();
+    await act(async () => { await expect(hook.result.current.ask('Why?', '00:01:00')).rejects.toThrow('predates'); });
+    await act(async () => { await hook.result.current.ask('Why?', '00:01:00'); });
+    const ids = mock.invoke.mock.calls.map(call => call[1].body.requestId);
+    expect(ids[1]).not.toBe(ids[0]);
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+  });
   it.each(['TOKEN_REFRESHED', 'SIGNED_IN'])('preserves safe history on same-user %s events', async event => {
     mock.load.mockResolvedValue({ data: [row(), row({ id: 'future', position_seconds: 61 })], error: null });
     const hook = await mount();
@@ -68,7 +84,7 @@ describe('companion history and in-flight responses', () => {
     mock.load.mockResolvedValue({ data: [row(), row({ id: 'future', position_seconds: 61 })], error: null });
     const hook = await mount();
     expect(mock.load).toHaveBeenCalledWith({ user_id: 'user-1', title_id: 1, media_type: 'tv',
-      companion_version: 2, season_number: 1, episode_number: 2, 'position_seconds<=': 60 });
+      companion_version: 3, season_number: 1, episode_number: 2, 'position_seconds<=': 60 });
     expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
   });
   it('hides later answers immediately on rewind, before the new history request resolves', async () => {

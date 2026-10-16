@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { companionGenerator } from '../supabase/functions/_shared/companion-provider';
+import { companionEvidenceBudget, companionGenerator } from '../supabase/functions/_shared/companion-provider';
 
 const env = (values: Record<string, string>) => (name: string) => values[name];
 const completion = () => new Response(JSON.stringify({
@@ -7,6 +7,12 @@ const completion = () => new Response(JSON.stringify({
 }));
 
 describe('server companion provider selection', () => {
+  it('uses an explicit route-specific evidence budget without enlarging legacy Groq requests', () => {
+    expect(companionEvidenceBudget(env({}))).toBe(8500);
+    expect(companionEvidenceBudget(env({ COMPANION_AI_PROVIDER: 'groq' }))).toBe(8500);
+    expect(companionEvidenceBudget(env({ COMPANION_AI_PROVIDER: 'openrouter' }))).toBe(16000);
+    expect(companionEvidenceBudget(env({ OPENROUTER_API_KEY: 'staged-only' }))).toBe(8500);
+  });
   it('uses the OpenRouter secret only when explicitly selected', async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(completion());
     const generate = companionGenerator(env({ COMPANION_AI_PROVIDER: 'openrouter',
@@ -42,7 +48,7 @@ describe('server companion provider selection', () => {
       const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 429 }));
       const generate = companionGenerator(env({ COMPANION_AI_PROVIDER: 'openrouter',
         OPENROUTER_API_KEY: 'router-key', GROQ_API_KEY: 'legacy-key' }), request);
-      await expect(generate('System', 'Evidence', 900)).rejects.toThrow('free AI request limit');
+      await expect(generate('System', 'Evidence', 900)).rejects.toThrow('free AI service is currently rate-limited');
       expect(request).toHaveBeenCalledOnce();
       expect(request.mock.calls[0][0]).toBe('https://openrouter.ai/api/v1/chat/completions');
     } finally { log.mockRestore(); }

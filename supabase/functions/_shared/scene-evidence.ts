@@ -1,5 +1,9 @@
-import { conversationMemory, permittedCues, questionIntent,
-  type Conversation, type Cue, type Evidence, type SubtitleRecord, type ViewingPosition } from './companion.ts';
+import { conversationMemory, formatTimestamp, permittedCues, questionIntent,
+  type Conversation, type Cue, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition } from './companion.ts';
+
+export const DEFAULT_EVIDENCE_BUDGET = 8500;
+export const OPENROUTER_EVIDENCE_BUDGET = 16000;
+export interface SceneContext { evidence: Evidence[]; coverage: EvidenceCoverage }
 
 const stopWords = new Set(('a an the and or of to in on at by for with about from up until so far what whats is are was were ' +
   'has have had do does did be being been can could would should me my we us you your i it its this that these those ' +
@@ -27,7 +31,7 @@ export function isSubtitleCredit(text: string): boolean {
     /^(?:sync(?:hroni[sz]ation)?|translation)\s+(?:and\s+corrections?\s+)?by\s+\S+/i.test(text.trim());
 }
 
-function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence[] {
+function packets(records: SubtitleRecord[], position: ViewingPosition, focusRecent: boolean): Evidence[] {
   const scopes = new Map<string, { record: SubtitleRecord; cue: Cue }[]>();
   const seen = new Set<string>();
   for (const record of records) {
@@ -53,7 +57,7 @@ function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence
       result.push({ id: `${first.record.id}:${Math.round(first.cue.start * 1000)}`,
         season: first.record.season_number, episode: first.record.episode_number,
         start: first.cue.start, end: Math.max(...group.map(row => row.cue.end)),
-        text: group.map(row => row.cue.text).join('\n') });
+        text: group.map(({ cue }) => `[${formatTimestamp(cue.start)}] ${cue.text}`).join('\n') });
       group = []; chars = 0;
     };
     for (const row of rows) {
@@ -65,9 +69,16 @@ function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence
       // Storage chunks are not scene boundaries. Keep adjacent turns together,
       // including sentence continuations, but never bridge a long silent gap.
       const continuing = previous && /(?:\.\.\.|…|[,;:—-])$/.test(previous.text.trim());
-      const maxDuration = continuing ? 120 : 90;
-      const maxText = continuing ? 1500 : 1200;
-      if (previous && (cue.start - previous.end > 12 ||
+      const maxDuration = continuing ? 150 : 120;
+      const maxText = continuing ? 1800 : 1500;
+      // A retrieval packet is not a scene. Keep the newest completed cues in
+      // their own packet for "now" questions so an earlier dispute does not
+      // inherit a recent sound cue's timestamp. Keep the earlier context too.
+      const recentBoundary = Math.max(0, position.seconds - 30);
+      const entersRecentWindow = focusRecent && current({ season: row.record.season_number,
+        episode: row.record.episode_number }, position) &&
+        group.length > 0 && group[0].cue.start < recentBoundary && cue.start >= recentBoundary;
+      if (previous && (entersRecentWindow || cue.start - previous.end > 12 ||
           cue.start - group[0].cue.start > maxDuration || chars + cue.text.length + 1 > maxText)) flush();
       group.push(row); chars += cue.text.length + 1;
     }
@@ -81,7 +92,7 @@ function packets(records: SubtitleRecord[], position: ViewingPosition): Evidence
 // later rounds, so an arbitrary sample count cannot leave usable space empty.
 function overviewOrder(prefix: Evidence[], maxChars: number): Evidence[] {
   if (!prefix.length) return [];
-  const bins = Math.min(8, Math.max(1, Math.floor(maxChars / 2000)), prefix.length);
+  const bins = Math.min(8, Math.max(1, Math.floor(maxChars / 600)), prefix.length);
   const start = prefix[0].start;
   const duration = Math.max(1, prefix.at(-1)!.end - start);
   const buckets: Evidence[][] = Array.from({ length: bins }, () => []);
@@ -96,7 +107,7 @@ function overviewOrder(prefix: Evidence[], maxChars: number): Evidence[] {
 
 const chronological = (a: Evidence, b: Evidence) => (a.season ?? 0) - (b.season ?? 0) ||
   (a.episode ?? 0) - (b.episode ?? 0) || a.start - b.start;
-const current = (item: Evidence, position: ViewingPosition) => position.mediaType === 'movie' ||
+const current = (item: Pick<Evidence, 'season' | 'episode'>, position: ViewingPosition) => position.mediaType === 'movie' ||
   (item.season === position.seasonNumber && item.episode === position.episodeNumber);
 
 export function nearbyEvidence(evidence: Evidence[], position: ViewingPosition): Evidence[] {
@@ -104,13 +115,33 @@ export function nearbyEvidence(evidence: Evidence[], position: ViewingPosition):
 }
 
 export function selectSceneEvidence(records: SubtitleRecord[], position: ViewingPosition,
-  question: string, history: Conversation[] = [], maxChars = 8500): Evidence[] {
-  const all = packets(records, position);
-  if (!all.length) return [];
+  question: string, history: Conversation[] = [], maxChars = DEFAULT_EVIDENCE_BUDGET): Evidence[] {
+  return selectSceneContext(records, position, question, history, maxChars).evidence;
+}
+
+export function selectSceneContext(records: SubtitleRecord[], position: ViewingPosition,
+  question: string, history: Conversation[] = [], maxChars = DEFAULT_EVIDENCE_BUDGET): SceneContext {
   const intent = questionIntent(question);
+  const all = packets(records, position, intent === 'scene');
+  const finish = (evidence: Evidence[]): SceneContext => {
+    const selected = new Set(evidence.map(item => item.id));
+    const omitted = all.filter(item => !selected.has(item.id));
+    // Report retrieval omissions explicitly, without any omitted dialogue. Every
+    // range was already clipped to the viewing boundary before packet creation.
+    const ranges: EvidenceCoverage['omittedRanges'] = [];
+    for (const item of omitted) {
+      const previous = ranges.at(-1);
+      if (previous && previous.season === item.season && previous.episode === item.episode && item.start - previous.end <= 12) {
+        previous.end = Math.max(previous.end, item.end);
+      } else ranges.push({ season: item.season, episode: item.episode, start: item.start, end: item.end });
+    }
+    return { evidence, coverage: { providedPassages: all.length, selectedPassages: evidence.length,
+      omittedPassages: omitted.length, omittedRanges: ranges.slice(0, 12) } };
+  };
+  if (!all.length) return finish([]);
   const local = nearbyEvidence(all, position).sort((a, b) => b.end - a.end);
   // Old dialogue cannot establish what a silent, much later scene is showing.
-  if (intent === 'scene' && !local.length) return [];
+  if (intent === 'scene' && !local.length) return finish([]);
   const query = retrievalTerms(question, history, position);
   const words = all.map(item => terms(item.text));
   const frequency = new Map(query.map(term => [term, words.filter(row => row.includes(term)).length]));
@@ -119,7 +150,7 @@ export function selectSceneEvidence(records: SubtitleRecord[], position: Viewing
   const relevant = scored.filter(row => row.score > 0).sort((a, b) => b.score - a.score || chronological(a.item, b.item)).map(row => row.item);
   const prefix = all.filter(item => current(item, position));
   // Short prefixes should reach the model intact instead of being sampled.
-  if (JSON.stringify(all).length <= maxChars) return all;
+  if (JSON.stringify(all).length <= maxChars) return finish(all);
   const overview = overviewOrder(prefix, maxChars);
   const neighbours = relevant.flatMap(item => {
     const index = all.indexOf(item);
@@ -142,5 +173,5 @@ export function selectSceneEvidence(records: SubtitleRecord[], position: Viewing
       used.add(item.id); selected.push(item); size += cost;
     }
   }
-  return selected.sort(chronological);
+  return finish(selected.sort(chronological));
 }

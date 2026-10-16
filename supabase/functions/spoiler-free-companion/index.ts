@@ -1,14 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
-  COMPANION_VERSION, conversationMemory, formatTimestamp,
-  parseTimestamp,
-  type Conversation, type SubtitleRecord, type ViewingPosition,
+  COMPANION_VERSION, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
+  parseTimestamp, unavailableMemoryReply,
+  type Conversation, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
 
 import { checkedAnswer } from "../_shared/answer.ts";
-import { companionGenerator } from "../_shared/companion-provider.ts";
-import { selectSceneEvidence, subtitleSearchText } from "../_shared/scene-evidence.ts";
+import { companionResponse } from "../_shared/companion-response.ts";
+import { companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
+import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 
 import { assertSubtitlePreparation, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
 
@@ -22,7 +23,7 @@ const columns = 'id, tmdb_id, media_type, season_number, episode_number, ingesti
 
 function currentChunks(db: SupabaseClient, position: ViewingPosition) {
   let query = db.from('subtitle_chunks').select(columns).eq('tmdb_id', position.tmdbId)
-    .eq('media_type', position.mediaType).eq('ingestion_version', COMPANION_VERSION);
+    .eq('media_type', position.mediaType).eq('ingestion_version', SUBTITLE_VERSION);
   if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
   return query;
 }
@@ -59,8 +60,8 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
   ]);
   if (prefix.error) throw prefix.error;
   if (relevant.error) throw relevant.error;
-  return selectSceneEvidence([...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[],
-    position, question, memory);
+  return selectSceneContext([...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[],
+    position, question, memory, companionEvidenceBudget(name => Deno.env.get(name)));
 }
 
 serve(async req => {
@@ -87,9 +88,12 @@ serve(async req => {
       ...(mediaType === 'tv' ? { seasonNumber, episodeNumber } : {}) };
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const id = requestId ?? crypto.randomUUID();
-    const prior = await userDb.from('ai_conversations').select('*').eq('id', id).eq('companion_version', COMPANION_VERSION).maybeSingle();
+    const prior = await userDb.from('ai_conversations').select('*').eq('id', id).maybeSingle();
     if (prior.error) throw prior.error;
     if (prior.data) {
+      if (prior.data.companion_version !== COMPANION_VERSION) {
+        return json({ error: 'This saved answer predates the companion update. Please ask again.', code: 'answer_version_changed' }, 409);
+      }
       // An ID cannot be reused to retrieve a future or different title's answer.
       if (prior.data.title_id !== tmdbId || prior.data.media_type !== mediaType || prior.data.position_seconds !== seconds ||
           prior.data.season_number !== (position.seasonNumber ?? null) || prior.data.episode_number !== (position.episodeNumber ?? null) || prior.data.question !== question.trim()) {
@@ -104,24 +108,27 @@ serve(async req => {
     const historyResult = await historyQuery.order('created_at', { ascending: false }).limit(30);
     if (historyResult.error) throw historyResult.error;
     const memory = conversationMemory((historyResult.data ?? []) as Conversation[], position);
-    await ensureCurrentSubtitles(db, position);
-    const evidence = await retrieve(db, position, question.trim(), memory);
+    const memoryReply = unavailableMemoryReply(question.trim(), position, memory);
+    let evidence: Evidence[] = [];
+    let coverage: EvidenceCoverage | undefined;
+    if (!memoryReply) {
+      await ensureCurrentSubtitles(db, position);
+      ({ evidence, coverage } = await retrieve(db, position, question.trim(), memory));
+    }
     let checked = null;
     if (evidence.length) {
       const generate = companionGenerator(name => Deno.env.get(name));
       checked = await checkedAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
-          evidenceChars: JSON.stringify(evidence).length }));
+          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage);
     }
-    const answer = checked?.answer ?? (evidence.length
-      ? `I can’t establish that from the dialogue available up to ${formatTimestamp(seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`
-      : `I don’t have reliable dialogue available up to ${formatTimestamp(seconds)} for this title yet. I can’t give a grounded answer at this point.`);
+    const response = companionResponse(question.trim(), position, evidence, memory, checked);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
-    const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: checked !== null,
+    const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: response.charge,
       p_conversation: { id, title_id: tmdbId, media_type: mediaType, season_number: position.seasonNumber ?? null,
-        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds),
-        question: question.trim(), answer, context, evidence: checked?.evidence ?? [],
-        answer_status: checked ? 'answered' : 'insufficient_evidence' } });
+        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds), companion_version: COMPANION_VERSION,
+        question: question.trim(), answer: response.answer, context, evidence: response.evidence,
+        answer_status: response.answer_status } });
     if (saved.error) {
       if (saved.error.message.includes('Insufficient coins')) return json({ error: 'You need 150 coins for another question.' }, 402);
       throw saved.error;
