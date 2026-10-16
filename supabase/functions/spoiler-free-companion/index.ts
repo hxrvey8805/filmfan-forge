@@ -7,6 +7,7 @@ import {
 } from "../_shared/companion.ts";
 
 import { checkedAnswer } from "../_shared/answer.ts";
+import { companionResponse } from "../_shared/companion-response.ts";
 import { companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 
@@ -121,15 +122,13 @@ serve(async req => {
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
           evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage);
     }
-    const answer = memoryReply ?? checked?.answer ?? (evidence.length
-      ? `I can’t establish that from the dialogue available up to ${formatTimestamp(seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`
-      : `I don’t have reliable dialogue available up to ${formatTimestamp(seconds)} for this title yet. I can’t give a grounded answer at this point.`);
+    const response = companionResponse(question.trim(), position, evidence, memory, checked);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
-    const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: checked !== null,
+    const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: response.charge,
       p_conversation: { id, title_id: tmdbId, media_type: mediaType, season_number: position.seasonNumber ?? null,
         episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds), companion_version: COMPANION_VERSION,
-        question: question.trim(), answer, context, evidence: checked?.evidence ?? [],
-        answer_status: checked ? 'answered' : 'insufficient_evidence' } });
+        question: question.trim(), answer: response.answer, context, evidence: response.evidence,
+        answer_status: response.answer_status } });
     if (saved.error) {
       if (saved.error.message.includes('Insufficient coins')) return json({ error: 'You need 150 coins for another question.' }, 402);
       throw saved.error;

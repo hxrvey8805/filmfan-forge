@@ -48,7 +48,7 @@ describe('server companion provider selection', () => {
       const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 429 }));
       const generate = companionGenerator(env({ COMPANION_AI_PROVIDER: 'openrouter',
         OPENROUTER_API_KEY: 'router-key', GROQ_API_KEY: 'legacy-key' }), request);
-      await expect(generate('System', 'Evidence', 900)).rejects.toThrow('free AI request limit');
+      await expect(generate('System', 'Evidence', 900)).rejects.toThrow('free AI service is currently rate-limited');
       expect(request).toHaveBeenCalledOnce();
       expect(request.mock.calls[0][0]).toBe('https://openrouter.ai/api/v1/chat/completions');
     } finally { log.mockRestore(); }

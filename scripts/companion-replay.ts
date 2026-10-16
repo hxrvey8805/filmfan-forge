@@ -6,6 +6,7 @@
 import { buildPrompts, unavailableMemoryReply, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion.ts';
 import { selectSceneContext, OPENROUTER_EVIDENCE_BUDGET } from '../supabase/functions/_shared/scene-evidence.ts';
 import { checkedAnswer, type AnswerDiagnostics } from '../supabase/functions/_shared/answer.ts';
+import { companionResponse } from '../supabase/functions/_shared/companion-response.ts';
 import { OPENROUTER_MODEL, openRouterGenerator } from '../supabase/functions/_shared/openrouter.ts';
 
 const [inputPath, outputPath, mode] = Deno.args;
@@ -87,6 +88,9 @@ await Deno.writeTextFile(outputPath, JSON.stringify({
   note: 'Reconstructed from the input export, not a captured historical request. Missing history or retrieved records are not recreated.',
   question: input.question, position: input.position, evidence, coverage, memoryReply, prompts, checks, requests, requestConfigs,
   generations, usage, providerFailures, completions, error, result,
+  // Report exactly what the UI would receive, including uncharged limitations.
+  // Retrieval-only runs and provider errors must not look like answered tests.
+  response: mode === '--live' && !error ? companionResponse(input.question, input.position, evidence, history, result) : null,
 }, null, 2));
 console.log(JSON.stringify({ mode: mode ?? 'retrieval-only', passages: evidence.length,
   evidenceChars: JSON.stringify(evidence).length, checks, providerFailures, error, outputPath }));
