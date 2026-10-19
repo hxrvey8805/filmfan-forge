@@ -22,9 +22,9 @@ export function verificationEvidence(evidence: Evidence[]) {
 export function verifiedSelection(value: unknown, claims: GroundedDraft['claims'], evidence: Evidence[]): VerifiedSelection | null {
   const claimCount = claims.length;
   if (!value || typeof value !== 'object' || !Number.isInteger(claimCount) || claimCount < 1) return null;
-  const verdict = value as { withinBoundary: boolean; sufficient: boolean; checks: ClaimCheck[] };
+  const verdict = value as { withinBoundary: boolean; sufficient: boolean; answersQuestion: boolean; checks: ClaimCheck[] };
   if (verdict.withinBoundary !== true || typeof verdict.sufficient !== 'boolean' ||
-    !Array.isArray(verdict.checks) || verdict.checks.length !== claimCount) return null;
+    typeof verdict.answersQuestion !== 'boolean' || !Array.isArray(verdict.checks) || verdict.checks.length !== claimCount) return null;
   const seen = new Set<number>();
   const indexes: number[] = [];
   const issues: VerificationIssue[] = [];
@@ -83,7 +83,8 @@ export function verifiedSelection(value: unknown, claims: GroundedDraft['claims'
     else issues.push(check.issue);
   }
   if (verdict.sufficient && !indexes.length && !rejectedProof) return null;
-  return { indexes: indexes.sort((a, b) => a - b), sufficient: verdict.sufficient && !rejectedProof, issues: [...new Set(issues)] };
+  if (!verdict.answersQuestion) issues.push('relevance');
+  return { indexes: indexes.sort((a, b) => a - b), sufficient: verdict.sufficient && verdict.answersQuestion && !rejectedProof, issues: [...new Set(issues)] };
 }
 
 const repairHints: Record<VerificationIssue, string> = {
@@ -94,7 +95,7 @@ const repairHints: Record<VerificationIssue, string> = {
   timing: 'Keep proposals, predictions and completed events distinct. Do not merge separate scenes.',
   inference: 'Remove emotional reactions, assumed agreement and invented causes for exclamations. State only the substantive proposal or problem, attributed to a speaker when appropriate.',
   citation: 'Use only the exact passage aliases shown. Narrow each claim to one concrete point directly supported by the words in that passage. Do not combine it with an inferred outcome, motive, cause or agreement.',
-  relevance: 'Answer the specific question using substantive dialogue, not greetings or isolated exclamations.',
+  relevance: 'Answer the specific question and requested subject using substantive dialogue. Do not substitute a discussion about another person or surrounding plot. For a named relationship, address that named relationship explicitly or acknowledge that these excerpts do not establish it. A recap needs distinct single-passage points in chronological order spanning early and late substantive dialogue; do not repeat introductory details or omit all later developments.',
 };
 export function repairInstruction(issues: VerificationIssue[]): string {
   // Only our fixed instructions cross into a retry. Never feed rejected prose,
@@ -120,4 +121,5 @@ Read the whole exchange, including sound cues. Check who speaks, who is addresse
 Names in the question do not identify speakers. A name called aloud is not a label for the next speaker; named speech needs an explicit caption speaker label. Otherwise an anonymous explanation is acceptable. Retrieval coverage describes passages omitted from the supplied captions. Do not approve a causal bridge across a gap, or treat an excerpt after the gap as proof of how an earlier conversation ended. Consider later objections and corrections in the available exchange when checking explanations of a disagreement; one speaker's complaint is not necessarily the objective cause.
 For every claim return {index,supported,basis,issue,sources}. supported=true requires basis="entailed", issue="none", and 1–12 exact line IDs (for example P1:2) from that claim's cited passages. Select the lines that establish ALL of the claim, including needed context; do not copy quotations or write reasons. Reject a whole claim if any part is unsupported or relies on another claim's missing qualification. Rejected claims use supported=false, basis="plausible" or "unsupported", an issue (speaker, identity, action, timing, inference, citation, relevance), and sources=[].
 Set withinBoundary=false for future information or hints. Set sufficient=true only if the supported claims alone give a useful, coherent answer to the question or its supported part, with qualifications intact. Unknown speaker names need not prevent a generic explanation.
-Return exactly {"withinBoundary":true,"sufficient":true,"checks":[{"index":0,"supported":true,"basis":"entailed","issue":"none","sources":["P1:2"]}]}. Include exactly one check per claim. Do not rewrite the answer.`;
+Separately set answersQuestion=true only if those accepted claims address the actual requested subject and task. A question about a named person's relationship is not answered by facts about another person's ambitions. A why-question needs the relevant cause or misunderstanding, not a list of unrelated insults. Correct facts about nearby dialogue can still fail relevance. An explicit, supported limitation may answer the supported part; do not claim something has not happened in the story merely because selected captions lack it.
+Return exactly {"withinBoundary":true,"sufficient":true,"answersQuestion":true,"checks":[{"index":0,"supported":true,"basis":"entailed","issue":"none","sources":["P1:2"]}]}. Include exactly one check per claim. Do not rewrite the answer.`;

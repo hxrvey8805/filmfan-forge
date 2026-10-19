@@ -1,5 +1,6 @@
 import { evidenceLabel, formatTimestamp, permittedEvidence, questionIntent, unavailableMemoryReply,
   type Conversation, type Evidence, type ViewingPosition } from './companion.ts';
+import { isRelationshipQuestion } from './question-focus.ts';
 
 export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number };
 export type CheckedResponse = { answer: string; evidence: CitedEvidence[] };
@@ -34,7 +35,9 @@ export function companionResponse(question: string, position: ViewingPosition, e
   const permitted = permittedEvidence(evidence, position);
   const limited = limitedSceneContext(question, position, permitted);
   return { answer: limited?.answer ?? (permitted.length
-    ? `I can’t establish that from the dialogue available up to ${formatTimestamp(position.seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`
+    ? isRelationshipQuestion(question)
+      ? `I can’t establish the relationship you asked about from the captions available up to ${formatTimestamp(position.seconds)}. That is a limit of these captions; it doesn’t mean the story has shown no relationship.`
+      : `I can’t establish that from the dialogue available up to ${formatTimestamp(position.seconds)}. I’ll leave it uncertain rather than guess at the scene or use later events.`
     : `I don’t have reliable dialogue available up to ${formatTimestamp(position.seconds)} for this title yet. I can’t give a grounded answer at this point.`),
     evidence: limited?.evidence ?? [], answer_status: 'insufficient_evidence', charge: false };
 }

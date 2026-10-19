@@ -7,8 +7,8 @@ const evidence: Evidence[] = [{ id: 'letter', season: 1, episode: 2, start: 10, 
 const claim = { text: 'Sam has asked for the letter to stay sealed.', evidenceIds: ['P1'] };
 const draft = { status: 'answered', claims: [claim] };
 const check = { index: 0, supported: true, issue: 'none', basis: 'entailed', reason: 'Sam explicitly asks for the letter to stay sealed.', sources: ['P1:1'] };
-const pass = { withinBoundary: true, sufficient: true, checks: [check] };
-const reject = { withinBoundary: true, sufficient: false, checks: [{ ...check, supported: false, issue: 'speaker', reason: 'The speaker is unestablished.' }] };
+const pass = { withinBoundary: true, answersQuestion: true, sufficient: true, checks: [check] };
+const reject = { withinBoundary: true, answersQuestion: true, sufficient: false, checks: [{ ...check, supported: false, issue: 'speaker', reason: 'The speaker is unestablished.' }] };
 const history = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media_type: 'tv', season_number: 1, episode_number: 2,
   position_seconds: 20, companion_version: 3, question: 'What letter?', answer: 'SAFE_ANSWER', context: '',
   timestamp: '00:00:20', created_at: '2026-10-13T12:00:00Z', answer_status: 'answered', ...overrides });
@@ -201,7 +201,7 @@ describe('answer generation and independent verification', () => {
   it('keeps a useful verified subset and removes rejected prose and citations', async () => {
     const rows = [...evidence, { ...evidence[0], id: 'other', text: 'Other dialogue.' }];
     const mixed = { status: 'answered', claims: [claim, { text: 'An unsupported detail.', evidenceIds: ['P2'] }] };
-    const verdict = { withinBoundary: true, sufficient: true, checks: [
+    const verdict = { withinBoundary: true, answersQuestion: true, sufficient: true, checks: [
       { index: 1, supported: false, issue: 'inference', reason: 'No evidence for this detail.' }, check] };
     const generate = vi.fn().mockResolvedValueOnce(mixed).mockResolvedValueOnce(verdict);
     const observe = vi.fn();

@@ -3,6 +3,7 @@ import { buildPrompts, evidenceLabel, permittedEvidence, unavailableMemoryReply,
 import { repairInstruction, verificationEvidence, verifiedSelection, VERIFICATION_PROMPT, type VerificationIssue } from './verification.ts';
 import { draftGroundingIssues } from './draft-grounding.ts';
 import { writerFormat, verifierFormat, type AnswerFormat } from './answer-schema.ts';
+import { addressesNamedRelationship, coversRecap } from './question-focus.ts';
 
 export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier', format?: AnswerFormat) => Promise<unknown>;
 
@@ -25,13 +26,15 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
   for (let attempt = 0; attempt < 2; attempt++) {
     attempts++;
     const system = attempt === 0 ? prompts.system : `${prompts.system}\n${repairInstruction(issues)}`;
-    const candidate = validateDraft(await generate(system, prompts.user, 1500, 'writer', writerFormat(prompts.data.evidence, prompts.maxClaims)), prompts.data.evidence);
+    const candidate = validateDraft(await generate(system, prompts.user, 1500, 'writer', writerFormat(prompts.data.evidence, prompts.maxClaims, prompts.maxCitations)), prompts.data.evidence);
     const draft = candidate && candidate.claims.length <= prompts.maxClaims && candidate.claims.every(claim => claim.text.length <= 260) ? candidate : null;
     if (!draft || draft.status !== 'answered') {
       if (attempt === 0) { issues = draft ? ['relevance'] : ['citation']; continue; }
       report(draft ? 'draft_insufficient' : 'draft_invalid'); return null;
     }
     const groundingIssues = draftGroundingIssues(question, draft, prompts.data.evidence);
+    if (!addressesNamedRelationship(question, draft.claims)) groundingIssues.push('relevance');
+    if (!coversRecap(question, draft.claims, prompts.data.evidence)) groundingIssues.push('relevance');
     if (groundingIssues.length) {
       if (attempt === 0) { issues = groundingIssues; continue; }
       report('draft_ungrounded', draft.claims.length); return null;
@@ -45,6 +48,13 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
     if (!selection) { report('verification_invalid', draft.claims.length); return null; }
     if (selection.sufficient && selection.indexes.length) {
       const claims = selection.indexes.map(index => draft.claims[index]);
+      // A checker can remove the only relevant claim and still approve the
+      // remainder. Apply the same focus requirement to the returned subset.
+      if (!addressesNamedRelationship(question, claims) || !coversRecap(question, claims, prompts.data.evidence)) {
+        issues = ['relevance'];
+        if (attempt === 0) continue;
+        report('verification_rejected', claims.length); return null;
+      }
       const ids = new Set(claims.flatMap(claim => claim.evidenceIds));
       const citedEvidence = [...ids].map(id => aliases.get(id)!);
       report(claims.length === draft.claims.length ? 'answered' : 'answered_partial', claims.length);

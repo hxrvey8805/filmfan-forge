@@ -108,7 +108,7 @@ describe('OpenRouter companion transport', () => {
     const claim = { text: 'Sam asks for the letter to stay sealed.', evidenceIds: ['P1'] };
     const request = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(completion(JSON.stringify({ status: 'answered', claims: [claim] })))
-      .mockResolvedValueOnce(completion(JSON.stringify({ withinBoundary: true, sufficient: true,
+      .mockResolvedValueOnce(completion(JSON.stringify({ withinBoundary: true, answersQuestion: true, sufficient: true,
         checks: [{ index: 0, supported: true, issue: 'none', basis: 'entailed', reason: 'Sam explicitly asks this.', sources: ['P1:1'] }] })));
     const result = await checkedAnswer('Why?', position, [safe,
       { ...safe, id: 'future', end: 31, text: 'FUTURE_CUE' },

@@ -21,7 +21,7 @@ describe('compact model captions', () => {
     const rows = [original, { ...original, id: 'future', end: 21, text: 'FUTURE_CUE' },
       { ...original, id: 'next', episode: 3, text: 'NEXT_EPISODE_CUE' }];
     const generate = vi.fn().mockResolvedValueOnce({ status: 'answered', claims: [{ text: 'Mira asks someone to stay.', evidenceIds: ['P1'] }] })
-      .mockResolvedValueOnce({ withinBoundary: true, sufficient: true,
+      .mockResolvedValueOnce({ withinBoundary: true, answersQuestion: true, sufficient: true,
         checks: [{ index: 0, supported: true, basis: 'entailed', issue: 'none', sources: ['P1:1'] }] });
     const result = await checkedAnswer('What is said?', position, rows, [], generate);
     expect(result?.evidence[0]).toMatchObject({ id: 'original', start: 10, end: 12, season: 1, episode: 2 });
@@ -29,5 +29,19 @@ describe('compact model captions', () => {
     expect(generate.mock.calls[0][1]).toContain('(MIRA) Stay here.\nWait for me.');
     expect(JSON.stringify(generate.mock.calls)).not.toMatch(/FUTURE_CUE|NEXT_EPISODE_CUE/);
     expect(original.text).toContain('[00:00:11]');
+  });
+  it('does not send whole-script or summary metadata beside a permitted excerpt', async () => {
+    const position: ViewingPosition = { tmdbId: 1, mediaType: 'movie', seconds: 20 };
+    const row = { id: 'source', season: null, episode: null, start: 10, end: 12,
+      text: '[00:00:10] The letter is sealed.', fullScript: 'FUTURE_SCRIPT_SENTINEL',
+      seasonSummary: 'FUTURE_SUMMARY_SENTINEL', sourceNotes: { hiddenIdentity: 'FUTURE_IDENTITY_SENTINEL' } };
+    const generate = vi.fn().mockResolvedValueOnce({ status: 'answered', claims: [{ text: 'A speaker says the letter is sealed.', evidenceIds: ['P1'] }] })
+      .mockResolvedValueOnce({ withinBoundary: true, sufficient: true, answersQuestion: true,
+        checks: [{ index: 0, supported: true, basis: 'entailed', issue: 'none', sources: ['P1:1'] }] });
+    const result = await checkedAnswer('What is said?', position, [row], [], generate);
+    expect(result?.answer).toContain('letter is sealed');
+    expect(JSON.stringify(generate.mock.calls)).not.toMatch(/FUTURE_.*_SENTINEL|fullScript|seasonSummary|sourceNotes/);
+    expect(JSON.parse(generate.mock.calls[1][1]).evidence[0]).toEqual({ id: 'P1', season: null, episode: null,
+      start: 10, end: 12, lines: [{ id: 'P1:1', text: 'The letter is sealed.' }] });
   });
 });

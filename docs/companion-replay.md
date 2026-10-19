@@ -1,5 +1,7 @@
 # Companion provider, deployment and replay
 
+**Latest evaluation: 19 October 2026. The two memory-boundary cases pass; the four content questions still fail manual acceptance. PR 11 remains draft. No merge or deployment is authorized by these results.**
+
 ## Free OpenRouter connection
 
 The companion can use `dots-studio/dots-3-note-preview:free` through OpenRouter, pinned to `atlas-cloud/fp8`. Set the backend secrets `OPENROUTER_API_KEY` and `COMPANION_AI_PROVIDER=openrouter` to activate it after deploying the code. Until the explicit provider setting is present, the existing Groq configuration is used. An OpenRouter failure or missing key never triggers a provider fallback. `COMPANION_AI_PROVIDER=groq` is the explicit rollback.
@@ -57,6 +59,8 @@ The writer receives only permitted chronological passages with short request-loc
 There is at most one fresh rewrite and another independent check, using the same permitted evidence and memory plus fixed issue-category guidance. Rejected prose and checker explanations never become evidence. Provider failures propagate without publishing an unchecked draft.
 
 Before verification, deterministic grounding checks reject a named question subject absent from its cited passages, capitalized name/acronym candidates absent from their citations, and named speech without an explicit cited speaker label. The same checks also apply to the actual lines selected by the checker, rather than accepting a name elsewhere in the broader passage as proof. Possessive and curly-apostrophe forms are normalized. A name called aloud is not a speaker label. The writer may still explain an unlabeled conversation anonymously. These are necessary grounding conditions, not a general entity resolver or proof that every remaining claim is true. The semantic verifier remains required.
+
+Relevance is checked separately. A named relationship question must retain its named subjects in both the draft and any checker-selected subset. This conservative text check is not entity resolution or semantic proof. The checker must also explicitly assess whether the accepted claims answer the actual question. Recaps use distinct single-passage points in chronological order and, for longer substantive prefixes, must cite both early and late passages. Tiny exclamations and sound-only packets do not force invented closing events. These breadth checks cannot establish that the chosen events are the most important ones. The generation boundary projects only the permitted evidence fields; extra whole-script, season-summary or other source metadata cannot hitchhike into verification.
 
 For current-moment questions, retrieval splits packets at the start of the last 30 seconds of completed captions, while retaining the earlier dialogue as background. Both writer and checker receive the same explicit recent-window IDs. The window is not a detected scene boundary. Cue-end clipping still occurs before splitting, and the window is rebuilt after a rewind or episode switch.
 
@@ -175,6 +179,35 @@ All six original questions were replayed from their preserved inputs. The subseq
 | Switch to S1E1 05:00 | Pass: previous-episode answer excluded, no model calls, no future-memory sentinel in response or prompt conversation. |
 
 The recorded diagnostics/replays used 19 requests: 18 completed responses reported zero cost; the reproduced HTTP 400 supplied no usage. All used the pinned zero-price endpoint. No paid fallback or provider change was introduced. Captured departure, success and excitement drafts are rejected by the final guard in an offline regression. Automated validation: **255 tests pass**, with scoped ESLint and Deno checks passing. These are local saved-input evaluations; edition/playback alignment remains unverified. **The four content cases do not clear the release gate. Do not merge or deploy.**
+
+## 19 October: relevance, recap breadth and additional source experiments
+
+The latest candidate adds the relevance and recap checks described above. The relationship fallback now explains a limitation of the available captions without claiming that the story has shown no relationship. All changes retain timestamp-only inputs, the pinned zero-price route and the existing cue/history boundaries.
+
+All six original questions were replayed. The final code then reproduced their outcomes offline using captured model responses only when every writer/verifier request matched exactly; this reused eight responses and made zero new calls. This is a regression check, not another fresh quality evaluation.
+
+| Original case | Manual result |
+| --- | --- |
+| Breaking Bad S1E1, 27:13 recap | Both compact requests succeed, but drafts invent details and neglect later developments. Withheld. Quality fail. |
+| Breaking Bad S1E2, 05:00 scene | Still infers current action and success/celebration from earlier plans and noises. Withheld; limited captions are not a full-answer pass. |
+| The Social Network, 05:00 disagreement | The model checker accepts role reversal and a false interpretation of the breakup. Manual correctness fail. |
+| Gladiator, 15:00 relationship | Irrelevant succession discussion is now withheld. The supplied captions still do not reliably establish the requested personal relationship. Usefulness fail. |
+| Rewind to S1E2 03:15 | Pass: no model calls, no future history in prompt conversation or response. |
+| Switch to S1E1 05:00 | Pass: no model calls, no other-episode answer in prompt conversation or response. |
+
+Separate source experiments do not replace those original inputs. Replaying the stricter 112-label screenplay alignment still produced incorrect causality. A range-selection experiment returned inconsistent/invalid selections; a simpler passage selector covered only the early recap. Manually curated notes derived solely from permitted captions improved coverage, but still produced drafts that failed grounding. None is connected to serving retrieval or presented as an automatic summary pipeline. No title-specific canned answers were added.
+
+A verifier experiment requested source lines and a brief factual justification before the verdict. It still accepted wrong explanations and duplicated a claim index; runtime validation rejected the malformed verdict. That experimental contract and prompt were discarded. Free model comparisons also failed to establish an improvement: Gemma was rate-limited, MiniMax produced a wrong draft that its checker rejected before the repair exceeded the shared deadline, and Xing produced unsupported identities and attribution. The production model is unchanged.
+
+The combined local replays and bounded experiments made 26 requests: 24 completed usage records reported zero cost; one rate-limit response and one aborted response supplied no usage. All routes enforced zero-price caps and no paid fallback. No credits were purchased or deployment triggered. The private audit retains exact inputs, outputs, transport diagnostics and hashes, outside Git.
+
+Validation: **268 automated tests**, production build, Deno checks and scoped ESLint pass. This verifies implementation behavior, not reliable generated answers. The four content cases and source/playback alignment remain unresolved. Keep the release hold.
+
+### Combining scripts, summaries and model knowledge
+
+Model knowledge is useful for language and general concepts, but it is not a timestamped plot source. It may contain later identities, motives and endings. Do not feed an unrestricted full synopsis to the answer model and rely on a “no spoilers” instruction.
+
+Additional story evidence needs verified title/episode and playback-edition alignment, source provenance, and a reveal point for each fact. A summary must be built from the already permitted prefix, or gated by the latest reveal point of every fact it contains. Rewinding must rebuild that prefix; episode changes must change the source scope and conversation scope together. Screenplay text may differ from the final cut and needs review. The existing offline alignment helper exports only neutral labels for exact permitted dialogue matches; it does not authorize using later screenplay material or guessed visual actions. General model knowledge must not fill missing plot facts. These are requirements for future source enrichment, not a claim that such a pipeline is deployed.
 
 ## Earlier 14 October 2026 evaluation
 
