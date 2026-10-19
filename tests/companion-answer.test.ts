@@ -59,7 +59,7 @@ describe('answer generation and independent verification', () => {
     { name: 'failed answer', rows: [history({ answer_status: 'insufficient_evidence' })] },
     { name: 'legacy answer', rows: [history({ companion_version: 1 })] },
     { name: 'retired checked answer', rows: [history({ companion_version: 2 })] },
-    { name: 'overlong omitted answer', rows: [history({ answer: 'x'.repeat(1001) })] },
+    { name: 'overlong omitted answer', rows: [history({ answer: 'x'.repeat(3000) })] },
   ])('does not invent a reminder when the referenced assistant answer is unavailable: $name', async ({ rows }) => {
     const question = 'Remind me where they decided to park the RV in your last answer.';
     const generate = vi.fn().mockResolvedValue(draft), observe = vi.fn();

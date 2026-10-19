@@ -239,9 +239,11 @@ export function promptConversation(history: Conversation[], position: ViewingPos
   const selected: { question: string; answer: string | null; seconds: number | null }[] = [];
   let size = 2;
   for (const row of conversationMemory(history, position).reverse()) {
-    // Never cut an answer mid-qualification. A long answer can still contribute
-    // its question as a reference without turning a partial sentence into fact.
-    const item = { question: row.question.slice(0, 400), answer: row.answer.length <= 1000 ? row.answer : null, seconds: row.position_seconds };
+    // Keep a complete recap when it fits the existing 2,800-character total
+    // memory budget. The old 1,000-character per-answer cap discarded useful
+    // six-point recaps even with an otherwise empty budget. Never truncate a
+    // qualification; an oversized answer contributes only its question.
+    const item = { question: row.question.slice(0, 400), answer: row.answer.length <= 2200 ? row.answer : null, seconds: row.position_seconds };
     const cost = JSON.stringify(item).length + (selected.length ? 1 : 0);
     if (size + cost > 2800) continue;
     selected.push(item); size += cost;

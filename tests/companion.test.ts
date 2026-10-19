@@ -149,7 +149,7 @@ describe('conversation memory and answer validation', () => {
     expect(buildPrompts('Why?', position, safeEvidence([record()], position), mixed).user).not.toMatch(/OLD_REFUSAL|UNKNOWN_STATUS/);
   });
   it('does not turn a long qualified answer into an unqualified truncated claim', () => {
-    const history = [message({ answer: 'Possible interpretation. '.repeat(60) + 'That identity is not established.' })];
+    const history = [message({ answer: 'Possible interpretation. '.repeat(120) + 'That identity is not established.' })];
     expect(promptConversation(history, position)).toEqual([{ question: 'What is he holding?', answer: null, seconds: 25 }]);
   });
   it('a friend or defendant does not trigger an ending route', () => {

@@ -32,6 +32,7 @@ beforeAll(async () => {
   await pg.exec(migration('20261013120000_companion_evidence_and_memory'));
   await pg.exec(migration('20261015153000_caption_context_revision'));
   await pg.exec(migration('20261015195500_companion_answer_revision'));
+  await pg.exec(migration('20261019160000_reviewed_scene_notes'));
   await pg.exec('GRANT SELECT, INSERT ON public.ai_conversations TO authenticated');
   const fixtures = [
     ['tv', 1, 1, 800, 810, 'previous', 3],
@@ -56,6 +57,35 @@ beforeAll(async () => {
   }
 });
 afterAll(() => pg.close());
+
+describe('private reviewed scene source store', () => {
+  const note = { id: 'reviewed-example', tmdb_id: 10, media_type: 'tv', season_number: 1, episode_number: 2,
+    reveal_seconds: 30, review: { status: 'reviewed', basis: 'caption_prefix' } };
+  it('derives query scope from the note so index fields cannot disguise future or other-episode notes', async () => {
+    await pg.query('INSERT INTO companion_scene_notes(id,note) VALUES ($1,$2::jsonb)', [note.id, JSON.stringify(note)]);
+    const { rows } = await pg.query('SELECT tmdb_id,episode_number,reveal_seconds FROM companion_scene_notes WHERE id=$1', [note.id]);
+    expect(rows).toEqual([{ tmdb_id: 10, episode_number: 2, reveal_seconds: 30 }]);
+    await expect(pg.query('UPDATE companion_scene_notes SET reveal_seconds=10 WHERE id=$1', [note.id])).rejects.toThrow();
+  });
+  it('does not let browser roles read private source material or approve their own notes', async () => {
+    for (const role of ['anon', 'authenticated']) {
+      for (const sql of ['SELECT * FROM companion_scene_notes',
+        "INSERT INTO companion_scene_notes(id,note) VALUES ('forged','{}')"]) {
+        await expect(pg.transaction(async tx => { await tx.exec(`SET LOCAL ROLE ${role}`); await tx.exec(sql); })).rejects.toThrow(/permission denied/);
+      }
+    }
+    const data = await pg.transaction(async tx => {
+      await tx.exec('SET LOCAL ROLE service_role');
+      return tx.query('SELECT id FROM companion_scene_notes');
+    });
+    expect(data.rows).toEqual([{ id: note.id }]);
+  });
+  it('rejects unreviewed notes and incomplete episode identities', async () => {
+    for (const invalid of [{ ...note, id: 'invalid', review: {} }, { ...note, id: 'invalid', episode_number: null }, { ...note, id: null }]) {
+      await expect(pg.query('INSERT INTO companion_scene_notes(id,note) VALUES ($1,$2::jsonb)', ['invalid', JSON.stringify(invalid)])).rejects.toThrow();
+    }
+  });
+});
 
 async function search(type: string, season: number | null, episode: number | null, seconds: number, semantic = true) {
   const { rows } = await pg.query<{ content: string }>(

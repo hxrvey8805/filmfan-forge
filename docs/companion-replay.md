@@ -1,6 +1,6 @@
 # Companion provider, deployment and replay
 
-**Latest evaluation: 19 October 2026. The two memory-boundary cases pass; the four content questions still fail manual acceptance. PR 11 remains draft. No merge or deployment is authorized by these results.**
+**Latest evaluation: 19 October 2026, reviewed-source replay. Three original content questions pass against editorially reviewed caption notes; the Gladiator relationship case remains unresolved. Both memory-boundary cases pass. This is a local, curated-source evaluation, not automatic coverage of other titles or a verified playback edition. PR 11 remains draft; do not merge or deploy.**
 
 ## Free OpenRouter connection
 
@@ -20,10 +20,10 @@ The previous Nemotron free endpoint was removed from the integration because its
 
 ## Deployment
 
-**The current caption/context repair is held in draft. Do not merge or deploy it until the original questions pass a fresh live evaluation, including rewind and episode-switch checks.** The provider activation steps below describe the earlier connection. The current repair requires both `20261015153000_caption_context_revision.sql` and `20261015195500_companion_answer_revision.sql` alongside both edge functions. Subtitle revision 3 excludes older caption caches; conversation revision 3 excludes answers accepted by the previous verification contract. Historical rows are preserved, but do not appear as current companion history or prompt memory. Do not use the earlier migration-free deployment instruction unchanged for this repair.
+**The current caption/context repair is held in draft. Do not merge or deploy it until the original questions pass a fresh live evaluation, including rewind and episode-switch checks.** The provider activation steps below describe the earlier connection. The current repair requires `20261015153000_caption_context_revision.sql`, `20261015195500_companion_answer_revision.sql` and `20261019160000_reviewed_scene_notes.sql` alongside both edge functions. Subtitle revision 3 excludes older caption caches; conversation revision 3 excludes answers accepted by the previous verification contract. Historical rows are preserved, but do not appear as current companion history or prompt memory. Do not use the earlier migration-free deployment instruction unchanged for this repair.
 
 1. Only after the acceptance gate passes, merge the reviewed change to GitHub main so Lovable syncs the source.
-2. Apply both migrations above and confirm subtitle and conversation revision 3 are available. The revised saving RPC rejects requests from older function versions before charging, so deploy the matching backend immediately afterward. Preserve `OPENROUTER_API_KEY` in CineGeek's Cloud secrets; never paste it into Lovable chat or commit it.
+2. Apply all three migrations above and confirm subtitle/conversation revision 3 and the private note store are available. Separately load only approved source notes whose anchors match production captions; an empty store provides no reviewed-source improvement. The revised saving RPC rejects requests from older function versions before charging, so deploy the matching backend immediately afterward. Preserve `OPENROUTER_API_KEY` in CineGeek's Cloud secrets; never paste it into Lovable chat or commit it.
 3. Deploy **both** `spoiler-free-companion` and `process-subtitles`, including their shared imports. Deploy the reviewed frontend history changes as well. The caption revision migration is required for this repair.
 4. Set `COMPANION_AI_PROVIDER=openrouter` after both functions are deployed. Adding the API key alone does not activate the provider.
 5. Confirm function deployment versions/status before claiming the public companion has switched. GitHub sync and frontend Publish alone are not backend deployment evidence.
@@ -32,13 +32,13 @@ Lovable's managed Cloud project is not a user-owned Supabase CLI project. The cu
 
 Suggested deployment-only instruction, **send only after the release gate passes and build-credit use is authorized**:
 
-> Apply `20261015153000_caption_context_revision.sql` and `20261015195500_companion_answer_revision.sql`, then deploy `process-subtitles` and `spoiler-free-companion` from the reviewed GitHub main, including all `_shared` imports and the reviewed frontend changes. Preserve source exactly. No model questions, subtitle downloads or additional AI features. Report both migration results and deployment success/version for both functions. Do not print secrets. The OpenRouter key is stored separately in Cloud secrets; activation uses `COMPANION_AI_PROVIDER=openrouter` after both functions are deployed.
+> Apply `20261015153000_caption_context_revision.sql`, `20261015195500_companion_answer_revision.sql` and `20261019160000_reviewed_scene_notes.sql`, then deploy `process-subtitles` and `spoiler-free-companion` from the reviewed GitHub main, including all `_shared` imports and the reviewed frontend changes. Preserve source exactly. No model questions, subtitle downloads or additional AI features. Report all migration results and deployment success/version for both functions. Do not print secrets. The OpenRouter key is stored separately in Cloud secrets; activation uses `COMPANION_AI_PROVIDER=openrouter` after both functions are deployed. Source-note import is a separate reviewed step; do not invent or automatically generate notes to fill the empty store.
 
 ## Offline checks and replay
 
 `scripts/companion-replay.ts` uses the shared retrieval, writer and checker against an exported subtitle prefix. It does not call Lovable or write production conversations. Use exports with individual cues clipped to the intended viewing point, and keep exports, keys and results outside Git.
 
-Input JSON contains `question`, `position`, `records` and optional `history`, using the shared companion types. Without `--live`, the script writes retrieval and the writer prompt. With `--live`, it uses the same OpenRouter adapter as the backend and saves writer/checker requests, final JSON responses, token usage, safe provider error codes and the answer or refusal. It never saves credentials, raw provider error bodies or model reasoning. Errors preserve the partial audit and exit with a nonzero status. Live replay is opt-in and should only run when requested.
+Input JSON contains `question`, `position`, `records`, optional `history` and optional `reviewedNotes`, using the shared companion types. Notes are private editorial source data, not substitute model outputs. Without `--live`, the script writes retrieval, eligible notes and the caption writer prompt. With `--live`, it uses the same OpenRouter adapter as the backend and saves actual selection/writer/checker requests, final JSON responses, token usage, safe provider error codes and the answer or refusal. Consult `requests` for what the AI actually received; the fallback caption prompt may not have been sent. It never saves credentials, raw provider error bodies or model reasoning. Errors preserve the partial audit and exit with a nonzero status. Live replay is opt-in and should only run when requested.
 
 The OpenRouter path and replay use a 16,000-character serialized evidence budget; the legacy Groq path retains its 8,500-character cap. Both report counts and bounded timestamp ranges for omitted passages to the writer and checker. This measures selection from the supplied caption records, not source completeness or alignment with the viewer's playback edition. The source is filtered at each cue's end time before selection. Increasing the budget never increases the viewing boundary.
 
@@ -54,7 +54,7 @@ deno run --env-file=/private/openrouter.env --allow-env=OPENROUTER_API_KEY \
 
 ## Answer and memory boundaries
 
-The writer receives only permitted chronological passages with short request-local citation IDs. Each claim is a short, standalone statement with its own qualifications. The checker receives the entire selected evidence context and checks every claim individually. Only explicitly supported claims can be returned, and only when those claims alone form a useful, coherent answer. Incomplete, contradictory or boundary-failing verdicts are rejected.
+When approved notes exist, the reviewed-source path below runs first. Otherwise the caption writer receives only permitted chronological passages with short request-local citation IDs. Each claim is a short, standalone statement with its own qualifications. The checker receives the entire selected evidence context and checks every claim individually. Only explicitly supported claims should be returned, and only when those claims alone form a useful, coherent answer. Incomplete, contradictory or boundary-failing verdicts are rejected; a positive semantic check is still not a correctness guarantee.
 
 There is at most one fresh rewrite and another independent check, using the same permitted evidence and memory plus fixed issue-category guidance. Rejected prose and checker explanations never become evidence. Provider failures propagate without publishing an unchecked draft.
 
@@ -71,6 +71,35 @@ Memory includes only revision-3 `answered` turns from the same permitted scope. 
 Explicit references such as "your last answer" are handled without AI when no eligible assistant answer remains in prompt memory. The backend returns a fixed message stating that no previous answer is available at the selected viewing point, skips subtitle preparation and generation, and saves an uncharged `insufficient_evidence` response. The generation helper enforces the same guard for replay and other callers. Ordinary story questions still use caption evidence, and follow-ups with eligible memory still go through verification.
 
 Offline tests cover the provider requests, free-only routing, quota failures and the real writer/checker request bodies after rewind or episode switches. They do not establish model answer quality or guarantee that a model will never hallucinate. Deployment status is reported separately.
+
+## Reviewed scene notes
+
+`reviewed-scenes.ts` accepts editorial summaries bound to exact completed caption cues. Each note records title/episode, source file ID when known, its start and reveal time, complete caption anchors, intended uses, topics and review provenance. The supported review basis is `caption_prefix`: this does **not** authorize importing visual stage directions from a draft screenplay. A source reviewer must check each assertion, speaker, denial and qualification. A `reviewed` flag or an exact text match cannot establish semantic truth or playback-edition alignment.
+
+The server retrieves notes only from the service-role-only `companion_scene_notes` table. Browser roles cannot read or write that store, and question-body annotations are ignored. Generated database columns derive scope and reveal time from the note itself. The application then independently checks title/episode, all source cue text/times, any known subtitle file ID, and every cue within the reviewed interval. Missing or changed source text, shifted timings, duplicate note IDs, future anchors and unsupported source types invalidate a note. No full screenplay, search result or unfiltered synopsis enters the model prompt.
+
+The free model selects request-local note IDs only. The server renders the complete reviewed wording and citations; model-authored prose, unknown IDs and extra fields are rejected. Recaps must retain all supplied key notes (up to eight); current-scene responses require recent evidence and label older background separately. Notes can require earlier context notes, which are expanded only within the same permitted source set. Missing, later or cyclic dependencies are rejected. Filtered conversation can resolve references but cannot supply new facts. Scope and cutoff are checked again if prepared notes are reused after a rewind or episode change.
+
+This is a curated content path, not an automatic script-to-scene pipeline or a solution for the entire catalogue. Larger note sets and unsupported questions retain the caption fallback, whose quality limitations remain. The migration creates an empty private store. The local reviewed notes and copyrighted source exports remain outside Git; they have not been imported into production.
+
+### 19 October reviewed-source evaluation
+
+The four original questions and viewing points were unchanged. Eleven editorial notes were added in separate input copies, with the original caption exports preserved and hashed. The Social Network screenplay's matching opening dialogue was cross-checked against the caption sequence and inspected PDF speaker labels. Breaking Bad episode 2's production script was checked for dialogue continuity only. The early pilot and Gladiator screenplay drafts contained material differences and supplied no extra plot facts or visual actions. No unrestricted summary or remembered model plot was admitted.
+
+| Original case | Manual result with reviewed notes |
+| --- | --- |
+| Breaking Bad S1E1, 27:13 recap | Pass for the supplied caption prefix: six chronological milestones include the diagnosis and raid, without invented gifts, collapse, resignation or former-student recognition. |
+| Breaking Bad S1E2, 05:00 scene | Pass as a dialogue-based explanation: earlier RV/cleanup plans are distinguished from the latest captioned sounds; the groan's identity/cause remains unknown. It is not a verified visual account. The first note selection omitted useful background; required context fixed that omission and the same question was live-tested again. |
+| The Social Network, 05:00 disagreement | Pass for the supplied prefix: subject changes, the perceived slight, status fixation and the condescending offer are explained with consistent roles. No invented departure, later institution or reversed breakup cause. |
+| Gladiator, 15:00 relationship | Still unresolved. The available draft differs from the caption track, and the permitted captions do not reliably establish the requested personal relationship. The unchanged caption replay is withheld. No fabricated relationship note was added. |
+| Rewind to S1E2 03:15 | Pass: later notes/history unavailable, no model calls. |
+| Switch to S1E1 05:00 | Pass: other-episode notes/history unavailable, no model calls. |
+
+Six model requests completed and all reported zero cost, using the unchanged pinned free endpoint with zero-price caps and no paid fallback. The final code reproduced all six case responses offline, matching five captured requests exactly and checking note scope/cutoffs at 90 positions. That final regression made zero new model calls. These are local saved-input evaluations, not public-site tests. The source review is editorial work; the result does not establish that the free model independently understands arbitrary scripts or can safely fill missing facts.
+
+The reviewed recap is 1,192 characters, which exposed a follow-up bug: the old 1,000-character per-answer memory cap omitted it even when the total memory budget was empty. Complete answers up to 2,200 characters can now participate, still within the unchanged 2,800-character total serialized budget. Longer answers are omitted whole, never truncated mid-qualification. Timestamp and episode filtering still happen first. Regression tests cover a complete long recap, a crowded budget and its exclusion after rewind or episode switch.
+
+Validation: **297 automated tests**, production build, scoped ESLint and Deno checks pass. New tests cover private-store permissions, generated scope columns, full-span cue checks, changed editions, fractional cutoffs, context dependencies, rendering without generated prose, recap coverage, safe memory and episode isolation. One content question and source/playback alignment remain unresolved. **Keep PR 11 in draft; do not merge or deploy.**
 
 ## 15 October offline follow-up
 

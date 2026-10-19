@@ -4,18 +4,26 @@ import { repairInstruction, verificationEvidence, verifiedSelection, VERIFICATIO
 import { draftGroundingIssues } from './draft-grounding.ts';
 import { writerFormat, verifierFormat, type AnswerFormat } from './answer-schema.ts';
 import { addressesNamedRelationship, coversRecap } from './question-focus.ts';
+import { reviewedSceneAnswer, type PreparedSceneNote } from './reviewed-scenes.ts';
 
 export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier', format?: AnswerFormat) => Promise<unknown>;
 
-export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial';
+export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'reviewed_answered';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
 
 export async function checkedAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
-  observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage) {
+  observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = []) {
   const permitted = permittedEvidence(evidence, position);
   let attempts = 0;
   const report = (stage: AnswerCheckStage, claimCount = 0) => observe({ stage, evidenceCount: permitted.length, claimCount, attempts });
   if (unavailableMemoryReply(question, position, history)) { report('memory_unavailable'); return null; }
+  if (reviewedNotes.length) {
+    const reviewed = await reviewedSceneAnswer(question, position, reviewedNotes, history, (...args) => {
+      attempts++;
+      return generate(...args);
+    });
+    if (reviewed) { report('reviewed_answered', reviewed.evidence.length); return reviewed; }
+  }
   if (!permitted.length) { report('no_evidence'); return null; }
   const prompts = buildPrompts(question, position, permitted, history, coverage);
   const aliases = new Map(prompts.data.evidence.map((item, index) => [item.id, permitted[index]]));

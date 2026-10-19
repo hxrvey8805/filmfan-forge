@@ -8,6 +8,7 @@ import { selectSceneContext, OPENROUTER_EVIDENCE_BUDGET } from '../supabase/func
 import { checkedAnswer, type AnswerDiagnostics } from '../supabase/functions/_shared/answer.ts';
 import { companionResponse } from '../supabase/functions/_shared/companion-response.ts';
 import { OPENROUTER_MODEL, openRouterGenerator } from '../supabase/functions/_shared/openrouter.ts';
+import { permittedSceneNotes, type ReviewedSceneNote } from '../supabase/functions/_shared/reviewed-scenes.ts';
 
 const [inputPath, outputPath, mode] = Deno.args;
 if (!inputPath || !outputPath || (mode && mode !== '--live')) {
@@ -15,12 +16,13 @@ if (!inputPath || !outputPath || (mode && mode !== '--live')) {
 }
 if (inputPath === outputPath) throw new Error('Use a separate output file to preserve the source export.');
 const input = JSON.parse(await Deno.readTextFile(inputPath)) as {
-  question: string; position: ViewingPosition; records: SubtitleRecord[]; history?: Conversation[];
+  question: string; position: ViewingPosition; records: SubtitleRecord[]; history?: Conversation[]; reviewedNotes?: ReviewedSceneNote[];
 };
 const history = input.history ?? [];
 const memoryReply = unavailableMemoryReply(input.question, input.position, history);
 const { evidence, coverage } = selectSceneContext(input.records, input.position, input.question, history, OPENROUTER_EVIDENCE_BUDGET);
 const prompts = buildPrompts(input.question, input.position, evidence, history, coverage);
+const reviewedNotes = memoryReply ? [] : permittedSceneNotes(input.reviewedNotes ?? [], input.records, input.position);
 const checks: AnswerDiagnostics[] = [];
 const generations: { phase: string; response: unknown }[] = [];
 const requests: { phase: string; system: string; user: string; maxTokens: number }[] = [];
@@ -78,7 +80,7 @@ if (mode === '--live' && memoryReply) {
       const response = await generate(system, user, maxTokens, purpose, format);
       generations.push({ phase, response });
       return response;
-    }, event => checks.push(event), coverage);
+    }, event => checks.push(event), coverage, reviewedNotes);
   } catch (failure) {
     error = failure instanceof Error ? failure.message : 'Replay failed';
   }
@@ -86,7 +88,7 @@ if (mode === '--live' && memoryReply) {
 await Deno.writeTextFile(outputPath, JSON.stringify({
   mode: mode === '--live' ? (memoryReply ? 'memory-guard-replay' : 'live-model-replay') : 'retrieval-only', model: OPENROUTER_MODEL,
   note: 'Reconstructed from the input export, not a captured historical request. Missing history or retrieved records are not recreated.',
-  question: input.question, position: input.position, evidence, coverage, memoryReply, prompts, checks, requests, requestConfigs,
+  question: input.question, position: input.position, evidence, coverage, reviewedNotes, memoryReply, prompts, checks, requests, requestConfigs,
   generations, usage, providerFailures, completions, error, result,
   // Report exactly what the UI would receive, including uncharged limitations.
   // Retrieval-only runs and provider errors must not look like answered tests.

@@ -10,6 +10,7 @@ import { checkedAnswer } from "../_shared/answer.ts";
 import { companionResponse } from "../_shared/companion-response.ts";
 import { companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
+import { permittedSceneNotes, type ReviewedSceneNote, type PreparedSceneNote } from "../_shared/reviewed-scenes.ts";
 
 import { assertSubtitlePreparation, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
 
@@ -19,7 +20,7 @@ const headers = {
   'Content-Type': 'application/json',
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
-const columns = 'id, tmdb_id, media_type, season_number, episode_number, ingestion_version, cues, start_seconds, end_seconds';
+const columns = 'id, tmdb_id, media_type, season_number, episode_number, ingestion_version, cues, start_seconds, end_seconds, source_file_id';
 
 function currentChunks(db: SupabaseClient, position: ViewingPosition) {
   let query = db.from('subtitle_chunks').select(columns).eq('tmdb_id', position.tmdbId)
@@ -60,8 +61,16 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
   ]);
   if (prefix.error) throw prefix.error;
   if (relevant.error) throw relevant.error;
-  return selectSceneContext([...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[],
-    position, question, memory, companionEvidenceBudget(name => Deno.env.get(name)));
+  const records = [...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[];
+  let query = db.from('companion_scene_notes').select('note').eq('tmdb_id', position.tmdbId)
+    .eq('media_type', position.mediaType).lte('reveal_seconds', position.seconds);
+  if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
+  else query = query.is('season_number', null).is('episode_number', null);
+  const reviewed = await query.order('reveal_seconds', { ascending: true }).limit(1000);
+  if (reviewed.error) throw reviewed.error;
+  // These notes come only from the service-role store, never the request body.
+  const notes = permittedSceneNotes((reviewed.data ?? []).map(row => row.note) as ReviewedSceneNote[], records, position);
+  return { ...selectSceneContext(records, position, question, memory, companionEvidenceBudget(name => Deno.env.get(name))), notes };
 }
 
 serve(async req => {
@@ -111,16 +120,17 @@ serve(async req => {
     const memoryReply = unavailableMemoryReply(question.trim(), position, memory);
     let evidence: Evidence[] = [];
     let coverage: EvidenceCoverage | undefined;
+    let notes: PreparedSceneNote[] = [];
     if (!memoryReply) {
       await ensureCurrentSubtitles(db, position);
-      ({ evidence, coverage } = await retrieve(db, position, question.trim(), memory));
+      ({ evidence, coverage, notes } = await retrieve(db, position, question.trim(), memory));
     }
     let checked = null;
     if (evidence.length) {
       const generate = companionGenerator(name => Deno.env.get(name));
       checked = await checkedAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
-          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage);
+          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes);
     }
     const response = companionResponse(question.trim(), position, evidence, memory, checked);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
