@@ -8,7 +8,7 @@ import { reviewedSceneAnswer, type PreparedSceneNote } from './reviewed-scenes.t
 
 export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier', format?: AnswerFormat) => Promise<unknown>;
 
-export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'reviewed_answered';
+export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'reviewed_answered' | 'reviewed_limited';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
 
 export async function checkedAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
@@ -22,7 +22,7 @@ export async function checkedAnswer(question: string, position: ViewingPosition,
       attempts++;
       return generate(...args);
     });
-    if (reviewed) { report('reviewed_answered', reviewed.evidence.length); return reviewed; }
+    if (reviewed) { report(reviewed.limited ? 'reviewed_limited' : 'reviewed_answered', reviewed.evidence.length); return reviewed; }
   }
   if (!permitted.length) { report('no_evidence'); return null; }
   const prompts = buildPrompts(question, position, permitted, history, coverage);

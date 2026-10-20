@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { permittedSceneNotes, reviewedSceneAnswer, type ReviewedSceneNote } from '../supabase/functions/_shared/reviewed-scenes';
 import { COMPANION_VERSION, promptConversation, type Conversation, type SubtitleRecord } from '../supabase/functions/_shared/companion';
 import { checkedAnswer } from '../supabase/functions/_shared/answer';
+import { companionResponse } from '../supabase/functions/_shared/companion-response';
 
 const position = { tmdbId: 10, mediaType: 'tv' as const, seasonNumber: 1, episodeNumber: 2, seconds: 30 };
 const records: (SubtitleRecord & { source_file_id: number })[] = [{ id: 'chunk', tmdb_id: 10, media_type: 'tv', season_number: 1,
@@ -61,6 +62,63 @@ describe('reviewed scene source boundaries', () => {
     expect(prepare([contextual, { ...note, episode_number: 1 }])).toEqual([]);
     expect(prepare([contextual, { ...note, context_ids: ['event'] }])).toEqual([]);
     expect(prepare([contextual, note])).toHaveLength(2);
+  });
+});
+
+describe('limited reviewed context', () => {
+  const limited: ReviewedSceneNote = { ...note, coverage: 'limited', valid_until_seconds: 30,
+    summary: 'Morgan proposes a departure. These captions do not establish Morgan’s relationship with Lee.' };
+
+  it('requires an explicit review boundary and rejects invalid coverage', () => {
+    expect(prepare([limited])).toHaveLength(1);
+    for (const change of [{ valid_until_seconds: undefined }, { valid_until_seconds: 13 },
+      { valid_until_seconds: NaN }, { valid_until_seconds: Infinity }, { coverage: 'anything' }]) {
+      expect(prepare([{ ...limited, ...change } as ReviewedSceneNote])).toEqual([]);
+    }
+  });
+
+  it('expires a limitation when viewing moves beyond the reviewed context', () => {
+    expect(prepare([limited], records, { ...position, seconds: 30.001 })).toEqual([]);
+    expect(prepare([limited], records, { ...position, seconds: 13.999 })).toEqual([]);
+    expect(prepare([limited], records, { ...position, seconds: 14 })).toHaveLength(1);
+  });
+
+  it('rechecks both ends of the boundary and episode scope on prepared context', async () => {
+    const generate = vi.fn();
+    for (const pos of [{ ...position, seconds: 30.001 }, { ...position, seconds: 13.999 },
+      { ...position, episodeNumber: 1 }, { ...position, tmdbId: 11 }]) {
+      expect(await reviewedSceneAnswer('What is Morgan’s relationship with Lee?', pos,
+        prepare([limited]), [], generate)).toBeNull();
+    }
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('displays supported facts and their qualification without charging or trusting them as complete memory', async () => {
+    const question = 'What is Morgan’s relationship with Lee?';
+    const generate = vi.fn().mockResolvedValue({ noteIds: ['N1'] });
+    const observe = vi.fn();
+    const result = await checkedAnswer(question, position, [], [], generate, observe, undefined, prepare([limited]));
+    expect(generate).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ answer: limited.summary, limited: true });
+    expect(observe).toHaveBeenLastCalledWith(expect.objectContaining({ stage: 'reviewed_limited' }));
+    const response = companionResponse(question, position, [], [], result);
+    expect(response).toMatchObject({ answer: limited.summary, answer_status: 'insufficient_evidence', charge: false });
+    expect(response).not.toHaveProperty('limited');
+    const history: Conversation[] = [{ id: 'partial', title_id: 10, media_type: 'tv', season_number: 1, episode_number: 2,
+      position_seconds: 30, companion_version: COMPANION_VERSION, question, answer: response.answer,
+      context: '', timestamp: '00:00:30', created_at: '2026-10-20T12:00:00Z', answer_status: response.answer_status }];
+    expect(promptConversation(history, position)).toEqual([]);
+    generate.mockClear();
+    expect(await checkedAnswer('Explain your last answer.', position, [], history, generate)).toBeNull();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('propagates a required context limitation even if the selected note is otherwise complete', async () => {
+    const notes = prepare([limited, { ...note, id: 'event', reveal_seconds: 20, context_ids: ['plan'], summary: 'A noise follows.' }]);
+    const result = await reviewedSceneAnswer('What is happening?', position, notes, [], async () => ({ noteIds: ['N2'] }));
+    expect(result).toMatchObject({ limited: true, answer: `${limited.summary}\n\nA noise follows.` });
+    expect(prepare([limited, { ...note, id: 'event', context_ids: ['plan'] }], records,
+      { ...position, seconds: 31 })).toEqual([]);
   });
 });
 

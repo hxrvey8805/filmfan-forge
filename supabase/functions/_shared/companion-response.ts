@@ -3,8 +3,8 @@ import { evidenceLabel, formatTimestamp, permittedEvidence, questionIntent, unav
 import { isRelationshipQuestion } from './question-focus.ts';
 
 export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number };
-export type CheckedResponse = { answer: string; evidence: CitedEvidence[] };
-export type CompanionResponse = CheckedResponse & { answer_status: 'answered' | 'insufficient_evidence'; charge: boolean };
+export type CheckedResponse = { answer: string; evidence: CitedEvidence[]; limited?: true };
+export type CompanionResponse = Omit<CheckedResponse, 'limited'> & { answer_status: 'answered' | 'insufficient_evidence'; charge: boolean };
 
 // A failed interpretation need not hide the available scene evidence. This is
 // deliberately an uncharged, limited response, never an accepted explanation
@@ -31,7 +31,8 @@ export function companionResponse(question: string, position: ViewingPosition, e
   history: Conversation[], checked: CheckedResponse | null): CompanionResponse {
   const memoryReply = unavailableMemoryReply(question, position, history);
   if (memoryReply) return { answer: memoryReply, evidence: [], answer_status: 'insufficient_evidence', charge: false };
-  if (checked) return { ...checked, answer_status: 'answered', charge: true };
+  if (checked) return { answer: checked.answer, evidence: checked.evidence,
+    answer_status: checked.limited ? 'insufficient_evidence' : 'answered', charge: !checked.limited };
   const permitted = permittedEvidence(evidence, position);
   const limited = limitedSceneContext(question, position, permitted);
   return { answer: limited?.answer ?? (permitted.length

@@ -16,6 +16,10 @@ export interface ReviewedSceneNote {
   start_seconds: number;
   reveal_seconds: number;
   summary: string;
+  // A review may support useful facts without resolving the whole subject.
+  // Such a limitation is valid only through its reviewed viewing boundary.
+  coverage?: 'complete' | 'limited';
+  valid_until_seconds?: number;
   uses: ('recap' | 'scene' | 'explanation')[];
   topics: string[];
   context_ids?: string[];
@@ -35,6 +39,8 @@ export interface PreparedSceneNote {
   uses: ReviewedSceneNote['uses'];
   topics: string[];
   contextIds: string[];
+  limited?: true;
+  validUntil?: number;
 }
 
 const cueKey = (cue: Cue) => JSON.stringify([cue.start, cue.end, cue.text]);
@@ -57,6 +63,10 @@ export function permittedSceneNotes(notes: ReviewedSceneNote[], records: Subtitl
         !Number.isFinite(note.start_seconds) || note.start_seconds < 0 || !Number.isFinite(note.reveal_seconds) ||
         note.reveal_seconds < note.start_seconds || note.reveal_seconds > position.seconds ||
         typeof note.summary !== 'string' || !note.summary.trim() || note.summary.length > 1000 ||
+        (note.coverage !== undefined && !['complete', 'limited'].includes(note.coverage)) ||
+        (note.coverage === 'limited' && note.valid_until_seconds === undefined) ||
+        (note.valid_until_seconds !== undefined && (!Number.isFinite(note.valid_until_seconds) ||
+          note.valid_until_seconds < note.reveal_seconds || position.seconds > note.valid_until_seconds)) ||
         !Array.isArray(note.uses) || !note.uses.length || note.uses.some(use => !['recap', 'scene', 'explanation'].includes(use)) ||
         !Array.isArray(note.topics) || note.topics.length > 12 || note.topics.some(topic => typeof topic !== 'string' || topic.length > 80) ||
         (note.context_ids !== undefined && (!Array.isArray(note.context_ids) || note.context_ids.length > 4 ||
@@ -78,7 +88,9 @@ export function permittedSceneNotes(notes: ReviewedSceneNote[], records: Subtitl
     if (cues.some(cue => cue.start <= note.reveal_seconds && cue.end >= note.start_seconds && !anchors.has(cueKey(cue)))) continue;
     result.push({ id: note.id, tmdbId: note.tmdb_id, mediaType: note.media_type, season: note.season_number,
       episode: note.episode_number, start: note.start_seconds, end: note.reveal_seconds,
-      text: note.summary.trim(), uses: [...note.uses], topics: [...note.topics], contextIds: [...(note.context_ids ?? [])] });
+      text: note.summary.trim(), uses: [...note.uses], topics: [...note.topics], contextIds: [...(note.context_ids ?? [])],
+      ...(note.coverage === 'limited' ? { limited: true as const } : {}),
+      ...(note.valid_until_seconds !== undefined ? { validUntil: note.valid_until_seconds } : {}) });
   }
   return result.filter(note => expandContext([note], result) !== null)
     .sort((a, b) => a.end - b.end || a.start - b.start || a.id.localeCompare(b.id));
@@ -118,14 +130,20 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
   const scoped = notes.filter(note => note.tmdbId === position.tmdbId && note.mediaType === position.mediaType &&
     note.season === (position.seasonNumber ?? null) && note.episode === (position.episodeNumber ?? null) &&
     Number.isFinite(note.start) && note.start >= 0 && Number.isFinite(note.end) && note.end >= note.start &&
-    note.end <= position.seconds);
+    note.end <= position.seconds && (!note.limited || note.validUntil !== undefined) &&
+    (note.validUntil === undefined || (Number.isFinite(note.validUntil) && note.validUntil >= note.end &&
+      position.seconds <= note.validUntil)));
   const eligible = scoped.filter(note => note.uses.includes(use) && expandContext([note], scoped) !== null);
   // Never trim a dense set in a way that silently loses recap milestones.
   if (!eligible.length || eligible.length > (use === 'recap' ? 8 : 24) ||
       JSON.stringify(eligible).length > 14000) return null;
-  const aliases = eligible.map((note, i) => ({ id: `N${i + 1}`, start: note.start, end: note.end, text: note.text, topics: note.topics }));
+  const aliases = eligible.map((note, i) => ({ id: `N${i + 1}`, start: note.start, end: note.end, text: note.text, topics: note.topics,
+    ...(note.limited ? { coverage: 'limited' } : {}) }));
   const conversation = promptConversation(history, position);
-  const system = conversation.length ? `${SCENE_SELECTION_PROMPT}\nEarlier conversation resolves references only; it is not evidence. Select only facts from the supplied reviewed notes.` : SCENE_SELECTION_PROMPT;
+  let system = conversation.length ? `${SCENE_SELECTION_PROMPT}\nEarlier conversation resolves references only; it is not evidence. Select only facts from the supplied reviewed notes.` : SCENE_SELECTION_PROMPT;
+  if (eligible.some(note => note.limited)) {
+    system += '\nA note marked limited may give useful facts about the requested subject while explicitly leaving part unresolved. You may select it for that subject; it will remain a limited response, not a complete answer.';
+  }
   const value = await generate(system, JSON.stringify({ question, position, intent: use, notes: aliases,
     ...(conversation.length ? { conversation } : {}) }), 300, 'writer', {
     type: 'json_schema', json_schema: { name: 'companion_note_selection', strict: true, schema: {
@@ -149,5 +167,5 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
     ? `Earlier (${formatTimestamp(note.start)}–${formatTimestamp(note.end)}): ${note.text}` : note.text).join('\n\n'), evidence: selected.map(note => ({
     id: `reviewed:${note.id}`, label: `Reviewed caption note · ${formatTimestamp(note.start)}–${formatTimestamp(note.end)}`,
     season: position.seasonNumber ?? null, episode: position.episodeNumber ?? null, start: note.start, end: note.end,
-  })) };
+  })), ...(selected.some(note => note.limited) ? { limited: true as const } : {}) };
 }

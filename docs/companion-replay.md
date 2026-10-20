@@ -1,6 +1,6 @@
 # Companion provider, deployment and replay
 
-**Latest evaluation: 19 October 2026, reviewed-source replay. Three original content questions pass against editorially reviewed caption notes; the Gladiator relationship case remains unresolved. Both memory-boundary cases pass. This is a local, curated-source evaluation, not automatic coverage of other titles or a verified playback edition. PR 11 remains draft; do not merge or deploy.**
+**Latest evaluation: 20 October 2026. Three original content questions retain their reviewed-source passes. Gladiator now returns supported opening context with an explicit personal-relationship limitation; this is an improved partial answer, not a fourth full pass. Both memory-boundary cases pass. This is a local, curated-source evaluation, not automatic coverage of other titles or a verified playback edition. PR 11 remains draft; do not merge or deploy.**
 
 ## Free OpenRouter connection
 
@@ -80,7 +80,21 @@ The server retrieves notes only from the service-role-only `companion_scene_note
 
 The free model selects request-local note IDs only. The server renders the complete reviewed wording and citations; model-authored prose, unknown IDs and extra fields are rejected. Recaps must retain all supplied key notes (up to eight); current-scene responses require recent evidence and label older background separately. Notes can require earlier context notes, which are expanded only within the same permitted source set. Missing, later or cyclic dependencies are rejected. Filtered conversation can resolve references but cannot supply new facts. Scope and cutoff are checked again if prepared notes are reused after a rewind or episode change.
 
+Reviews can mark `coverage: "limited"` when supported facts leave part of the requested subject unresolved. Such notes require an explicit `valid_until_seconds` at or after the reveal time. The server checks expiry during preparation and selection; a qualified statement must not linger after the viewing point leaves its reviewed scope. Any limited note in the selected dependency chain keeps the whole response limited. Its complete wording is displayed with citations, but `answer_status` remains `insufficient_evidence`, charging remains disabled and it is excluded from trusted follow-up memory. The model cannot upgrade its status by selecting its ID.
+
 This is a curated content path, not an automatic script-to-scene pipeline or a solution for the entire catalogue. Larger note sets and unsupported questions retain the caption fallback, whose quality limitations remain. The migration creates an empty private store. The local reviewed notes and copyrighted source exports remain outside Git; they have not been imported into production.
+
+### 20 October Gladiator follow-up
+
+The original Maximus/emperor question, 15:00 cutoff and caption export are unchanged. One additional private note reviews the 69 completed cues through 14:36.611, with validity ending at 15:00. It explains Maximus's military role, his men greeting him by name, his commands to stay together and his talk of harvesting his crops. It explicitly leaves his personal closeness to the emperor unresolved. [TCM's official opening-clip description](https://www.tcm.com/watchtcm/titles/341478) corroborates the opening character and role; the full synopsis, later clips and screenplay stage directions were not imported.
+
+A separate subtitle track placed the direct praise after 15:00 and had roughly half-to-one-second differences at nearby anchors. That was useful corroboration for excluding the later exchange, not proof of playback-edition alignment. No external cue was shifted backwards, no later relationship material entered the prompt, and no claim was made that the film itself has shown no relationship.
+
+The fresh free-model replay selected the reviewed note in **one request, with reported cost $0**. The response preserves all qualifications and uses `reviewed_limited` diagnostics, `insufficient_evidence` status and no charge. This improves the prior blanket refusal without relabelling missing relationship evidence as a complete answer. The exact request/response is saved privately.
+
+The final offline regression reproduces all six cases, matching four captured model requests exactly and checking 96 note boundaries. The other three content answers are unchanged; they were not newly called against the provider in this iteration. The rewind and episode-switch guards also ran again without credentials or network permission and made zero model calls. **302 automated tests**, build, Deno checks, scoped ESLint and whitespace checks pass, including limitation expiry, dependency propagation and exclusion from memory.
+
+The all-four release gate remains closed. The Gladiator personal-relationship portion and playback-edition alignment remain unverified. Code is in the draft branch; reviewed source notes remain private and are not loaded into production.
 
 ### 19 October reviewed-source evaluation
 
