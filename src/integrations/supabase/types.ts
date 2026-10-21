@@ -71,6 +71,36 @@ export type Database = {
         }
         Relationships: []
       }
+      companion_scene_notes: {
+        Row: {
+          episode_number: number | null
+          id: string
+          media_type: string
+          note: Json
+          reveal_seconds: number
+          season_number: number | null
+          tmdb_id: number
+        }
+        Insert: {
+          episode_number?: number | null
+          id: string
+          media_type?: string
+          note: Json
+          reveal_seconds?: number
+          season_number?: number | null
+          tmdb_id?: number
+        }
+        Update: {
+          episode_number?: number | null
+          id?: string
+          media_type?: string
+          note?: Json
+          reveal_seconds?: number
+          season_number?: number | null
+          tmdb_id?: number
+        }
+        Relationships: []
+      }
       season_summaries: {
         Row: {
           created_at: string

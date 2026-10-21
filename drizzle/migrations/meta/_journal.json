@@ -22,6 +22,13 @@
       "when": 1792620297022,
       "tag": "0002_companion_answer_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792620308365,
+      "tag": "0003_reviewed_scene_notes",
+      "breakpoints": true
     }
   ]
 }
