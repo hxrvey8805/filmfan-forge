@@ -1,6 +1,6 @@
 # Companion provider, deployment and replay
 
-**Latest evaluation: 20 October 2026. Three original content questions retain their reviewed-source passes. Gladiator now returns supported opening context with an explicit personal-relationship limitation; this is an improved partial answer, not a fourth full pass. Both memory-boundary cases pass. This is a local, curated-source evaluation, not automatic coverage of other titles or a verified playback edition. PR 11 remains draft; do not merge or deploy.**
+**Latest evaluation: 21 October 2026. All four original content questions were freshly replayed on the pinned free route for a reported total cost of $0. Three return their reviewed complete answers; Gladiator returns supported opening context with an explicit personal-relationship limitation, not a fourth full pass. Both memory-boundary cases pass without model calls. Complete subtitle imports for two cases also passed a local database rehearsal. Production source preparation remains incomplete. PR 11 remains draft; do not merge or deploy.**
 
 ## Free OpenRouter connection
 
@@ -83,6 +83,39 @@ The free model selects request-local note IDs only. The server renders the compl
 Reviews can mark `coverage: "limited"` when supported facts leave part of the requested subject unresolved. Such notes require an explicit `valid_until_seconds` at or after the reveal time. The server checks expiry during preparation and selection; a qualified statement must not linger after the viewing point leaves its reviewed scope. Any limited note in the selected dependency chain keeps the whole response limited. Its complete wording is displayed with citations, but `answer_status` remains `insufficient_evidence`, charging remains disabled and it is excluded from trusted follow-up memory. The model cannot upgrade its status by selecting its ID.
 
 This is a curated content path, not an automatic script-to-scene pipeline or a solution for the entire catalogue. Larger note sets and unsupported questions retain the caption fallback, whose quality limitations remain. The migration creates an empty private store. The local reviewed notes and copyrighted source exports remain outside Git; they have not been imported into production.
+
+### Preparing reviewed data for deployment
+
+Code deployment does not publish the private reviewed sources. `scripts/prepare-scene-note-import.ts` prepares SQL for a note set and its matching revision-3 caption export. It validates every note and dependency using the runtime gate, then generates a transactional database check of the exact scope, file ID (when known), completed cue times and text. Any mismatch rolls back the whole note set, including notes inserted earlier in the batch. It does not upgrade an older caption cache or approve new facts.
+
+```sh
+deno run --allow-read --allow-write=/private/audit \
+  scripts/prepare-scene-note-import.ts /private/audit/notes.json \
+  /private/audit/records.json /private/audit/NEW-import.sql
+```
+
+When the tested source is missing from the backend, `scripts/prepare-reviewed-source.ts` can prepare a complete local subtitle file and its matching notes together. The manifest requires the reviewed SHA-256, complete-file declaration, title/episode, source reference and provider file ID or explicit `null` when unknown. An OpenSubtitles legacy subtitle/download ID must not be guessed to be its API file ID. The parser and cache-row builder are shared with ingestion. Only the original local file is parsed; there are no downloads, embeddings or model calls.
+
+```sh
+deno run --allow-read --allow-write=/private/audit \
+  scripts/prepare-reviewed-source.ts /private/audit/source-manifest.json \
+  /private/audit/complete-subtitles.ass /private/audit/notes.json \
+  /private/audit/NEW-source-bundle
+```
+
+This writes private `import.sql`, `records.json` and `manifest.json` files. It refuses to overwrite an existing directory. The generated transaction locks the caption table, rejects a different or incomplete current cache, publishes the complete file using the same keys as ingestion, and imports notes only after checking their anchors against the inserted rows. Failure rolls back both captions and notes. Reapplying the same bundle is idempotent. Legacy TV indices are replaced as in normal ingestion; unused legacy tails remain excluded by revision. Existing current sources are never silently replaced. The declaration/hash/anchor checks establish file identity and consistency, not playback alignment or semantic truth; source review is still necessary.
+
+Both tools are offline preparation only. Generated files contain source dialogue (base64 in SQL is not encryption), must stay outside Git with private permissions, and must not be pasted into an AI build chat. Applying them requires the pending migrations and an authorized database administration path **after** the release gate passes. Do not relabel an old production export as revision 3 merely to make the import succeed.
+
+### 21 October live-source and import audit
+
+The fresh four model responses exactly reproduce the reviewed answers: three `answered` responses and one qualified, uncharged Gladiator `insufficient_evidence` response. Each uses one free-model request, reported cost $0. The rewind and episode-switch fixtures run without keys or network permissions and make zero model calls. An offline regression then matches all four captured request bodies and responses exactly across six cases and 96 note boundaries.
+
+A read-only export of the actual production subtitle table exposed the data gap. The Breaking Bad pilot's reviewed anchors all match its cached source. Gladiator's 69 reviewed anchors also match; that exact production track puts the emperor's first direct praise at 15:12.485–15:15.984, beyond the unchanged 15:00 viewing boundary. Breaking Bad episode 2 uses a different file/timings from the reviewed SDH file, and The Social Network has no production subtitle rows. Existing caches remain revision 1/2. No production data was changed, and these exports were not relabelled as revision 3.
+
+The original complete local SRT for Breaking Bad episode 2 and ASS file for The Social Network were recovered and parsed with the current parser. Guarded private bundles contain 617 cues/30 chunks and 3,011 cues/75 chunks respectively, plus their two and three reviewed notes. A local PostgreSQL rehearsal applies the actual repository migrations, imports both bundles twice, runs the backend's prefix and keyword retrieval, and reproduces both captured model requests and answers exactly. It checks 7,260 full-file cue/note viewing boundaries, including future scenes, without network calls or production writes. This verifies those bundles; it does not establish their alignment with a user's playback edition.
+
+**317 automated tests**, production build, Deno checks, scoped ESLint and whitespace checks pass. New database tests cover drift, wrong file/title/episode/revision, rollback, partial current caches, idempotence and legacy-cache isolation. Remaining release requirements are acceptance of the qualified Gladiator result or additional verified evidence within 15:00, complete approved source preparation for the other two cases, and a verified deployment/import path. The live site has not received this repair.
 
 ### 20 October Gladiator follow-up
 

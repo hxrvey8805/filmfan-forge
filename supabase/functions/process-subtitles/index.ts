@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { chunkCues, SUBTITLE_VERSION, formatTimestamp } from "../_shared/companion.ts";
+import { SUBTITLE_VERSION } from "../_shared/companion.ts";
+import { subtitleCacheRows } from "../_shared/subtitle-cache.ts";
 import { loadSubtitleFile, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
 
 const headers = { 'Content-Type': 'application/json' };
@@ -30,17 +31,7 @@ serve(async (req) => {
     const source = await loadSubtitleFile({ tmdbId, mediaType, seasonNumber, episodeNumber }, apiKey);
     if (!source) return new Response(JSON.stringify({ success: false, reason: 'unavailable' }), { headers });
     const { fileId, cues } = source;
-    const chunks = chunkCues(cues);
-    const rows = chunks.map((cues, index) => ({
-      tmdb_id: tmdbId, media_type: mediaType,
-      season_number: mediaType === 'tv' ? seasonNumber : null,
-      episode_number: mediaType === 'tv' ? episodeNumber : null,
-      chunk_index: index, start_seconds: cues[0].start, end_seconds: Math.max(...cues.map(cue => cue.end)),
-      content: cues.map(cue => `[${formatTimestamp(cue.start)}] ${cue.text}`).join('\n'),
-      cues, ingestion_version: SUBTITLE_VERSION, source_file_id: fileId,
-      cache_key: `${mediaType}:${tmdbId}:${seasonNumber ?? 0}:${episodeNumber ?? 0}:${SUBTITLE_VERSION}:${index}`,
-      embedding: null as number[] | null,
-    }));
+    const rows = subtitleCacheRows({ tmdbId, mediaType, seasonNumber, episodeNumber }, fileId, cues);
     // Timestamp and keyword retrieval need no paid embedding service.
     // A single database transaction publishes the entire parsed file. A failed
     // import cannot leave a partially populated cache that looks complete.
