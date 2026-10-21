@@ -4,7 +4,7 @@ type TitlePosition = Omit<ViewingPosition, 'seconds'>;
 type SubtitleSearchResult = {
   attributes?: {
     language?: string; download_count?: number; nb_cd?: number;
-    foreign_parts_only?: boolean; machine_translated?: boolean; ai_translated?: boolean;
+    foreign_parts_only?: boolean; machine_translated?: boolean; ai_translated?: boolean; hearing_impaired?: boolean;
     files?: { file_id?: number; cd_number?: number }[];
     feature_details?: { feature_type?: string; tmdb_id?: number; parent_tmdb_id?: number;
       season_number?: number; episode_number?: number };
@@ -39,6 +39,9 @@ export function selectSubtitleFile(results: unknown, position: TitlePosition): n
       : feature.feature_type === 'Episode' && feature.parent_tmdb_id === position.tmdbId &&
         feature.season_number === position.seasonNumber && feature.episode_number === position.episodeNumber;
   });
-  eligible.sort((a, b) => (b.attributes?.download_count ?? 0) - (a.attributes?.download_count ?? 0));
+  // SDH/closed captions can supply speaker labels and sounds needed to resolve
+  // an otherwise ambiguous exchange. Popularity alone favors dialogue-only files.
+  eligible.sort((a, b) => Number(b.attributes?.hearing_impaired === true) - Number(a.attributes?.hearing_impaired === true) ||
+    (b.attributes?.download_count ?? 0) - (a.attributes?.download_count ?? 0));
   return eligible[0]?.attributes?.files?.[0]?.file_id ?? null;
 }

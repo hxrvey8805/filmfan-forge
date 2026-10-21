@@ -8,6 +8,14 @@ const result = (feature = episode, overrides = {}) => ({ attributes: { language:
   nb_cd: 1, feature_details: feature, files: [{ file_id: 10, cd_number: 1 }], ...overrides } });
 
 describe('subtitle provider identity and timing source', () => {
+  it('prefers eligible SDH captions over a more popular plain track, without relaxing identity checks', () => {
+    const plain = result(episode, { download_count: 1000000 });
+    const captions = result(episode, { hearing_impaired: true, download_count: 10, files: [{ file_id: 30 }] });
+    expect(selectSubtitleFile([plain, captions], tv)).toBe(30);
+    const wrong = result({ ...episode, episode_number: 3 }, { hearing_impaired: true });
+    const machine = result(episode, { hearing_impaired: true, machine_translated: true });
+    expect(selectSubtitleFile([wrong, machine], tv)).toBeNull();
+  });
   it('uses the series identifier for TV searches and feature identifier for movies', () => {
     const params = subtitleSearchParams(tv);
     expect(params.get('parent_tmdb_id')).toBe('1396');

@@ -1,23 +1,85 @@
 import { describe, expect, it } from 'vitest';
 import { buildPrompts, chunkCues, promptConversation, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion';
-import { selectSceneEvidence, subtitleSearchText } from '../supabase/functions/_shared/scene-evidence';
+import { selectSceneContext, selectSceneEvidence, subtitleSearchText, OPENROUTER_EVIDENCE_BUDGET } from '../supabase/functions/_shared/scene-evidence';
 
 const position: ViewingPosition = { tmdbId: 1, mediaType: 'tv', seasonNumber: 1, episodeNumber: 2, seconds: 100 };
 const record = (overrides: Partial<SubtitleRecord> = {}): SubtitleRecord => ({ id: 'one', tmdb_id: 1,
-  media_type: 'tv', season_number: 1, episode_number: 2, ingestion_version: 2,
+  media_type: 'tv', season_number: 1, episode_number: 2, ingestion_version: 3,
   cues: [{ start: 90, end: 99, text: '(SAM) The key is in the drawer. [door opens]' }], ...overrides });
 const message = (overrides: Partial<Conversation> = {}): Conversation => ({ id: 'safe', title_id: 1,
-  media_type: 'tv', season_number: 1, episode_number: 2, position_seconds: 90, companion_version: 2,
+  media_type: 'tv', season_number: 1, episode_number: 2, position_seconds: 90, companion_version: 3,
   question: 'Why did Sam hide the key?', answer: 'The key is hidden.', context: '', timestamp: '00:01:30',
   created_at: '2026-10-14T00:00:00Z', answer_status: 'answered', ...overrides });
 
 describe('timestamped scene retrieval', () => {
+  it('separates an earlier proposal from the latest cues without dropping either or admitting a crossing cue', () => {
+    const point = { ...position, seconds: 100 };
+    const cues = [
+      { start: 60, end: 64, text: 'We will start the engine.' },
+      { start: 68, end: 70, text: 'Try again.' },
+      { start: 70, end: 74, text: '[ENGINE REVS]' },
+      { start: 80, end: 82, text: '[CHEERING]' },
+      { start: 90, end: 95, text: '[RUSTLING]' },
+      { start: 99, end: 100.001, text: 'FUTURE_SPEAKER' },
+    ];
+    const context = selectSceneContext([record({ cues })], point, 'What is happening right now?');
+    expect(context.evidence).toHaveLength(2);
+    expect(context.evidence[0].text).toContain('start the engine');
+    expect(context.evidence[0].text).not.toContain('ENGINE REVS');
+    expect(context.evidence[1]).toMatchObject({ start: 70, end: 95 });
+    expect(context.evidence[1].text).not.toContain('Try again');
+    expect(context.coverage.omittedPassages).toBe(0);
+    const prompt = buildPrompts('What is happening right now?', point, context.evidence, [], context.coverage);
+    expect(prompt.data.moment).toEqual({ windowStart: 70, recentEvidenceIds: ['P2'] });
+    expect(prompt.user).not.toContain('FUTURE_SPEAKER');
+    // Recompute the window after rewind; neither the later sound nor its ID
+    // survives into the new prompt. Exact completed-cue boundaries still apply.
+    const rewind = { ...point, seconds: 73.999 };
+    const earlier = selectSceneContext([record({ cues })], rewind, 'What is happening right now?');
+    const earlierPrompt = buildPrompts('What is happening right now?', rewind, earlier.evidence, []);
+    expect(earlierPrompt.user).not.toMatch(/ENGINE REVS|CHEERING|RUSTLING|FUTURE_SPEAKER/);
+    expect(earlierPrompt.data.moment?.windowStart).toBeCloseTo(43.999);
+  });
+  it('never labels an earlier episode as the current moment even when its local timestamp is recent', () => {
+    const rows = [record(), record({ id: 'previous', episode_number: 1 })];
+    const context = selectSceneContext(rows, position, 'What is happening now?');
+    const prompt = buildPrompts('What is happening right now?', position, context.evidence, []);
+    expect(prompt.data.moment?.recentEvidenceIds).toEqual(['P2']);
+    const switched = { ...position, episodeNumber: 1 };
+    const other = selectSceneContext(rows, switched, 'What is happening right now?');
+    expect(other.evidence.every(item => item.episode === 1)).toBe(true);
+  });
+  it('keeps a dense short conversation intact on the OpenRouter budget instead of dropping its middle', () => {
+    const cues = Array.from({ length: 170 }, (_, i) => ({ start: i * 1.7, end: i * 1.7 + 1.6,
+      text: `TURN_${i}: We are discussing the disagreement and its immediate context.` }));
+    const rows = [record({ cues: [...cues, { start: 299, end: 300.001, text: 'FUTURE_CONTINUATION' }] })];
+    const selected = selectSceneContext(rows, { ...position, seconds: 300 }, 'What caused the disagreement?', [], OPENROUTER_EVIDENCE_BUDGET);
+    expect(JSON.stringify(selected.evidence).length).toBeGreaterThan(8500);
+    expect(JSON.stringify(selected.evidence).length).toBeLessThanOrEqual(OPENROUTER_EVIDENCE_BUDGET);
+    for (const cue of cues) expect(selected.evidence.some(item => item.text.includes(cue.text))).toBe(true);
+    expect(selected.coverage.omittedPassages).toBe(0);
+    expect(JSON.stringify(selected)).not.toContain('FUTURE_CONTINUATION');
+    const limited = selectSceneContext(rows, { ...position, seconds: 300 }, 'What caused the disagreement?', [], 8500);
+    expect(limited.coverage.omittedPassages).toBeGreaterThan(0);
+    expect(limited.coverage.omittedRanges.length).toBeGreaterThan(0);
+    for (const range of limited.coverage.omittedRanges) expect(range.end).toBeLessThanOrEqual(300);
+  });
+  it('reports only permitted omissions after rewinding or switching episodes', () => {
+    const cues = Array.from({ length: 40 }, (_, i) => ({ start: i * 10, end: i * 10 + 3, text: `Discussion ${i} about an important decision.` }));
+    const rows = [record({ cues }), record({ id: 'future-episode', episode_number: 3, cues })];
+    const context = selectSceneContext(rows, { ...position, seconds: 100 }, 'Recap so far', [], 350);
+    expect(context.coverage.omittedPassages).toBeGreaterThan(0);
+    expect(context.coverage.providedPassages).toBe(context.coverage.selectedPassages + context.coverage.omittedPassages);
+    expect(context.coverage.omittedRanges.every(item => item.episode === 2 && item.end <= 100)).toBe(true);
+    const switched = selectSceneContext(rows, { ...position, episodeNumber: 1 }, 'Recap so far', [], 350);
+    expect(switched).toEqual({ evidence: [], coverage: { providedPassages: 0, selectedPassages: 0, omittedPassages: 0, omittedRanges: [] } });
+  });
   it('filters crossing cues, later episodes, other titles and legacy caches before ranking', () => {
     const rows = [record({ cues: [{ start: 90, end: 100, text: 'SAFE key' }, { start: 99, end: 100.001, text: 'FUTURE key' }] }),
       record({ id: 'later', episode_number: 3 }), record({ id: 'title', tmdb_id: 2 }), record({ id: 'legacy', ingestion_version: 1 })];
     const result = selectSceneEvidence(rows, position, 'Where is the key?');
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ start: 90, end: 100, text: 'SAFE key' });
+    expect(result[0]).toMatchObject({ start: 90, end: 100, text: '[00:01:30] SAFE key' });
   });
   it('has no future dialogue at every rewind point and preserves sound/speaker labels', () => {
     const cues = Array.from({ length: 80 }, (_, i) => ({ start: i * 4, end: i * 4 + 3.5, text: `(SAM) [noise] CUE_${i}_END` }));
@@ -68,7 +130,7 @@ describe('timestamped scene retrieval', () => {
       ...Array.from({ length: 38 }, (_, i) => ({ start: 60 + i * 30, end: 64 + i * 30,
         text: `Later exchange ${i}. We need to change our plans and discuss a different route.` }))];
     const result = selectSceneEvidence([record({ cues })], { ...position, seconds: 1250 }, 'Recap so far', [], 2500);
-    expect(result[0].text).toBe('EARLIEST_AVAILABLE');
+    expect(result[0].text).toBe('[00:00:01] EARLIEST_AVAILABLE');
     expect(result[1].text).toContain('EARLY_CONTEXT');
     expect(JSON.stringify(result).length).toBeLessThanOrEqual(2500);
   });
@@ -83,7 +145,7 @@ describe('timestamped scene retrieval', () => {
         { start: 99, end: 100.001, text: 'FUTURE_IDENTITY' }] })];
     const result = selectSceneEvidence(rows, position, 'What do we know about the leader so far?');
     expect(result).toHaveLength(1);
-    expect(result[0].text).toBe('The first thing I will do when...\n...I take over is thank her.');
+    expect(result[0].text).toBe('[00:01:20] The first thing I will do when...\n[00:01:25] ...I take over is thank her.');
     expect(result[0].end).toBe(89);
     // Same timeline in a different episode must not become the same exchange.
     expect(selectSceneEvidence([...rows, record({ id: 'old', episode_number: 1 })], position, 'Explain')).toHaveLength(2);

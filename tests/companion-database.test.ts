@@ -30,19 +30,24 @@ beforeAll(async () => {
   ]) await pg.exec(migration(name));
   await pg.exec(migration('20251122155759_92f1d8ce-3bf2-4992-ba51-366d73fa76f8').split('-- Migration 2:')[0]);
   await pg.exec(migration('20261013120000_companion_evidence_and_memory'));
+  await pg.exec(migration('20261015153000_caption_context_revision'));
+  await pg.exec(migration('20261015195500_companion_answer_revision'));
+  await pg.exec(migration('20261019160000_reviewed_scene_notes'));
   await pg.exec('GRANT SELECT, INSERT ON public.ai_conversations TO authenticated');
   const fixtures = [
-    ['tv', 1, 1, 800, 810, 'previous', 2],
-    ['tv', 1, 2, 10, 20, 'safe', 2],
-    ['tv', 1, 2, 25, 30, 'exact', 2],
-    ['tv', 1, 2, 29, 30.001, 'crossing', 2],
-    ['tv', 1, 2, 40, 45, 'future', 2],
-    ['tv', 1, 3, 0, 5, 'nextEpisode', 2],
-    ['tv', 2, 1, 0, 5, 'nextSeason', 2],
+    ['tv', 1, 1, 800, 810, 'previous', 3],
+    ['tv', 1, 2, 10, 20, 'safe', 3],
+    ['tv', 1, 2, 25, 30, 'exact', 3],
+    ['tv', 1, 2, 29, 30.001, 'crossing', 3],
+    ['tv', 1, 2, 40, 45, 'future', 3],
+    ['tv', 1, 3, 0, 5, 'nextEpisode', 3],
+    ['tv', 2, 1, 0, 5, 'nextSeason', 3],
     ['tv', 1, 2, 1, 2, 'legacy', 1],
-    ['movie', null, null, 10, 20, 'movieSafe', 2],
-    ['movie', null, null, 29, 30.001, 'movieCrossing', 2],
-    ['movie', null, null, 40, 45, 'movieFuture', 2],
+    ['tv', 1, 2, 1, 2, 'oldCacheTail', 2],
+    ['movie', null, null, 1, 2, 'oldMovieCache', 2],
+    ['movie', null, null, 10, 20, 'movieSafe', 3],
+    ['movie', null, null, 29, 30.001, 'movieCrossing', 3],
+    ['movie', null, null, 40, 45, 'movieFuture', 3],
   ];
   for (const [i, [type, season, episode, start, end, label, version]] of fixtures.entries()) {
     await pg.query(`INSERT INTO subtitle_chunks(tmdb_id, media_type, season_number, episode_number,
@@ -53,6 +58,35 @@ beforeAll(async () => {
 });
 afterAll(() => pg.close());
 
+describe('private reviewed scene source store', () => {
+  const note = { id: 'reviewed-example', tmdb_id: 10, media_type: 'tv', season_number: 1, episode_number: 2,
+    reveal_seconds: 30, review: { status: 'reviewed', basis: 'caption_prefix' } };
+  it('derives query scope from the note so index fields cannot disguise future or other-episode notes', async () => {
+    await pg.query('INSERT INTO companion_scene_notes(id,note) VALUES ($1,$2::jsonb)', [note.id, JSON.stringify(note)]);
+    const { rows } = await pg.query('SELECT tmdb_id,episode_number,reveal_seconds FROM companion_scene_notes WHERE id=$1', [note.id]);
+    expect(rows).toEqual([{ tmdb_id: 10, episode_number: 2, reveal_seconds: 30 }]);
+    await expect(pg.query('UPDATE companion_scene_notes SET reveal_seconds=10 WHERE id=$1', [note.id])).rejects.toThrow();
+  });
+  it('does not let browser roles read private source material or approve their own notes', async () => {
+    for (const role of ['anon', 'authenticated']) {
+      for (const sql of ['SELECT * FROM companion_scene_notes',
+        "INSERT INTO companion_scene_notes(id,note) VALUES ('forged','{}')"]) {
+        await expect(pg.transaction(async tx => { await tx.exec(`SET LOCAL ROLE ${role}`); await tx.exec(sql); })).rejects.toThrow(/permission denied/);
+      }
+    }
+    const data = await pg.transaction(async tx => {
+      await tx.exec('SET LOCAL ROLE service_role');
+      return tx.query('SELECT id FROM companion_scene_notes');
+    });
+    expect(data.rows).toEqual([{ id: note.id }]);
+  });
+  it('rejects unreviewed notes and incomplete episode identities', async () => {
+    for (const invalid of [{ ...note, id: 'invalid', review: {} }, { ...note, id: 'invalid', episode_number: null }, { ...note, id: null }]) {
+      await expect(pg.query('INSERT INTO companion_scene_notes(id,note) VALUES ($1,$2::jsonb)', ['invalid', JSON.stringify(invalid)])).rejects.toThrow();
+    }
+  });
+});
+
 async function search(type: string, season: number | null, episode: number | null, seconds: number, semantic = true) {
   const { rows } = await pg.query<{ content: string }>(
     'SELECT content FROM match_companion_chunks(1,$1,$2,$3,$4,$5,$6::vector)',
@@ -61,7 +95,7 @@ async function search(type: string, season: number | null, episode: number | nul
 }
 const answer = (overrides = {}) => ({ id: randomUUID(), title_id: 1, media_type: 'tv', season_number: 1,
   episode_number: 2, position_seconds: 30, timestamp: '00:00:30', question: 'Why the letter?',
-  answer: 'The letter is sealed.', context: 'S1E2 @ 00:00:30', evidence: [], answer_status: 'answered', ...overrides });
+  answer: 'The letter is sealed.', context: 'S1E2 @ 00:00:30', evidence: [], answer_status: 'answered', companion_version: 3, ...overrides });
 async function save(payload = answer(), charge = true, owner = user) {
   const { rows } = await pg.query<{ result: { usedCoins: number; remainingFreeQuestions: number; conversation: { id: string; answer: string } } }>(
     'SELECT record_companion_answer($1,$2::jsonb,$3) AS result', [owner, JSON.stringify(payload), charge]);
@@ -92,6 +126,28 @@ describe('database evidence retrieval', () => {
 });
 
 describe('saved answers, payment and ownership', () => {
+  it('refuses an older in-flight writer before creating usage or charging', async () => {
+    const owner = randomUUID();
+    for (const companion_version of [undefined, 2]) {
+      const payload = answer({ companion_version });
+      await expect(save(payload, true, owner)).rejects.toThrow('Companion upgrade required');
+      expect((await pg.query('SELECT id FROM ai_conversations WHERE id=$1', [payload.id])).rows).toEqual([]);
+    }
+    expect((await pg.query('SELECT user_id FROM user_ai_usage WHERE user_id=$1', [owner])).rows).toEqual([]);
+  });
+  it('preserves retired answers but never replays or charges for their request IDs', async () => {
+    const owner = randomUUID(), payload = answer({ answer: 'UNVERIFIED_OLD_ANSWER' });
+    await save(payload, false, owner);
+    await pg.query('UPDATE ai_conversations SET companion_version=2 WHERE id=$1', [payload.id]);
+    await expect(save(payload, true, owner)).rejects.toThrow('older companion version');
+    expect((await pg.query('SELECT answer,companion_version FROM ai_conversations WHERE id=$1', [payload.id])).rows)
+      .toEqual([{ answer: 'UNVERIFIED_OLD_ANSWER', companion_version: 2 }]);
+    expect((await pg.query('SELECT questions_today FROM user_ai_usage WHERE user_id=$1', [owner])).rows).toEqual([{ questions_today: 0 }]);
+    const fresh = answer();
+    await save(fresh, false, owner);
+    expect((await pg.query('SELECT companion_version FROM ai_conversations WHERE id=$1', [fresh.id])).rows)
+      .toEqual([{ companion_version: 3 }]);
+  });
   it('charges once, returns the original answer on retry, and rejects ID reuse at a new position', async () => {
     await pg.query('INSERT INTO user_ai_usage(user_id,questions_today,last_reset_date) VALUES ($1,5,(now() AT TIME ZONE \'UTC\')::date)', [user]);
     await pg.query('INSERT INTO user_stats(user_id,coins) VALUES ($1,150)', [user]);
@@ -120,11 +176,14 @@ describe('saved answers, payment and ownership', () => {
     await save(answer({ episode_number: 3, position_seconds: 5 }), false, owner);
     await save(answer({ title_id: 2, position_seconds: 5 }), false, owner);
     await save(answer({ position_seconds: 5 }), false, otherUser);
+    const retired = answer({ position_seconds: 5 });
+    await save(retired, false, owner);
+    await pg.query('UPDATE ai_conversations SET companion_version=2 WHERE id=$1', [retired.id]);
     await pg.query('SELECT set_config(\'request.jwt.claim.sub\',$1,false)', [owner]);
     await pg.exec('SET ROLE authenticated');
     try {
       const { rows } = await pg.query(`SELECT id FROM ai_conversations WHERE title_id=1 AND media_type='tv'
-        AND season_number=1 AND episode_number=2 AND companion_version=2 AND position_seconds <= 30`);
+        AND season_number=1 AND episode_number=2 AND companion_version=3 AND position_seconds <= 30`);
       expect(rows).toEqual([{ id: safe.id }]);
     } finally { await pg.exec('RESET ROLE'); }
   });
@@ -133,7 +192,7 @@ describe('saved answers, payment and ownership', () => {
     await pg.exec('SET ROLE authenticated');
     try {
       await expect(pg.query(`INSERT INTO ai_conversations(user_id,title_id,media_type,question,answer,context,companion_version)
-        VALUES ($1,1,'movie','q','FORGED_FUTURE','test',2)`, [user])).rejects.toThrow('row-level security');
+        VALUES ($1,1,'movie','q','FORGED_FUTURE','test',3)`, [user])).rejects.toThrow('row-level security');
       await expect(save(answer(), false)).rejects.toThrow('permission denied');
       await expect(search('tv', 1, 2, 30)).rejects.toThrow('permission denied');
     } finally { await pg.exec('RESET ROLE'); }

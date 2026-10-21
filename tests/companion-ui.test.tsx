@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompanionTimestamp } from '../src/components/CompanionTimestamp';
+import { CompanionAnswer } from '../src/components/CompanionAnswer';
 import TitleDetailModal from '../src/components/TitleDetailModal';
 
 const mock = vi.hoisted(() => ({ invoke: vi.fn(), useCompanion: vi.fn(() => ({ ask: vi.fn(), messages: [], isLoading: false, historyError: null })) }));
@@ -44,6 +45,17 @@ const movie = { id: 1, type: 'movie' as const, title: 'First Film', posterPath: 
 const modal = (title = movie) => <MemoryRouter><TitleDetailModal title={title} open onOpenChange={() => {}} /></MemoryRouter>;
 
 describe('timestamp-only controls and title changes', () => {
+  it('shows limited caption context as literal text with no question or coin charge', () => {
+    const answer = 'I couldn’t verify a full explanation.\n[00:04:57] <script>Fictional dialogue</script>';
+    const view = render(<CompanionAnswer message={{ id: 'limited', question: 'What is happening?', answer,
+      context: '', timestamp: '00:05:00', position_seconds: 300, companion_version: 3, title_id: 1,
+      media_type: 'movie', season_number: null, episode_number: null, created_at: '2026-10-16T10:00:00Z',
+      answer_status: 'insufficient_evidence', evidence: [{ id: 'recent', label: '00:04:57–00:04:59', start: 297, end: 299 }] }} />);
+    expect(view.container.querySelector('script')).toBeNull();
+    expect(view.container.textContent).toContain('<script>Fictional dialogue</script>');
+    expect(screen.getByText('No question or coins used.')).toBeTruthy();
+    expect(screen.getByText('Caption sources')).toBeTruthy();
+  });
   it('retains exact seconds, rewinds to zero, and prevents submitting malformed times', () => {
     render(<Timer />);
     const input = screen.getByLabelText('Your position');

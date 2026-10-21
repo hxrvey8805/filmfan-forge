@@ -73,7 +73,13 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
       });
       if (error) {
         let message = 'The companion could not answer. Please try again.';
-        try { message = (await error.context.json()).error || message; } catch { /* Network errors have no response body. */ }
+        try {
+          const failure = await error.context.json();
+          message = failure.error || message;
+          // Retrying a retired cached answer needs a fresh request ID. Other
+          // failures keep their ID so a successful save cannot charge twice.
+          if (failure.code === 'answer_version_changed') pendingRequest.current = null;
+        } catch { /* Network errors have no response body. */ }
         throw new Error(message);
       }
       if (!data?.conversation) throw new Error('The answer could not be saved. Please try again.');
