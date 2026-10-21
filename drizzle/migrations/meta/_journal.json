@@ -15,6 +15,13 @@
       "when": 1792620279421,
       "tag": "0001_caption_context_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792620297022,
+      "tag": "0002_companion_answer_revision",
+      "breakpoints": true
     }
   ]
 }
