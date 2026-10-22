@@ -1,6 +1,16 @@
 # Companion provider, deployment and replay
 
-**Latest evaluation: 22 October 2026. PR 12 is an unreleased interpretation candidate. 378 automated tests pass, but fresh general-explanation quality is not established. Source/history boundaries pass; several real-title drafts are still withheld, and live testing reached the free rate limit. Do not merge or deploy. The four original reviewed-note cases remain unchanged in offline exact-request replay.**
+**Latest evaluation: 22 October 2026. PR 12 is an unreleased interpretation candidate. 421 automated tests pass, but fresh general-explanation quality is not established. Source/history boundaries pass; several real-title drafts are still withheld, and the latest work uses saved failures without model calls. Do not merge or deploy until fresh new-title, rewind and episode-switch answers pass.**
+
+## 22 October: offline speaker and action repair (unreleased)
+
+The writer and reviewer now receive the original caption lines with request-local annotations: explicit labels apply only to their own line; questions, negations, possible requests, beliefs, acknowledgements and first/second-person possessions are marked as surface cues. These cues are not semantic proof and do not identify unlabeled turns. They are rebuilt only after timestamp/episode filtering, without carrying a speaker between lines or changing the source words. No external lookup, extra model call, source download or persistent story cache is added.
+
+Additional preflight checks reject borrowing a name from another cited line, reversing “your parents” into the speaker's own family, turning simple requests plus thanks into completed work, and interpreting repeated denials as two people's shared admission. Physical-action checks now cover the saved finding/bringing/hiding/arrival/acceptance errors and apply to interpretations as well as facts. Sound-only captions cannot become speech merely because they have a name label. Passive descriptions of a person remain distinct from that person speaking. The model must still verify semantics, complete exchanges and relevance; these checks alone cannot establish correctness or completeness.
+
+Offline validation: 421 automated tests across 23 files, production build, Deno check and scoped lint pass. The saved-output audit withholds 22 selected unsupported/malformed points from five captured drafts plus the repeated-denial interpretation. It does not replay those generations under the changed prompts or count surviving points as quality passes. Useful anonymous reports, explicit self-introductions and qualified interpretations have positive synthetic regressions. Nine source samples still pass 2,649 viewing positions, 226,174 permitted-cue checks and 72 memory checks. The original four reviewed-note answers and two memory guards remain unchanged in exact-request offline replay.
+
+No live AI calls, Lovable credits, app coins, purchases, merge or deployment were used for this follow-up. The free route and timestamp-only controls are unchanged. Annotated contexts and original failure captures stay private, outside Git. Fresh model outputs for Parasite, Stranger Things, Arrival and The Good Place, including rewind/switch cases, are still required; excerpt fallbacks do not pass explanation quality.
 
 ## 22 October: explanations and bounded interpretation (unreleased)
 
