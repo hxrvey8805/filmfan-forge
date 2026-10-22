@@ -1,6 +1,18 @@
 # Companion provider, deployment and replay
 
-**Latest evaluation: 21 October 2026. All four original content questions pass the user's accepted criterion: a useful qualified answer is acceptable only when it does not spoil later moments. Fresh free-model replays cost $0 total. Three answers are complete; Gladiator preserves an explicit personal-relationship limitation and is not a complete relationship answer. Both memory-boundary cases pass without model calls. All four complete subtitle imports passed a local PostgreSQL rehearsal with 11,090 viewing-boundary checks and exact reproduction of the four captured model requests/answers. The local content/source gate is cleared. PR 11 remains draft pending the coordinated production deployment and separate authorization for another Lovable build-credit request; the public site has not received this repair.**
+**Latest evaluation: 22 October 2026. PR 12 is an unreleased interpretation candidate. 378 automated tests pass, but fresh general-explanation quality is not established. Source/history boundaries pass; several real-title drafts are still withheld, and live testing reached the free rate limit. Do not merge or deploy. The four original reviewed-note cases remain unchanged in offline exact-request replay.**
+
+## 22 October: explanations and bounded interpretation (unreleased)
+
+`story-explanation.ts` builds a request-scoped story record from already permitted caption passages. It separates attributed factual points from tentative readings of their significance. Each fact has explicit source-line references and an event state (statement, proposal, question, denial, uncertainty, or literal sound observation). Readings reference the factual points they depend on. Invalid draft points and dependent readings are removed before independent verification; no post-verdict factual rewrite is published. Remaining facts must all pass review and relevance checks. The server labels accepted readings “My read”. A rejected draft falls back to literal source context.
+
+The serving story prompt and reviewed-note selector no longer include earlier assistant prose. Earlier, same-episode questions can resolve references, but a previous interpretation cannot become a story fact. Retrieval still clips before selection, and rewind/title/episode guards run before generation. There is no persistent generated-summary cache and no unrestricted synopsis or parametric plot knowledge supplied as evidence.
+
+Validation: 378 tests across 22 files, production build, Deno check and scoped lint pass. Nine movie/episode sources pass 2,649 viewing positions, 226,174 permitted-cue checks and 72 memory checks. The original four reviewed-note answers and two memory guards remain unchanged in exact-request offline replay. These are implementation and source-boundary checks, not universal answer-quality proof.
+
+The real-title gate remains closed: Parasite and Stranger Things drafts still showed wrong attribution or invented actions; The Good Place S1E1 fell back to excerpts; Arrival returned HTTP 400; The Good Place S1E2 and a Gemma comparison reached HTTP 429. MiniMax/NVIDIA private probes did not establish a replacement. No live provider change was made. Fresh rewind/episode-switch answer quality and final-candidate quality are still pending. All completed usage records reported zero cost; no Lovable build credits, purchases, app coins, merge or deployment were used.
+
+Runtime checks and model review reduce risk; they do not prove every interpretation spoiler-free. Do not turn a literal-excerpt fallback into an explanation-quality pass. The final pre-review pruning and prompt correction need fresh live evaluation once service is available.
 
 ## Free OpenRouter connection
 

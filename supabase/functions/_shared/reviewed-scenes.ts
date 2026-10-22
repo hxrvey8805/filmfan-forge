@@ -139,7 +139,9 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
       JSON.stringify(eligible).length > 14000) return null;
   const aliases = eligible.map((note, i) => ({ id: `N${i + 1}`, start: note.start, end: note.end, text: note.text, topics: note.topics,
     ...(note.limited ? { coverage: 'limited' } : {}) }));
-  const conversation = promptConversation(history, position);
+  // Past interpretations are visible conversation, never story evidence. Only
+  // questions may help resolve the requested subject in this episode/prefix.
+  const conversation = promptConversation(history, position).map(({ question, seconds }) => ({ question, seconds }));
   let system = conversation.length ? `${SCENE_SELECTION_PROMPT}\nEarlier conversation resolves references only; it is not evidence. Select only facts from the supplied reviewed notes.` : SCENE_SELECTION_PROMPT;
   if (eligible.some(note => note.limited)) {
     system += '\nA note marked limited may give useful facts about the requested subject while explicitly leaving part unresolved. You may select it for that subject; it will remain a limited response, not a complete answer.';

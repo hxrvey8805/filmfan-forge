@@ -75,14 +75,14 @@ describe('limited caption context', () => {
     'withholds invalid selection %j', async response => {
       expect(await selectCaptionExcerpts('What is happening?', position, rows, vi.fn().mockResolvedValue(response))).toBeNull();
     });
-  it('publishes only source context for unreviewed captions, never model-authored plot prose', async () => {
-    const generate = vi.fn().mockResolvedValueOnce({ selections: { P1: 'R1' },
+  it('falls back to source context when an explanation draft is invalid, without forwarding rejected prose', async () => {
+    const generate = vi.fn().mockResolvedValueOnce({ answer: 'Marla leaves town.' }).mockResolvedValueOnce({ selections: { P1: 'R1' },
       answer: 'Marla leaves town.' });
     const result = await companionAnswer('What has happened so far?', position, rows, [], generate);
     expect(result?.answer).toContain('It has not arrived yet.');
     expect(result?.answer).not.toContain('Marla');
-    expect(generate.mock.calls[0][1]).not.toContain('Marla');
-    expect(generate).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(generate.mock.calls)).not.toContain('Marla');
+    expect(generate).toHaveBeenCalledTimes(2);
   });
   it('never calls a fallback for unavailable memory or a provider failure', async () => {
     const generate = vi.fn().mockRejectedValue(new Error('free quota'));

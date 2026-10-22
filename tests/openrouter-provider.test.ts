@@ -9,6 +9,15 @@ const completion = (content: unknown, finish_reason = 'stop') => new Response(JS
 }));
 
 describe('OpenRouter companion transport', () => {
+  it('keeps interpretation analysis on the same free route with bounded private reasoning', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{"facts":[],"readings":[]}'));
+    await openRouterGenerator('test-key', request)('Analyze permitted dialogue', 'Source', 2200, 'analyst');
+    const body = JSON.parse(request.mock.calls[0][1]!.body as string);
+    expect(body.reasoning).toEqual({ enabled: true, exclude: true });
+    expect(body.max_tokens).toBe(2200 + 3072);
+    expect(body.provider).toMatchObject({ only: ['atlas-cloud/fp8'], allow_fallbacks: false,
+      max_price: { prompt: 0, completion: 0, request: 0 } });
+  });
   it('pins the free endpoint, disables paid routing and web plugins, and reads final JSON only', async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{"supported":true}'));
     expect(await openRouterGenerator('test-key', request)('Check evidence', 'Permitted dialogue', 900)).toEqual({ supported: true });

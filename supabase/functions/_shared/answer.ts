@@ -6,16 +6,16 @@ import { writerFormat, verifierFormat, type AnswerFormat } from './answer-schema
 import { addressesNamedRelationship, coversRecap } from './question-focus.ts';
 import { reviewedSceneAnswer, type PreparedSceneNote } from './reviewed-scenes.ts';
 import { selectCaptionExcerpts } from './caption-excerpts.ts';
+import { storyExplanation } from './story-explanation.ts';
 
-export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier', format?: AnswerFormat) => Promise<unknown>;
+export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier' | 'analyst', format?: AnswerFormat) => Promise<unknown>;
 
-export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'caption_limited' | 'reviewed_answered' | 'reviewed_limited';
+export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'caption_limited' | 'reviewed_answered' | 'reviewed_limited' | 'story_explained';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
 
-// Public orchestration: only reviewed, timestamp-linked scene facts may be
-// published as explanations. Caption-only paraphrases failed real-title
-// checks even when a second model approved them. Select source spans instead;
-// no model-authored story prose crosses this boundary.
+// Public orchestration: reviewed notes, then a separately checked factual
+// explanation + optional interpretation, then literal source context. A failed
+// draft never enters the fallback, a repair prompt, or later story memory.
 export async function companionAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
   observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = []) {
   const permitted = permittedEvidence(evidence, position);
@@ -36,9 +36,15 @@ export async function companionAnswer(question: string, position: ViewingPositio
   if (!permitted.length) {
     observe({ stage: 'no_evidence', evidenceCount: 0, claimCount: 0, attempts }); return null;
   }
-  const excerpts = await selectCaptionExcerpts(question, position, permitted, generate);
+  const tracked: JsonGenerator = (...args) => { attempts++; return generate(...args); };
+  const explanation = await storyExplanation(question, position, permitted, history, tracked, coverage);
+  if (explanation) {
+    observe({ stage: 'story_explained', evidenceCount: permitted.length, claimCount: explanation.evidence.length, attempts });
+    return explanation;
+  }
+  const excerpts = await selectCaptionExcerpts(question, position, permitted, tracked);
   observe({ stage: excerpts ? 'caption_limited' : 'draft_insufficient', evidenceCount: permitted.length,
-    claimCount: excerpts?.evidence.length ?? 0, attempts: attempts + 1 });
+    claimCount: excerpts?.evidence.length ?? 0, attempts });
   return excerpts;
 }
 

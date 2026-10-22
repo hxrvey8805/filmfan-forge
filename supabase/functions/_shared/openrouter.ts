@@ -39,8 +39,8 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch):
           // The fast draft is untrusted. Keep reasoning enabled for the check:
           // direct-mode checks approved invented actions in the saved replays.
           // This is a total completion limit, not a separate reasoning cap.
-          reasoning: { enabled: purpose === 'verifier', exclude: true },
-          max_tokens: maxTokens + (purpose === 'verifier' ? 6144 : 0),
+          reasoning: { enabled: purpose === 'verifier' || purpose === 'analyst', exclude: true },
+          max_tokens: maxTokens + (purpose === 'verifier' ? 6144 : purpose === 'analyst' ? 3072 : 0),
           // Native constraints avoid malformed line IDs; runtime validation and
           // the evidence check still decide whether an answer can be published.
           response_format: format ?? { type: 'json_object' },
