@@ -50,7 +50,7 @@ export function draftGroundingIssues(question: string, draft: GroundedDraft, evi
     for (const match of claim.text.matchAll(namedSpeech)) {
       const name = normalized(match[1]);
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll(' ', '\\s+');
-      const label = new RegExp(`(?:^|\\s)(?:\\(${escaped}\\)|${escaped}\\s*:)`, 'imu');
+      const label = new RegExp(`(?:^|\\s)(?:\\(\\s*${escaped}\\s*\\)|\\[\\s*${escaped}\\s*\\]|${escaped}\\s*:)`, 'imu');
       if (!genericSubjects.has(name) && !label.test(cited)) issues.add('speaker');
     }
   }

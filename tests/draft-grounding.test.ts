@@ -43,8 +43,13 @@ describe('speaker and question-name grounding', () => {
     expect(draftGroundingIssues('What do we know about Mira?', draft('Mira is called by name.', ['P1']), rows)).toEqual([]);
     expect(draftGroundingIssues('What do we know about Mira?', draft('A speaker speculates about the king being ill.'), rows)).toEqual([]);
   });
-  it.each(['(MIRA) Stay here.', 'MIRA: Stay here.', 'ROWAN: Where? MIRA: Stay here.'])('accepts an explicit cited speaker label (%s)', text => {
+  it.each(['(MIRA) Stay here.', '[ Mira ] Stay here.', '( MIRA ) Stay here.', '[Mira] Stay here.', '[00:00:10] [MIRA] Stay here.', 'MIRA: Stay here.', 'ROWAN: Where? MIRA: Stay here.'])('accepts an explicit cited speaker label (%s)', text => {
     expect(draftGroundingIssues('What did Mira ask?', draft('Mira asks the other person to stay.', ['P1']), [passage('P1', text)])).toEqual([]);
+  });
+  it('does not turn a sound description containing a name into a speaker label', () => {
+    for (const text of ['[Mira gasps] Stay here.', '[Mira is addressed] Stay here.', 'Mira! Stay here.']) {
+      expect(draftGroundingIssues('What did Mira say?', draft('Mira says to stay.', ['P1']), [passage('P1', text)])).toContain('speaker');
+    }
   });
   it('does not use a label from an uncited passage to identify a remote conversation', () => {
     const labeled = [passage('P1', '(MIRA) Stay here.'), rows[1]];
