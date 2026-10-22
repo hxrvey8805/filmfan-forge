@@ -5,7 +5,7 @@
 // Keep exports and outputs outside Git: they can contain dialogue and private conversations.
 import { buildPrompts, unavailableMemoryReply, type Conversation, type SubtitleRecord, type ViewingPosition } from '../supabase/functions/_shared/companion.ts';
 import { selectSceneContext, OPENROUTER_EVIDENCE_BUDGET } from '../supabase/functions/_shared/scene-evidence.ts';
-import { checkedAnswer, type AnswerDiagnostics } from '../supabase/functions/_shared/answer.ts';
+import { companionAnswer, type AnswerDiagnostics } from '../supabase/functions/_shared/answer.ts';
 import { companionResponse } from '../supabase/functions/_shared/companion-response.ts';
 import { OPENROUTER_MODEL, openRouterGenerator } from '../supabase/functions/_shared/openrouter.ts';
 import { permittedSceneNotes, type ReviewedSceneNote } from '../supabase/functions/_shared/reviewed-scenes.ts';
@@ -35,7 +35,7 @@ let error: string | null = null;
 let result = null;
 if (mode === '--live' && memoryReply) {
   // This production guard must work without credentials or network access.
-  result = await checkedAnswer(input.question, input.position, evidence, history,
+  result = await companionAnswer(input.question, input.position, evidence, history,
     async () => { throw new Error('Unavailable memory must not call the AI.'); }, event => checks.push(event), coverage);
 } else if (mode === '--live') {
   const key = Deno.env.get('OPENROUTER_API_KEY');
@@ -74,7 +74,7 @@ if (mode === '--live' && memoryReply) {
     return response;
   });
   try {
-    result = await checkedAnswer(input.question, input.position, evidence, history, async (system, user, maxTokens, purpose, format) => {
+    result = await companionAnswer(input.question, input.position, evidence, history, async (system, user, maxTokens, purpose, format) => {
       const phase = purpose ?? 'unknown';
       requests.push({ phase, system, user, maxTokens });
       const response = await generate(system, user, maxTokens, purpose, format);

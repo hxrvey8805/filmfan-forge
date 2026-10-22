@@ -6,7 +6,7 @@ import {
   type Conversation, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
 
-import { checkedAnswer } from "../_shared/answer.ts";
+import { companionAnswer } from "../_shared/answer.ts";
 import { companionResponse } from "../_shared/companion-response.ts";
 import { companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
@@ -128,7 +128,7 @@ serve(async req => {
     let checked = null;
     if (evidence.length) {
       const generate = companionGenerator(name => Deno.env.get(name));
-      checked = await checkedAnswer(question.trim(), position, evidence, memory, generate,
+      checked = await companionAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
           evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes);
     }
