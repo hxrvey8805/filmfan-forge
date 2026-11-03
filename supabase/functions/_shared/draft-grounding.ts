@@ -16,12 +16,23 @@ const speechVerbs = '(?:says?|said|saying|states?|stated|stating|tells?|told|tel
   'claims?|claimed|claiming|believes?|believed|believing|suspects?|suspected|suspecting|replies|replied|replying|' +
   'responds?|responded|responding|announces?|announced|announcing|addresses|addressed|addressing|speaks?|spoke|spoken|speaking|' +
   'accuses?|accused|accusing|expresses|expressed|expressing|complains?|complained|complaining|denies|denied|denying|' +
-  'disputes?|disputed|disputing|suggests?|suggested|suggesting|proposes?|proposed|proposing|promises?|promised|promising)';
+  'disputes?|disputed|disputing|suggests?|suggested|suggesting|proposes?|proposed|proposing|promises?|promised|promising|' +
+  'offers?|offered|offering|admits?|admitted|admitting|reports?|reported|reporting|denies|denied|denying|' +
+  'thanks?|thanked|thanking|explains?|explained|explaining|describes?|described|describing|' +
+  'warns?|warned|warning|requests?|requested|requesting|reiterates?|reiterated|reiterating|introduces?|introduced|introducing)';
 // Progressive and perfect forms still attribute speech: "Mira is arguing" and
 // "Mira has complained" need the same label as "Mira says". Saved failures
 // slipped through the old present/past-only check and reversed the speakers.
 const auxiliary = '(?:(?:is|are|was|were|has|have|had|been|being)\\s+){0,3}';
 const namedSpeech = new RegExp(`(?<![\\p{L}\\p{N}])([\\p{Lu}][\\p{L}\\p{M}'’\\-]*(?: [\\p{Lu}][\\p{L}\\p{M}'’\\-]*)?)\\s+(?:${auxiliary}${speechVerbs}|(?:is|was)\\s+[^.!?]{1,60}\\bwho\\s+${speechVerbs})\\b`, 'gu');
+// "Mira is described as a cousin" describes Mira; it does not say she spoke.
+// Preserve active progressive/perfect forms such as "Mira has described...".
+const passiveSpeech = /\b(?:is|are|was|were|be|been|being)\s+(?:[\p{L}]+ed|said|told|spoken)\b/u;
+const speechMatches = (text: string) => [...text.matchAll(namedSpeech)].filter(match => !passiveSpeech.test(match[0]));
+
+export function namedSpeechSubjects(text: string): string[] {
+  return speechMatches(text).map(match => normalized(match[1])).filter(name => !genericSubjects.has(name));
+}
 
 // Necessary grounding conditions, not a replacement for semantic verification.
 // A name in the question cannot identify an unlabeled speaker in an unrelated
@@ -47,10 +58,10 @@ export function draftGroundingIssues(question: string, draft: GroundedDraft, evi
     }
     // A name being called or mentioned is not a speaker label. Preserve real
     // labels from SDH/WebVTT; never propagate a guessed name across passages.
-    for (const match of claim.text.matchAll(namedSpeech)) {
+    for (const match of speechMatches(claim.text)) {
       const name = normalized(match[1]);
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll(' ', '\\s+');
-      const label = new RegExp(`(?:^|\\s)(?:\\(${escaped}\\)|${escaped}\\s*:)`, 'imu');
+      const label = new RegExp(`(?:^|\\s)(?:\\(\\s*${escaped}\\s*\\)|\\[\\s*${escaped}\\s*\\]|${escaped}\\s*:)`, 'imu');
       if (!genericSubjects.has(name) && !label.test(cited)) issues.add('speaker');
     }
   }

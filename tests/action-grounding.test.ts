@@ -17,6 +17,14 @@ describe('speech does not establish physical departure', () => {
     'One speaker proposes fixing it, then they celebrate.',
     'An engine revs, prompting them to yell in excitement.',
     'A speaker gasps in relief after the plan works.',
+    'A speaker says she needs help and brings her to the house.',
+    'After finding a girl in the woods, someone asks for help.',
+    'A speaker describes her name after seeing her tattoo.',
+    'A speaker asks for help, then accepts the job.',
+    'Someone arrives carrying a gift and describes it.',
+    'The group hides her in the basement.',
+    'A speaker says thanks and takes the job.',
+    'The offer could bring her to the house.',
   ])('requires an action qualification: %s', text => expect(unqualifiedCaptionAction(text)).toBe(true));
   it.each([
     'A speaker announces a plan to return to their room.',
@@ -30,5 +38,9 @@ describe('speech does not establish physical departure', () => {
     'A speaker reports that the repair was successful.',
     'A speaker says they succeeded.',
     'Captions: [ENGINE REVS]; [BOTH YELL]',
+    'A speaker reports finding someone in the woods.',
+    'A speaker proposes hiding someone until morning.',
+    'The offer could bring financial relief.',
+    'A speaker denies accepting the job.',
   ])('retains reported speech and nonphysical uses: %s', text => expect(unqualifiedCaptionAction(text)).toBe(false));
 });

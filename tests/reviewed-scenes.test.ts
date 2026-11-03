@@ -171,7 +171,7 @@ describe('selection without generated plot prose', () => {
     await reviewedSceneAnswer('Why that plan?', position, prepare(), [...history,
       { ...history[0], id: 'other', episode_number: 1, position_seconds: 12, answer: 'OTHER_EPISODE' },
       { ...history[0], id: 'safe', position_seconds: 14, answer: 'SAFE_EARLIER_PLAN' }], generate);
-    expect(JSON.stringify(generate.mock.calls)).toContain('SAFE_EARLIER_PLAN');
+    expect(JSON.stringify(generate.mock.calls)).not.toContain('SAFE_EARLIER_PLAN');
     expect(JSON.stringify(generate.mock.calls)).not.toMatch(/FUTURE_MEMORY_SENTINEL|OTHER_EPISODE/);
     generate.mockClear();
     const result = await checkedAnswer('Remind me where they decided to park the RV in your last answer.', position, [], history,
@@ -179,7 +179,7 @@ describe('selection without generated plot prose', () => {
     expect(result).toBeNull();
     expect(generate).not.toHaveBeenCalled();
   });
-  it('retains a complete longer recap for follow-ups without enlarging the memory budget', async () => {
+  it('retains the follow-up subject but never treats a prior recap as source evidence', async () => {
     const answer = 'A reviewed event is described. '.repeat(40) + 'The outcome is not established.';
     const history: Conversation[] = [{ id: 'recap', title_id: 10, media_type: 'tv', season_number: 1, episode_number: 2,
       position_seconds: 20, companion_version: COMPANION_VERSION, question: 'Recap so far', answer,
@@ -187,7 +187,8 @@ describe('selection without generated plot prose', () => {
     const generate = vi.fn().mockResolvedValue({ noteIds: ['N1'] });
     expect(await reviewedSceneAnswer('Explain the plan in your last answer.', position, prepare(), history, generate)).not.toBeNull();
     const data = JSON.parse(generate.mock.calls[0][1]);
-    expect(data.conversation[0].answer).toBe(answer);
+    expect(data.conversation[0]).not.toHaveProperty('answer');
+    expect(JSON.stringify(data)).not.toContain(answer);
     const crowded = promptConversation([...history, { ...history[0], id: 'other' }, { ...history[0], id: 'third' }], position);
     expect(JSON.stringify(crowded).length).toBeLessThanOrEqual(2800);
     expect(crowded.every(turn => turn.answer === answer)).toBe(true);

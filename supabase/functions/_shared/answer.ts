@@ -5,12 +5,51 @@ import { draftGroundingIssues } from './draft-grounding.ts';
 import { writerFormat, verifierFormat, type AnswerFormat } from './answer-schema.ts';
 import { addressesNamedRelationship, coversRecap } from './question-focus.ts';
 import { reviewedSceneAnswer, type PreparedSceneNote } from './reviewed-scenes.ts';
+import { selectCaptionExcerpts } from './caption-excerpts.ts';
+import { storyExplanation } from './story-explanation.ts';
 
-export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier', format?: AnswerFormat) => Promise<unknown>;
+export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier' | 'analyst', format?: AnswerFormat) => Promise<unknown>;
 
-export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'reviewed_answered' | 'reviewed_limited';
+export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'caption_limited' | 'reviewed_answered' | 'reviewed_limited' | 'story_explained';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
 
+// Public orchestration: reviewed notes, then a separately checked factual
+// explanation + optional interpretation, then literal source context. A failed
+// draft never enters the fallback, a repair prompt, or later story memory.
+export async function companionAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
+  observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = []) {
+  const permitted = permittedEvidence(evidence, position);
+  if (unavailableMemoryReply(question, position, history)) {
+    observe({ stage: 'memory_unavailable', evidenceCount: permitted.length, claimCount: 0, attempts: 0 }); return null;
+  }
+  let attempts = 0;
+  if (reviewedNotes.length) {
+    const reviewed = await reviewedSceneAnswer(question, position, reviewedNotes, history, (...args) => {
+      attempts++; return generate(...args);
+    });
+    if (reviewed) {
+      observe({ stage: reviewed.limited ? 'reviewed_limited' : 'reviewed_answered', evidenceCount: permitted.length,
+        claimCount: reviewed.evidence.length, attempts });
+      return reviewed;
+    }
+  }
+  if (!permitted.length) {
+    observe({ stage: 'no_evidence', evidenceCount: 0, claimCount: 0, attempts }); return null;
+  }
+  const tracked: JsonGenerator = (...args) => { attempts++; return generate(...args); };
+  const explanation = await storyExplanation(question, position, permitted, history, tracked, coverage);
+  if (explanation) {
+    observe({ stage: 'story_explained', evidenceCount: permitted.length, claimCount: explanation.evidence.length, attempts });
+    return explanation;
+  }
+  const excerpts = await selectCaptionExcerpts(question, position, permitted, tracked);
+  observe({ stage: excerpts ? 'caption_limited' : 'draft_insufficient', evidenceCount: permitted.length,
+    claimCount: excerpts?.evidence.length ?? 0, attempts });
+  return excerpts;
+}
+
+// Retained for adversarial/regression evaluation of the old paraphrase path.
+// Production and replay entry points must use companionAnswer above.
 export async function checkedAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
   observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = []) {
   const permitted = permittedEvidence(evidence, position);
