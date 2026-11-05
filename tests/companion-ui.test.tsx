@@ -54,7 +54,7 @@ describe('timestamp-only controls and title changes', () => {
     expect(view.container.querySelector('script')).toBeNull();
     expect(view.container.textContent).toContain('<script>Fictional dialogue</script>');
     expect(screen.getByText('No question or coins used.')).toBeTruthy();
-    expect(screen.getByText('Caption sources')).toBeTruthy();
+    expect(screen.getByText('Sources')).toBeTruthy();
   });
   it('retains exact seconds, rewinds to zero, and prevents submitting malformed times', () => {
     render(<Timer />);

@@ -9,6 +9,7 @@ import { paragraphSources } from './paragraph-sources.ts';
 import { draftGroundingIssues } from './draft-grounding.ts';
 import { geekVoice } from './geek-voice.ts';
 import { isSubtitleCredit, retrievalTerms } from './scene-evidence.ts';
+import { asksAboutDeath, silentEventCaution } from './visual-context.ts';
 
 const object = (properties: Record<string, unknown>) => ({ type: 'object', properties,
   required: Object.keys(properties), additionalProperties: false });
@@ -104,11 +105,12 @@ export async function detailExplanation(question: string, position: ViewingPosit
   const { ctx, passages, lines, focusLineIds } = context;
   const packet = { question, scope: discussion === 'recap' ? 'Recap the supplied dialogue in chronological order, covering earlier and current problems. These are retrieved captions, not a complete visual record. Do not fill gaps.' : discussion ? 'Explain the current discussion and its present stakes, using the lead-in only as context. These are dialogue excerpts, not a complete visual record or whole-title recap.' : 'Explain the requested detail; these are selected dialogue excerpts, not a complete visual record.', position: ctx.data.position, earlierQuestions: ctx.data.earlierQuestions.map(q => q.question), focusLineIds, passages };
   const wire = JSON.stringify(packet);
+  const visualCaution = asksAboutDeath(question) ? '\n' + silentEventCaution : '';
   type Point = { text: string; kind: string; sources: string[] };
   let issues: string[] = [];
   for (let attempt = 0; attempt < 3; attempt++) {
     const recapInstruction = discussion === 'recap' ? '\nFor this recap, use 3–4 developed paragraphs (roughly 120–200 words) when the source spans several exchanges. Each paragraph must cite consecutive lines within ONE distinct passage, in chronological order from earlier to recent material. Explain a concrete issue and its present significance in that paragraph, rather than listing isolated activities. For a genuinely short excerpt, fewer paragraphs are enough.' : '';
-    const raw = await generate(writer + recapInstruction + (attempt ? '\nFresh attempt. Correct these check categories without guessing: ' + issues.join(', ') : ''), wire, 1600, 'writer', draftFormat([...lines.keys()]));
+    const raw = await generate(writer + visualCaution + recapInstruction + (attempt ? '\nFresh attempt. Correct these check categories without guessing: ' + issues.join(', ') : ''), wire, 1600, 'writer', draftFormat([...lines.keys()]));
     if (!record(raw) || !['explained', 'partial'].includes(String(raw.status)) || !Array.isArray(raw.points) || !raw.points.length || raw.points.length > 4) return null;
     const points: Point[] = [];
     const rejected = new Set<string>();
@@ -171,7 +173,7 @@ export async function detailExplanation(question: string, position: ViewingPosit
     // without an optional third, but the reviewer must judge them afresh.
     if (!keptOpening || points.length < Math.min(2, raw.points.length)) { issues = [...rejected]; continue; }
     if (discussion === 'recap' && !coversRecap(question, points.map(p => ({ text: p.text, evidenceIds: [...new Set(p.sources.map(id => id.split(':')[0]))] })), ctx.aliased)) { issues = ['Cover distinct earlier and recent passages, one passage per paragraph, in chronological order.']; continue; }
-    const check = await generate(reviewer, JSON.stringify({ ...packet, points }), 900, 'verifier', reviewFormat);
+    const check = await generate(reviewer + visualCaution, JSON.stringify({ ...packet, points }), 900, 'verifier', reviewFormat);
     if (!record(check) || typeof check.boundarySafe !== 'boolean' || !Array.isArray(check.checks) || check.checks.length !== points.length) return null;
     const checks = check.checks;
     const approved = points.every((p, index) => {
@@ -182,7 +184,7 @@ export async function detailExplanation(question: string, position: ViewingPosit
     });
     if (approved && check.boundarySafe === true && check.addressesQuestion === true) return {
       answer: points.map(p => p.text).join('\n\n'), evidence: paragraphSources(ctx.permitted, points.map(p => p.sources)),
-      ...(raw.status === 'partial' || points.some(p => p.kind === 'limit') ? { limited: true as const } : {}),
+      ...(raw.status === 'partial' || points.some(p => p.kind === 'limit') ? { limited: true as const, sourceGap: true as const } : {}),
     };
     const known = new Set(['identity', 'action', 'motive', 'state', 'relevance', 'spoiler', 'citation']);
     issues = checks.flatMap((c: unknown) => record(c) && known.has(String(c.issue)) ? [String(c.issue)] : []);

@@ -97,6 +97,25 @@ describe('companion history and in-flight responses', () => {
     hook.rerender({ position: { ...position, seconds: 0 }, enabled: true });
     expect(hook.result.current.messages).toEqual([]);
   });
+  it('shows an unresolved visual answer only at its eligible episode and viewing point', async () => {
+    const visual = row({ id: 'visual-ending', position_seconds: 60, answer_status: 'insufficient_evidence',
+      answer: 'The visual ending raises an unresolved question.',
+      evidence: [{ id: 'reviewed:ending', label: 'Reviewed scene note', season: 1, episode: 2, start: 45, end: 60 }] });
+    mock.load.mockResolvedValue({ data: [row(), visual], error: null });
+    const hook = await mount();
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe', 'visual-ending']);
+    hook.rerender({ position: { ...position, seconds: 59 }, enabled: true });
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+    await flush();
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+    hook.rerender({ position: { ...position, episodeNumber: 1 }, enabled: true });
+    expect(hook.result.current.messages).toEqual([]);
+    await flush();
+    expect(hook.result.current.messages).toEqual([]);
+    hook.rerender({ position, enabled: true });
+    await flush();
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe', 'visual-ending']);
+  });
   it('does not apply an old episode history response after switching to an earlier episode', async () => {
     const old = deferred<unknown>();
     mock.load.mockReturnValueOnce(old.promise);

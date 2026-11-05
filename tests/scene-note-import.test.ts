@@ -18,10 +18,64 @@ beforeAll(async () => {
     CREATE TABLE subtitle_chunks(tmdb_id integer, media_type text, season_number integer, episode_number integer,
       source_file_id bigint, ingestion_version integer, cues jsonb);`);
   await pg.exec(readFileSync(new URL('../supabase/migrations/20261019160000_reviewed_scene_notes.sql', import.meta.url), 'utf8'));
+  await pg.exec(readFileSync(new URL('../supabase/migrations/20261105220000_reviewed_visual_notes.sql', import.meta.url), 'utf8'));
 });
 beforeEach(async () => {
-  await pg.exec('TRUNCATE companion_scene_notes, subtitle_chunks');
+  await pg.exec('TRUNCATE companion_scene_notes, companion_visual_notes, subtitle_chunks');
   await pg.query("INSERT INTO subtitle_chunks VALUES (10,'movie',null,null,123,3,$1::jsonb)", [JSON.stringify(cues)]);
+});
+
+describe('private visual-note imports', () => {
+  const visual: ReviewedSceneNote = { ...note, id: 'visual-event', coverage: 'limited', valid_until_seconds: 30,
+    summary: 'The silent action is visible; its reason remains unresolved at the reviewed point.',
+    review: { ...note.review, basis: 'scene_prefix' },
+    scene_review: { kind: 'released_video', availability: 'timed_scene', reviewed_through_seconds: 30,
+      knowledge: 'unresolved', references: [{ url: 'https://studio.example/scene', locator: 'Reviewed video 10–30 seconds' }] } };
+
+  it('stores visual reviews separately, preserves provenance and strips unrelated metadata', async () => {
+    const sql = sceneNoteImport([note, { ...visual, full_recap: 'FUTURE_SOURCE' } as ReviewedSceneNote], records);
+    await pg.exec(sql);
+    await pg.exec(sql);
+    expect((await pg.query('SELECT id FROM companion_scene_notes')).rows).toEqual([{ id: note.id }]);
+    const { rows } = await pg.query<{ note: ReviewedSceneNote }>('SELECT note FROM companion_visual_notes');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].note.scene_review).toEqual(visual.scene_review);
+    expect(rows[0].note.valid_until_seconds).toBe(30);
+    expect(JSON.stringify(rows)).not.toContain('FUTURE_SOURCE');
+  });
+
+  it('rolls back both stores if the live edition changes', async () => {
+    const second = { ...visual, source_file_id: 124 };
+    const sql = sceneNoteImport([note, second], [...records, { ...records[0], source_file_id: 124 }]);
+    await expect(pg.exec(sql)).rejects.toThrow('Reviewed source mismatch');
+    expect((await pg.query('SELECT id FROM companion_scene_notes')).rows).toEqual([]);
+    expect((await pg.query('SELECT id FROM companion_visual_notes')).rows).toEqual([]);
+  });
+
+  it('prevents browser roles reading or writing private reviewed sources', async () => {
+    await pg.exec(sceneNoteImport([visual], records));
+    for (const role of ['anon', 'authenticated']) {
+      await pg.exec(`SET ROLE ${role}`);
+      try {
+        await expect(pg.query('SELECT * FROM companion_visual_notes')).rejects.toThrow('permission denied');
+        await expect(pg.query('DELETE FROM companion_visual_notes')).rejects.toThrow('permission denied');
+        await expect(pg.query('INSERT INTO companion_visual_notes(id,note) VALUES ($1,$2::jsonb)',
+          [visual.id, JSON.stringify(visual)])).rejects.toThrow('permission denied');
+      } finally { await pg.exec('RESET ROLE'); }
+    }
+    await pg.exec('SET ROLE service_role');
+    try { expect((await pg.query('SELECT id FROM companion_visual_notes')).rows).toHaveLength(1); }
+    finally { await pg.exec('RESET ROLE'); }
+  });
+
+  it('database constraints reject caption notes, unreviewed visual data and unbounded mysteries', async () => {
+    for (const invalid of [note, { ...visual, scene_review: undefined }, { ...visual, source_file_id: null },
+      { ...visual, review: { ...visual.review, status: 'draft' } }, { ...visual, valid_until_seconds: 31 },
+      { ...visual, valid_until_seconds: undefined }]) {
+      await expect(pg.query('INSERT INTO companion_visual_notes(id,note) VALUES ($1,$2::jsonb)',
+        [invalid.id, JSON.stringify(invalid)])).rejects.toThrow();
+    }
+  });
 });
 afterAll(() => pg.close());
 

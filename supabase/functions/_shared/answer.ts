@@ -34,9 +34,21 @@ export async function companionAnswer(question: string, position: ViewingPositio
   const tracked: JsonGenerator = (...args) => { attempts++; return generate(...args); };
   const broad = broadDiscussion(question);
   const specific = !broad && questionIntent(question) === 'explanation';
+  const captionNotes = reviewedNotes.filter(note => note.basis !== 'scene_prefix');
   try {
+    // A separately reviewed visual event must get a chance to answer before a
+    // keyword-matched older allegation can be mistaken for its correction.
+    if (reviewedNotes.some(note => note.basis === 'scene_prefix')) {
+      const visual = await reviewedSceneAnswer(question, position, reviewedNotes, history, tracked,
+        { visualOnly: questionIntent(question) !== 'recap' });
+      if (visual) {
+        observe({ stage: visual.limited ? 'reviewed_limited' : 'reviewed_answered', evidenceCount: permitted.length,
+          claimCount: visual.evidence.length, attempts });
+        return visual;
+      }
+    }
     if (specific) {
-      const cited = reviewedAttribution(question, position, reviewedNotes);
+      const cited = reviewedAttribution(question, position, captionNotes);
       if (cited) {
         observe({ stage: 'reviewed_limited', evidenceCount: permitted.length, claimCount: 1, attempts });
         return cited;
@@ -86,7 +98,7 @@ export async function companionAnswer(question: string, position: ViewingPositio
       observe({ stage: 'no_evidence', evidenceCount: 0, claimCount: 0, attempts }); return null;
     }
     if (specific) {
-      const direct = await directDialogue(question, position, permitted, history, tracked, reviewedNotes);
+      const direct = await directDialogue(question, position, permitted, history, tracked, captionNotes);
       if (direct) {
         observe({ stage: direct.limited ? 'dialogue_limited' : 'dialogue_answered', evidenceCount: permitted.length,
           claimCount: direct.evidence.length, attempts });
@@ -94,7 +106,7 @@ export async function companionAnswer(question: string, position: ViewingPositio
       }
       const excerpt = localCaptionExcerpts(question, position, permitted);
       observe({ stage: 'caption_limited', evidenceCount: permitted.length, claimCount: excerpt?.evidence.length ?? 0, attempts });
-      return excerpt;
+      return excerpt && { ...excerpt, sourceGap: true as const };
     }
     // The Sol route can explain caption-only discussions with the same independent
     // source checks as specific questions. The old free experiment stays gated.
@@ -116,7 +128,7 @@ export async function companionAnswer(question: string, position: ViewingPositio
   const excerpts = localCaptionExcerpts(question, position, permitted);
   observe({ stage: excerpts ? 'caption_limited' : 'draft_insufficient', evidenceCount: permitted.length,
     claimCount: excerpts?.evidence.length ?? 0, attempts });
-  return excerpts;
+  return excerpts && { ...excerpts, sourceGap: true as const };
 }
 
 // Retained for adversarial/regression evaluation of the old paraphrase path.

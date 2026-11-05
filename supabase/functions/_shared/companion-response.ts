@@ -1,10 +1,11 @@
 import { evidenceLabel, formatTimestamp, permittedEvidence, questionIntent, unavailableMemoryReply,
   type Conversation, type Evidence, type ViewingPosition } from './companion.ts';
 import { isRelationshipQuestion } from './question-focus.ts';
+import { asksAboutDeath } from './visual-context.ts';
 
 export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number; citations?: { paragraph: number; lineIds: string[] }[] };
-export type CheckedResponse = { answer: string; evidence: CitedEvidence[]; limited?: true };
-export type CompanionResponse = Omit<CheckedResponse, 'limited'> & { answer_status: 'answered' | 'insufficient_evidence'; charge: boolean };
+export type CheckedResponse = { answer: string; evidence: CitedEvidence[]; limited?: true; sourceGap?: true };
+export type CompanionResponse = Omit<CheckedResponse, 'limited' | 'sourceGap'> & { answer_status: 'answered' | 'insufficient_evidence'; charge: boolean };
 
 // A failed interpretation need not hide the available scene evidence. This is
 // deliberately an uncharged, limited response, never an accepted explanation
@@ -31,6 +32,13 @@ export function companionResponse(question: string, position: ViewingPosition, e
   history: Conversation[], checked: CheckedResponse | null): CompanionResponse {
   const memoryReply = unavailableMemoryReply(question, position, history);
   if (memoryReply) return { answer: memoryReply, evidence: [], answer_status: 'insufficient_evidence', charge: false };
+  // Missing dialogue cannot disprove a silent event or establish that its cause
+  // is an intentional mystery. Preserve the distinction from an editor-verified
+  // unresolved scene and from provider errors. Never recycle the rejected quote.
+  if (checked?.limited && checked.sourceGap && asksAboutDeath(question)) {
+    return { answer: 'I’m missing the scene context I’d need to answer that reliably. I won’t contradict what you saw or guess at who was responsible or why.',
+      evidence: [], answer_status: 'insufficient_evidence', charge: false };
+  }
   if (checked) return { answer: checked.answer, evidence: checked.evidence,
     answer_status: checked.limited ? 'insufficient_evidence' : 'answered', charge: !checked.limited };
   const permitted = permittedEvidence(evidence, position);

@@ -67,10 +67,18 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
     .eq('media_type', position.mediaType).lte('reveal_seconds', position.seconds);
   if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
   else query = query.is('season_number', null).is('episode_number', null);
-  const reviewed = await query.order('reveal_seconds', { ascending: true }).limit(1000);
+  let visualQuery = db.from('companion_visual_notes').select('note').eq('tmdb_id', position.tmdbId)
+    .eq('media_type', position.mediaType).lte('reveal_seconds', position.seconds);
+  if (position.mediaType === 'tv') visualQuery = visualQuery.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
+  else visualQuery = visualQuery.is('season_number', null).is('episode_number', null);
+  const [reviewed, visual] = await Promise.all([
+    query.order('reveal_seconds', { ascending: true }).limit(1000),
+    visualQuery.order('reveal_seconds', { ascending: true }).limit(1000),
+  ]);
   if (reviewed.error) throw reviewed.error;
+  if (visual.error) throw visual.error;
   // These notes come only from the service-role store, never the request body.
-  const notes = permittedSceneNotes((reviewed.data ?? []).map(row => row.note) as ReviewedSceneNote[], records, position);
+  const notes = permittedSceneNotes([...(reviewed.data ?? []), ...(visual.data ?? [])].map(row => row.note) as ReviewedSceneNote[], records, position);
   return { ...selectSceneContext(records, position, question, memory, companionEvidenceBudget(name => Deno.env.get(name))), notes };
 }
 
@@ -130,7 +138,7 @@ serve(async req => {
       ({ evidence, coverage, notes } = await retrieve(db, position, question.trim(), memory));
     }
     let checked = null;
-    if (evidence.length) {
+    if (evidence.length || notes.length) {
       const generate = companionGenerator(name => Deno.env.get(name), fetch,
         databaseSolBudget((name, args) => db.rpc(name, args), user.id, id));
       checked = await companionAnswer(question.trim(), position, evidence, memory, generate,
