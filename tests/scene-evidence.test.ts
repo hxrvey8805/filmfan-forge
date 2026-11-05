@@ -44,7 +44,8 @@ describe('timestamped scene retrieval', () => {
     const rows = [record(), record({ id: 'previous', episode_number: 1 })];
     const context = selectSceneContext(rows, position, 'What is happening now?');
     const prompt = buildPrompts('What is happening right now?', position, context.evidence, []);
-    expect(prompt.data.moment?.recentEvidenceIds).toEqual(['P2']);
+    expect(prompt.data.moment?.recentEvidenceIds).toEqual(['P1']);
+    expect(context.evidence.every(item => item.episode === 2)).toBe(true);
     const switched = { ...position, episodeNumber: 1 };
     const other = selectSceneContext(rows, switched, 'What is happening right now?');
     expect(other.evidence.every(item => item.episode === 1)).toBe(true);
@@ -94,7 +95,7 @@ describe('timestamped scene retrieval', () => {
   });
   it('keeps only past episode context when switching backwards', () => {
     const earlier = record({ id: 'earlier', episode_number: 1, cues: [{ start: 300, end: 303, text: 'PAST key' }] });
-    expect(selectSceneEvidence([earlier, record()], position, 'Explain the key').map(row => row.episode)).toEqual([1, 2]);
+    expect(selectSceneEvidence([earlier, record()], position, 'Explain the key').map(row => row.episode)).toEqual([2]);
     expect(selectSceneEvidence([earlier, record()], { ...position, episodeNumber: 1 }, 'Explain the key')).toEqual([]);
   });
   it('does not present old dialogue as a current silent scene', () => {
@@ -148,7 +149,7 @@ describe('timestamped scene retrieval', () => {
     expect(result[0].text).toBe('[00:01:20] The first thing I will do when...\n[00:01:25] ...I take over is thank her.');
     expect(result[0].end).toBe(89);
     // Same timeline in a different episode must not become the same exchange.
-    expect(selectSceneEvidence([...rows, record({ id: 'old', episode_number: 1 })], position, 'Explain')).toHaveLength(2);
+    expect(selectSceneEvidence([...rows, record({ id: 'old', episode_number: 1 })], position, 'Explain')).toEqual(result);
   });
   it('removes explicit uploader credits while retaining dialogue and sound labels', () => {
     const cues = [{ start: 1, end: 6, text: 'Subs collected, corrected and adapted by UPLOADER for TV seasons' },

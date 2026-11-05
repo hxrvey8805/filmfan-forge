@@ -2,13 +2,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   COMPANION_VERSION, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
-  parseTimestamp, unavailableMemoryReply,
+  parseTimestamp, safeHistory, unavailableMemoryReply,
   type Conversation, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
 
-import { checkedAnswer } from "../_shared/answer.ts";
+import { companionAnswer } from "../_shared/answer.ts";
 import { companionResponse } from "../_shared/companion-response.ts";
 import { companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
+import { databaseSolBudget } from "../_shared/sol-budget.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 import { permittedSceneNotes, type ReviewedSceneNote, type PreparedSceneNote } from "../_shared/reviewed-scenes.ts";
 
@@ -108,6 +109,9 @@ serve(async req => {
           prior.data.season_number !== (position.seasonNumber ?? null) || prior.data.episode_number !== (position.episodeNumber ?? null) || prior.data.question !== question.trim()) {
         return json({ error: 'Request ID already used for a different question.' }, 409);
       }
+      if (!safeHistory([prior.data as Conversation], position).length) {
+        return json({ error: 'This saved answer uses captions outside your viewing point. Please ask again.', code: 'answer_version_changed' }, 409);
+      }
       return json({ answer: prior.data.answer, conversation: prior.data, usedCoins: 0 });
     }
     let historyQuery = userDb.from('ai_conversations').select('*').eq('title_id', tmdbId)
@@ -127,8 +131,9 @@ serve(async req => {
     }
     let checked = null;
     if (evidence.length) {
-      const generate = companionGenerator(name => Deno.env.get(name));
-      checked = await checkedAnswer(question.trim(), position, evidence, memory, generate,
+      const generate = companionGenerator(name => Deno.env.get(name), fetch,
+        databaseSolBudget((name, args) => db.rpc(name, args), user.id, id));
+      checked = await companionAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
           evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes);
     }
@@ -142,6 +147,9 @@ serve(async req => {
     if (saved.error) {
       if (saved.error.message.includes('Insufficient coins')) return json({ error: 'You need 150 coins for another question.' }, 402);
       throw saved.error;
+    }
+    if (!safeHistory([saved.data.conversation as Conversation], position).length) {
+      return json({ error: 'This saved answer uses captions outside your viewing point. Please ask again.', code: 'answer_version_changed' }, 409);
     }
     return json({ ...saved.data, answer: saved.data.conversation.answer,
       status: saved.data.conversation.answer_status, evidence: saved.data.conversation.evidence, boundary: position });

@@ -106,9 +106,9 @@ describe('evidence boundaries', () => {
     expect(data.position.seconds).toBe(30);
     expect(JSON.stringify(data.evidence)).not.toContain('FUTURE_REVEAL');
   });
-  it('sorts mixed retrieval sources chronologically and removes duplicates', () => {
+  it('rejects unwatched episodes even when they have a lower number and removes duplicates', () => {
     const early = record({ id: 'earlier', episode_number: 1, cues: [{ start: 300, end: 302, text: 'Earlier episode.' }] });
-    expect(safeEvidence([record(), early, record()], position).map(item => item.id)).toEqual(['earlier', 'current']);
+    expect(safeEvidence([record(), early, record()], position).map(item => item.id)).toEqual(['current']);
   });
   it('has no future cues at any tested rewind point', () => {
     const cues = Array.from({ length: 120 }, (_, i) => ({ start: i * 2, end: i * 2 + 1.5, text: `CUE_${i}_END` }));
@@ -126,6 +126,13 @@ describe('conversation memory and answer validation', () => {
     message({ id: 'other', title_id: 9 }), message({ id: 'legacy', companion_version: 1 }),
     message({ id: 'retired', companion_version: 2, answer: 'RETIRED_BAD_ANSWER' }),
     message({ id: 'unknown', position_seconds: null })];
+  it('quarantines a saved answer whose own timestamp is eligible but whose cited evidence was outside its episode or cutoff', () => {
+    const good = {season:1,episode:2,start:12,end:20};
+    const make = (id:string,e:unknown) => message({id,evidence:[e]});
+    const rows = [make('clean',good),make('foreign',{...good,episode:1}),make('ahead',{...good,end:26})];
+    expect(safeHistory(rows,position).map(r=>r.id)).toEqual(['clean']);
+    expect(conversationMemory(rows,position).map(r=>r.id)).toEqual(['clean']);
+  });
   it('rewinding removes future answers from both visible history and model memory', () => {
     expect(safeHistory(rows, position).map(row => row.id)).toEqual(['safe']);
     expect(conversationMemory(rows, position).map(row => row.id)).toEqual(['safe']);

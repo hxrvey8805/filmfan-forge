@@ -9,9 +9,24 @@ const rows = [passage('P1', '[00:00:10] Captain!\n[00:00:11] Mira!'),
   passage('P2', '[00:00:20] Peace, Rowan.\n[00:00:21] Maybe the king is ill.\n[00:00:22] He will choose me.')];
 
 describe('speaker and question-name grounding', () => {
+  it.each(["The phrase means ‘I'll do what you ask’.", 'The reply means “I’ll do what you ask”.', 'The wording sounds like “We’re ready”.'])(
+    'does not mistake a pronoun contraction for a new name: %s', text => {
+      expect(draftGroundingIssues('What does that mean?', draft(text), rows)).not.toContain('identity');
+    });
+  it('distinguishes descriptive VIP treatment from an unknown named person or institution', () => {
+    expect(draftGroundingIssues('Why is this funny?', draft('The refreshments sound like VIP treatment.'), rows)).toEqual([]);
+    expect(draftGroundingIssues('Why is this funny?', draft('The refreshments are for VIP.'), rows)).toContain('identity');
+    expect(draftGroundingIssues('Why is this funny?', draft('VIP says to wait.'), rows)).toContain('speaker');
+    expect(draftGroundingIssues('Why is this funny?', draft('The refreshments sound like FBI treatment.'), rows)).toContain('identity');
+  });
   it('rejects a name imported from an uncited scene even when the question did not name anyone', () => {
     expect(draftGroundingIssues('Recap so far', draft('Mira is discussing the king.'), rows)).toContain('identity');
     expect(draftGroundingIssues('Recap so far', draft('A speaker discusses the king.'), rows)).toEqual([]);
+  });
+  it('accepts a cited hyphenated name and rejects a different compound name', () => {
+    const source = [passage('P1', 'This is for Lin-Mei.')];
+    expect(draftGroundingIssues('', draft('The request mentions Lin-Mei.', ['P1']), source)).toEqual([]);
+    expect(draftGroundingIssues('', draft('The request mentions Lin-Jo.', ['P1']), source)).toContain('identity');
   });
   it('rejects an invented named institution or acronym absent from the cited words', () => {
     expect(draftGroundingIssues('Recap so far', draft('Rowan works for the FBI.'), rows)).toContain('identity');
@@ -43,8 +58,18 @@ describe('speaker and question-name grounding', () => {
     expect(draftGroundingIssues('What do we know about Mira?', draft('Mira is called by name.', ['P1']), rows)).toEqual([]);
     expect(draftGroundingIssues('What do we know about Mira?', draft('A speaker speculates about the king being ill.'), rows)).toEqual([]);
   });
-  it.each(['(MIRA) Stay here.', 'MIRA: Stay here.', 'ROWAN: Where? MIRA: Stay here.'])('accepts an explicit cited speaker label (%s)', text => {
+  it.each(['Mira is described as a cousin.', 'Mira has been asked to stay.', 'Mira was told to wait.'])(
+    'does not confuse passive reports about a person with that person speaking: %s', text => {
+      expect(draftGroundingIssues('What do we know?', draft(text, ['P1']),
+        [passage('P1', 'Mira is a cousin. I asked Mira to stay and told Mira to wait.')])).not.toContain('speaker');
+    });
+  it.each(['(MIRA) Stay here.', '[ Mira ] Stay here.', '( MIRA ) Stay here.', '[Mira] Stay here.', '[00:00:10] [MIRA] Stay here.', 'MIRA: Stay here.', 'ROWAN: Where? MIRA: Stay here.'])('accepts an explicit cited speaker label (%s)', text => {
     expect(draftGroundingIssues('What did Mira ask?', draft('Mira asks the other person to stay.', ['P1']), [passage('P1', text)])).toEqual([]);
+  });
+  it('does not turn a sound description containing a name into a speaker label', () => {
+    for (const text of ['[Mira gasps] Stay here.', '[Mira is addressed] Stay here.', 'Mira! Stay here.']) {
+      expect(draftGroundingIssues('What did Mira say?', draft('Mira says to stay.', ['P1']), [passage('P1', text)])).toContain('speaker');
+    }
   });
   it('does not use a label from an uncited passage to identify a remote conversation', () => {
     const labeled = [passage('P1', '(MIRA) Stay here.'), rows[1]];
