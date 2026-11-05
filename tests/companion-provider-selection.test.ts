@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { companionEvidenceBudget, companionGenerator } from '../supabase/functions/_shared/companion-provider';
+import { companionAnswerOptions, companionEvidenceBudget, companionGenerator } from '../supabase/functions/_shared/companion-provider';
 
 const env = (values: Record<string, string>) => (name: string) => values[name];
 const completion = () => new Response(JSON.stringify({
@@ -54,4 +54,11 @@ describe('server companion provider selection', () => {
       expect(request.mock.calls[0][0]).toBe('https://openrouter.ai/api/v1/chat/completions');
     } finally { log.mockRestore(); }
   });
+});
+
+it('enables caption discussions only for the explicitly selected Sol deployment', () => {
+  for (const provider of [undefined, 'groq', 'openrouter', 'bogus']) {
+    expect(companionAnswerOptions(name => name === 'COMPANION_AI_PROVIDER' ? provider : 'staged-key')).toEqual({ captionDiscussion: false });
+  }
+  expect(companionAnswerOptions(name => name === 'COMPANION_AI_PROVIDER' ? ' openrouter-sol ' : undefined)).toEqual({ captionDiscussion: true });
 });

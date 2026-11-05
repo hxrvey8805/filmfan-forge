@@ -31,7 +31,7 @@ const namedSpeech = new RegExp(`(?<![\\p{L}\\p{N}])([\\p{Lu}][\\p{L}\\p{M}'’\\
 // "Mira is described as a cousin" describes Mira; it does not say she spoke.
 // Preserve active progressive/perfect forms such as "Mira has described...".
 const passiveSpeech = /\b(?:is|are|was|were|be|been|being)\s+(?:[\p{L}]+ed|said|told|spoken)\b/u;
-const speechMatches = (text: string) => [...text.matchAll(namedSpeech)].filter(match => !passiveSpeech.test(match[0]));
+const speechMatches = (text: string) => [...text.matchAll(namedSpeech)].filter(match => !passiveSpeech.test(match[0]) && !/^(?:Strictly|Generally|Technically|Broadly) speaking$/i.test(match[0]));
 
 export function namedSpeechSubjects(text: string): string[] {
   return speechMatches(text).map(match => normalized(match[1])).filter(name => !genericSubjects.has(name));
@@ -60,7 +60,7 @@ export function draftGroundingIssues(question: string, draft: GroundedDraft, evi
       // institution. The semantic reviewer must still ground the treatment;
       // this does not license "VIP says..." or an unknown acronym such as FBI.
       if (match[0] === 'VIP' && /^\s+(?:treatment|service|experience)\b/i.test(claim.text.slice(match.index! + match[0].length))) continue;
-      const sentenceStart = !claim.text.slice(0, match.index).trim() || /[.!?]\s*$/.test(claim.text.slice(0, match.index));
+      const sentenceStart = !claim.text.slice(0, match.index).trim() || /[.!?][”"'’\)\]]*\s*$/.test(claim.text.slice(0, match.index));
       if ((!sentenceStart || sourceNames.has(name) || /^[A-Z]{2,}$/.test(match[0])) && !citedWords.has(name)) issues.add('identity');
     }
     // A name being called or mentioned is not a speaker label. Preserve real

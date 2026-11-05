@@ -5,6 +5,10 @@ import { solGenerator } from './openrouter-sol.ts';
 import type { SolBudget } from './sol-budget.ts';
 import { DEFAULT_EVIDENCE_BUDGET, OPENROUTER_EVIDENCE_BUDGET } from './scene-evidence.ts';
 
+export function companionAnswerOptions(env: (name: string) => string | undefined) {
+  return { captionDiscussion: env('COMPANION_AI_PROVIDER')?.trim() === 'openrouter-sol' };
+}
+
 export function companionEvidenceBudget(env: (name: string) => string | undefined): number {
   // The legacy Groq request-size cap must not silently remove whole exchanges
   // on the separately configured OpenRouter route. Keep both bounds explicit.

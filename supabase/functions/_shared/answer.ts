@@ -25,7 +25,7 @@ export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number
 // explanation + optional interpretation, then literal source context. A failed
 // draft never enters the fallback, a repair prompt, or later story memory.
 export async function companionAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
-  observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = [], options: { experimentalCaptionWriter?: boolean } = {}) {
+  observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = [], options: { experimentalCaptionWriter?: boolean; captionDiscussion?: boolean } = {}) {
   const permitted = permittedEvidence(evidence, position);
   if (unavailableMemoryReply(question, position, history)) {
     observe({ stage: 'memory_unavailable', evidenceCount: permitted.length, claimCount: 0, attempts: 0 }); return null;
@@ -48,6 +48,20 @@ export async function companionAnswer(question: string, position: ViewingPositio
       if (reading) {
         observe({ stage: reading.limited ? 'dialogue_limited' : 'dialogue_answered', evidenceCount: permitted.length, claimCount: reading.evidence.length, attempts });
         return reading;
+      }
+    }
+    // Use caption context for developed discussion answers. Preserve reviewed
+    // recaps with checked chronology and attribution when they are available.
+    // Titles without recap notes can still use the checked caption-only path.
+    if (options.captionDiscussion === true && (broad || questionIntent(question) === 'scene') &&
+        !(questionIntent(question) === 'recap' && reviewedNotes.some(note => note.uses.includes('recap')))) {
+      const explained = questionIntent(question) === 'recap'
+        ? await detailExplanation(question, position, permitted, history, tracked, 'recap')
+        : await detailExplanation(question, position, permitted, history, tracked, true);
+      if (explained) {
+        observe({ stage: broad ? 'exchange_explained' : 'story_explained', evidenceCount: permitted.length,
+          claimCount: explained.evidence.length, attempts });
+        return explained;
       }
     }
     if (reviewedNotes.length) {
@@ -82,9 +96,10 @@ export async function companionAnswer(question: string, position: ViewingPositio
       observe({ stage: 'caption_limited', evidenceCount: permitted.length, claimCount: excerpt?.evidence.length ?? 0, attempts });
       return excerpt;
     }
-    // Free caption-only commentary still fails the manual release suite. Only the
-    // private replay opts in. No request body or provider output can enable it.
-    const explanation = broad ? (options.experimentalCaptionWriter === true
+    // The Sol route can explain caption-only discussions with the same independent
+    // source checks as specific questions. The old free experiment stays gated.
+    // Only server configuration, never a request body, enables either path.
+    const explanation = broad ? (options.experimentalCaptionWriter === true && options.captionDiscussion !== true
       ? await exchangeCommentary(question, position, permitted, history, tracked) : null)
       : await storyExplanation(question, position, permitted, history, tracked, coverage);
     if (explanation) {

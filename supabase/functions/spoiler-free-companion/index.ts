@@ -8,7 +8,7 @@ import {
 
 import { companionAnswer } from "../_shared/answer.ts";
 import { companionResponse } from "../_shared/companion-response.ts";
-import { companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
+import { companionAnswerOptions, companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
 import { databaseSolBudget } from "../_shared/sol-budget.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 import { permittedSceneNotes, type ReviewedSceneNote, type PreparedSceneNote } from "../_shared/reviewed-scenes.ts";
@@ -135,7 +135,7 @@ serve(async req => {
         databaseSolBudget((name, args) => db.rpc(name, args), user.id, id));
       checked = await companionAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
-          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes);
+          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes, companionAnswerOptions(name => Deno.env.get(name)));
     }
     const response = companionResponse(question.trim(), position, evidence, memory, checked);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
