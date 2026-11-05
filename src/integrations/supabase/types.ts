@@ -101,6 +101,69 @@ export type Database = {
         }
         Relationships: []
       }
+      companion_sol_budget: {
+        Row: {
+          committed_micro_usd: number
+          enabled: boolean
+          halted_reason: string | null
+          id: string
+          limit_micro_usd: number
+          updated_at: string
+        }
+        Insert: {
+          committed_micro_usd?: number
+          enabled?: boolean
+          halted_reason?: string | null
+          id: string
+          limit_micro_usd?: number
+          updated_at?: string
+        }
+        Update: {
+          committed_micro_usd?: number
+          enabled?: boolean
+          halted_reason?: string | null
+          id?: string
+          limit_micro_usd?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      companion_sol_calls: {
+        Row: {
+          actual_micro_usd: number | null
+          created_at: string
+          generation_id: string | null
+          id: string
+          request_id: string
+          reserved_micro_usd: number
+          settled_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          actual_micro_usd?: number | null
+          created_at?: string
+          generation_id?: string | null
+          id: string
+          request_id: string
+          reserved_micro_usd: number
+          settled_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          actual_micro_usd?: number | null
+          created_at?: string
+          generation_id?: string | null
+          id?: string
+          request_id?: string
+          reserved_micro_usd?: number
+          settled_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       season_summaries: {
         Row: {
           created_at: string
@@ -432,6 +495,24 @@ export type Database = {
       record_companion_answer: {
         Args: { p_charge: boolean; p_conversation: Json; p_user_id: string }
         Returns: Json
+      }
+      reserve_companion_sol_call: {
+        Args: {
+          p_call_id: string
+          p_micro_usd: number
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      settle_companion_sol_call: {
+        Args: {
+          p_call_id: string
+          p_generation_id: string
+          p_halt_reason: string
+          p_micro_usd: number
+        }
+        Returns: boolean
       }
     }
     Enums: {
