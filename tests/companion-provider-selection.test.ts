@@ -11,6 +11,7 @@ describe('server companion provider selection', () => {
     expect(companionEvidenceBudget(env({}))).toBe(8500);
     expect(companionEvidenceBudget(env({ COMPANION_AI_PROVIDER: 'groq' }))).toBe(8500);
     expect(companionEvidenceBudget(env({ COMPANION_AI_PROVIDER: 'openrouter' }))).toBe(16000);
+    expect(companionEvidenceBudget(env({ COMPANION_AI_PROVIDER: 'openrouter-sol' }))).toBe(16000);
     expect(companionEvidenceBudget(env({ OPENROUTER_API_KEY: 'staged-only' }))).toBe(8500);
   });
   it('uses the OpenRouter secret only when explicitly selected', async () => {

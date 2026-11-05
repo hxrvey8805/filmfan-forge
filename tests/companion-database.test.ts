@@ -33,6 +33,7 @@ beforeAll(async () => {
   await pg.exec(migration('20261015153000_caption_context_revision'));
   await pg.exec(migration('20261015195500_companion_answer_revision'));
   await pg.exec(migration('20261019160000_reviewed_scene_notes'));
+  await pg.exec(migration('20261104114500_scope_companion_search_to_episode'));
   await pg.exec('GRANT SELECT, INSERT ON public.ai_conversations TO authenticated');
   const fixtures = [
     ['tv', 1, 1, 800, 810, 'previous', 3],
@@ -104,13 +105,13 @@ async function save(payload = answer(), charge = true, owner = user) {
 
 describe('database evidence retrieval', () => {
   it('filters future cues, episodes, seasons, and legacy chunks before keyword or vector ranking', async () => {
-    expect(await search('tv', 1, 2, 30)).toEqual(['exact', 'previous', 'safe']);
-    expect(await search('tv', 1, 2, 30, false)).toEqual(['exact', 'previous', 'safe']);
-    expect(await search('tv', 1, 2, 15)).toEqual(['previous']);
+    expect(await search('tv', 1, 2, 30)).toEqual(['exact', 'safe']);
+    expect(await search('tv', 1, 2, 30, false)).toEqual(['exact', 'safe']);
+    expect(await search('tv', 1, 2, 15)).toEqual([]);
   });
   it('rewinding or going back an episode shrinks the permitted evidence', async () => {
     expect(await search('tv', 1, 2, 45)).toContain('future');
-    expect(await search('tv', 1, 2, 0)).toEqual(['previous']);
+    expect(await search('tv', 1, 2, 0)).toEqual([]);
     expect(await search('tv', 1, 1, 30)).toEqual([]);
     expect(await search('tv', 1, 1, 810)).toEqual(['previous']);
   });

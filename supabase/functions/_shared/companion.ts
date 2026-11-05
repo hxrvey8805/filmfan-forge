@@ -51,6 +51,7 @@ export interface Conversation {
   timestamp: string | null;
   created_at: string;
   answer_status?: string | null;
+  evidence?: unknown;
 }
 
 export function parseTimestamp(value: unknown): number | null {
@@ -181,9 +182,8 @@ function permittedPosition(season: number | null, episode: number | null, end: n
   if (!Number.isFinite(end) || end < 0) return false;
   if (position.mediaType === 'movie') return season === null && episode === null && end <= position.seconds;
   if (season === null || episode === null) return false;
-  return season < position.seasonNumber! ||
-    (season === position.seasonNumber && episode < position.episodeNumber!) ||
-    (season === position.seasonNumber && episode === position.episodeNumber && end <= position.seconds);
+  // Opening episode N is not evidence that the viewer finished episode N-1.
+  return season === position.seasonNumber && episode === position.episodeNumber && end <= position.seconds;
 }
 
 export function safeEvidence(records: SubtitleRecord[], position: ViewingPosition): Evidence[] {
@@ -218,7 +218,13 @@ export function safeHistory<T extends Conversation>(rows: T[], position: Viewing
   return rows.filter(row => row.title_id === position.tmdbId && row.media_type === position.mediaType &&
     row.companion_version === COMPANION_VERSION && row.position_seconds !== null &&
     (position.mediaType === 'movie' || (row.season_number === position.seasonNumber && row.episode_number === position.episodeNumber)) &&
-    permittedPosition(row.season_number, row.episode_number, row.position_seconds, position))
+    permittedPosition(row.season_number, row.episode_number, row.position_seconds, position) &&
+    // Persisted answers from older retrieval may have a correctly scoped row
+    // but citations from another episode. Never restore those into chat or memory.
+    (row.evidence === undefined || (Array.isArray(row.evidence) && row.evidence.every(e => e &&
+      e.season === row.season_number && e.episode === row.episode_number &&
+      Number.isFinite(e.start) && e.start >= 0 && Number.isFinite(e.end) &&
+      e.end >= e.start && e.end <= row.position_seconds!))))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
@@ -231,6 +237,9 @@ export function conversationMemory(rows: Conversation[], position: ViewingPositi
 
 export function questionIntent(question: string): 'scene' | 'recap' | 'explanation' {
   if (/\b(recap|summari[sz]e|summary|(?:story|happened|happening) so far|story up to|up (?:to|until) (?:this|that|the) (?:point|moment))\b/i.test(question)) return 'recap';
+  // A temporal modifier on a specific question does not turn it into a scene recap.
+  if (/^\s*(?:why|who|whose|which|what does|what did|what do)\b/i.test(question) &&
+      !/^\s*what (?:does|did|do) (?:this|that|the) (?:scene|moment)\b/i.test(question)) return 'explanation';
   if (/\b(right now|this moment|this scene|what just happened|what'?s happening|what is happening)\b/i.test(question)) return 'scene';
   return 'explanation';
 }

@@ -9,6 +9,29 @@ const completion = (content: unknown, finish_reason = 'stop') => new Response(JS
 }));
 
 describe('OpenRouter companion transport', () => {
+  it.each(['companion_story_draft', 'companion_story_review'])('uses an instance-shaped JSON prompt for %s and rejects trailing garbage', async name => {
+    const schema = { type: 'object', properties: { facts: { type: 'array', maxItems: 3 } }, required: ['facts'], additionalProperties: false };
+    const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{"facts":[]}_json_0_0'));
+    expect(await openRouterGenerator('test-key', request)('Check evidence', 'Permitted dialogue', 900, 'analyst',
+      { type: 'json_schema', json_schema: { name, strict: true, schema } })).toBeNull();
+    const body = JSON.parse(request.mock.calls[0][1]!.body as string);
+    expect(body.response_format).toEqual({ type: 'json_object' });
+    expect(body.messages[0].content).toContain('"facts":[{');
+    expect(body.messages[0].content).toContain('never line ranges');
+    expect(body.messages[0].content).not.toContain(JSON.stringify(schema));
+    expect(body.messages[1].content).toBe('Permitted dialogue');
+    expect(body.provider.max_price).toEqual({ prompt: 0, completion: 0, request: 0 });
+    expect(request).toHaveBeenCalledOnce();
+  });
+  it('keeps interpretation analysis on the same free route with bounded private reasoning', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{"facts":[],"readings":[]}'));
+    await openRouterGenerator('test-key', request)('Analyze permitted dialogue', 'Source', 2200, 'analyst');
+    const body = JSON.parse(request.mock.calls[0][1]!.body as string);
+    expect(body.reasoning).toEqual({ enabled: true, exclude: true });
+    expect(body.max_tokens).toBe(2200 + 3072);
+    expect(body.provider).toMatchObject({ only: ['atlas-cloud/fp8'], allow_fallbacks: false,
+      max_price: { prompt: 0, completion: 0, request: 0 } });
+  });
   it('pins the free endpoint, disables paid routing and web plugins, and reads final JSON only', async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{"supported":true}'));
     expect(await openRouterGenerator('test-key', request)('Check evidence', 'Permitted dialogue', 900)).toEqual({ supported: true });
@@ -28,7 +51,7 @@ describe('OpenRouter companion transport', () => {
     expect(body.messages[1]).toEqual({ role: 'user', content: 'Permitted dialogue' });
   });
 
-  it.each([401, 402, 403, 429, 503])('does not retry status %i or reveal provider bodies', async status => {
+  it.each([400, 401, 402, 403, 429])('does not retry status %i or reveal provider bodies', async status => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('PRIVATE_BODY_test-key', {
@@ -39,6 +62,38 @@ describe('OpenRouter companion transport', () => {
       expect(request).toHaveBeenCalledOnce();
       expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE|test-key/);
     } finally { log.mockRestore(); }
+  });
+
+  it.each([502, 503, 504])('retries a transient %i once on the same free route', async status => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('PRIVATE', { status }))
+        .mockResolvedValueOnce(completion('{"supported":true}'));
+      expect(await openRouterGenerator('test-key', request)('Check', 'Question', 900)).toEqual({ supported: true });
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request.mock.calls[0][1]!.body).toEqual(request.mock.calls[1][1]!.body);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE');
+    } finally { log.mockRestore(); }
+  });
+  it('stops after a second gateway failure', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const request = vi.fn<typeof fetch>().mockImplementation(async () => new Response('', { status: 502 }));
+      await expect(openRouterGenerator('test-key', request)('Check', 'Question', 900)).rejects.toThrow('Unable');
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally { log.mockRestore(); }
+  });
+
+  it.each(['companion_detail_explanation', 'companion_detail_review'])('uses bounded reasoning and plain JSON for %s', async name => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(completion('{}'));
+    const purpose = name.endsWith('review') ? 'verifier' : 'writer';
+    await openRouterGenerator('test-key', request)('Check', 'Question', 900, purpose,
+      { type: 'json_schema', json_schema: { name, strict: true, schema: { type: 'object' } } });
+    const body = JSON.parse(request.mock.calls[0][1]!.body as string);
+    expect(body.response_format).toEqual({ type: 'json_object' });
+    expect(body.reasoning).toEqual({ enabled: true, exclude: true });
+    expect(body.max_tokens).toBe(900 + (purpose === 'verifier' ? 6144 : 3072));
+    expect(body.provider.max_price).toEqual({ prompt: 0, completion: 0, request: 0 });
   });
 
   it.each(['length', 'tool_calls', 'error'])('rejects %s even when the content is valid JSON', async reason => {
@@ -150,5 +205,27 @@ describe('OpenRouter companion transport', () => {
         openRouterGenerator('test-key', request))).rejects.toThrow('free AI service is currently rate-limited');
       expect(request).toHaveBeenCalledTimes(2);
     } finally { log.mockRestore(); }
+  });
+});
+
+it('retains each allowed caption, time and label in compact wire input', async () => {
+  const { storyWire } = await import('../supabase/functions/_shared/story-wire');
+  const lines = [{ id: 'P1:1', atSeconds: 10, explicitSpeaker: 'MIRA', text: '(MIRA) Keep it sealed.' },
+    { id: 'P1:2', atSeconds: 11, unidentifiedSpeaker: true, text: 'I have not agreed. [sighs]' }];
+  const input = { question: 'Why?', evidence: [{ id: 'P1', start: 10, end: 15, season: 1, episode: 2, lines }] };
+  const wire = JSON.parse(storyWire(JSON.stringify(input)));
+  expect(wire.evidence[0].lines).toEqual([['P1:1', 10, 'MIRA', lines[0].text], ['P1:2', 11, null, lines[1].text]]);
+});
+
+describe('bounded source references', () => {
+  it('rebuilds the full exchange, including an intervening denial', async () => {
+    const { unpackExchangeDraft } = await import('../supabase/functions/_shared/story-wire');
+    const input = JSON.stringify({evidence:[{id:'P1',start:1,end:3,lines:[{id:'P1:1',text:'Will you cover a shift?'},{id:'P1:2',text:'I have not agreed.'},{id:'P1:3',text:'Can we discuss it?'}]}]});
+    const fact = {state:'proposal',clause:'covering a shift',window:'E1'};
+    expect(unpackExchangeDraft({facts:[fact],readings:[]},input)).toEqual({facts:[{
+      state:'proposal',text:'A speaker proposes covering a shift.',sources:['P1:1','P1:2','P1:3']}],readings:[]});
+    for (const invalid of [{window:'E9'}, {from:'P1:3',through:'P1:1'}, {state:'completed'}, {state:{toString:null}}]) {
+      expect(unpackExchangeDraft({facts:[{...fact,...invalid}],readings:[]},input)).toEqual({facts:[null],readings:[]});
+    }
   });
 });

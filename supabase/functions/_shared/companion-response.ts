@@ -2,7 +2,7 @@ import { evidenceLabel, formatTimestamp, permittedEvidence, questionIntent, unav
   type Conversation, type Evidence, type ViewingPosition } from './companion.ts';
 import { isRelationshipQuestion } from './question-focus.ts';
 
-export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number };
+export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number; citations?: { paragraph: number; lineIds: string[] }[] };
 export type CheckedResponse = { answer: string; evidence: CitedEvidence[]; limited?: true };
 export type CompanionResponse = Omit<CheckedResponse, 'limited'> & { answer_status: 'answered' | 'insufficient_evidence'; charge: boolean };
 

@@ -91,6 +91,8 @@ describe('recaps cover the available prefix', () => {
     expect(coversRecap('Recap the story so far.', merged, rows)).toBe(false);
     expect(coversRecap('What is happening here?', merged, rows)).toBe(true);
     expect(coversRecap('Recap the story so far.', claims(['P1']), rows.slice(0, 2))).toBe(true);
+    expect(coversRecap('Recap the story so far.', claims(['P4']), rows.slice(0, 4))).toBe(false);
+    expect(coversRecap('Recap the story so far.', claims(['P1','P4']), rows.slice(0, 4))).toBe(true);
   });
   it('rejects unknown citations even when the shape looks chronological', () => {
     expect(coversRecap('Recap the story so far.', claims(['P1', 'P5', 'P99']), rows)).toBe(false);

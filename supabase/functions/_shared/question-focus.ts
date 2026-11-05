@@ -33,7 +33,12 @@ export function coversRecap(question: string, claims: GroundedDraft['claims'], e
   // Ignore sound-only passages and tiny exclamations when asking for breadth;
   // otherwise the model would be pressured to invent an event for a final gasp.
   const substantive = evidence.filter(item => (item.text.replace(/\[[^\]]*\]/g, '').match(/[\p{L}\p{N}]+/gu) ?? []).length >= 12);
-  if (substantive.length < 6) return true;
+  if (substantive.length < 6) {
+    // A short exchange can be explained in one point. A recap of several
+    // minutes cannot collapse to a single late event just because few people spoke.
+    if (substantive.length < 2 || substantive.at(-1)!.start - substantive[0].start < 90) return true;
+    return ids.includes(substantive[0].id) && ids.includes(substantive.at(-1)!.id);
+  }
   const early = new Set(substantive.slice(0, Math.ceil(substantive.length / 3)).map(item => item.id));
   const late = new Set(substantive.slice(Math.floor(substantive.length * 2 / 3)).map(item => item.id));
   return ids.length >= 3 && ids.some(id => early.has(id)) && ids.some(id => late.has(id));

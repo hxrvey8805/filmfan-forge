@@ -1,6 +1,8 @@
 import { formatTimestamp, permittedCues, promptConversation, questionIntent, unavailableMemoryReply,
   type Conversation, type Cue, type SubtitleRecord, type ViewingPosition } from './companion.ts';
 import type { JsonGenerator } from './answer.ts';
+import { noteExcerpt } from './note-excerpt.ts';
+import { broadDiscussion } from './exchange-commentary.ts';
 import { addressesNamedRelationship } from './question-focus.ts';
 
 // Editorial data from a service-role-only store, NEVER from the question body.
@@ -41,6 +43,9 @@ export interface PreparedSceneNote {
   contextIds: string[];
   limited?: true;
   validUntil?: number;
+  // Cue ordinals are local to this exact edition-checked note.
+  cueIds?: string[];
+  cueWords?: string[];
 }
 
 const cueKey = (cue: Cue) => JSON.stringify([cue.start, cue.end, cue.text]);
@@ -88,7 +93,7 @@ export function permittedSceneNotes(notes: ReviewedSceneNote[], records: Subtitl
     if (cues.some(cue => cue.start <= note.reveal_seconds && cue.end >= note.start_seconds && !anchors.has(cueKey(cue)))) continue;
     result.push({ id: note.id, tmdbId: note.tmdb_id, mediaType: note.media_type, season: note.season_number,
       episode: note.episode_number, start: note.start_seconds, end: note.reveal_seconds,
-      text: note.summary.trim(), uses: [...note.uses], topics: [...note.topics], contextIds: [...(note.context_ids ?? [])],
+      cueIds: [...anchors].map((_,i) => 'C'+(i+1)), cueWords: [...anchors].map(a=>JSON.parse(a)[2] as string), text: note.summary.trim(), uses: [...note.uses], topics: [...note.topics], contextIds: [...(note.context_ids ?? [])],
       ...(note.coverage === 'limited' ? { limited: true as const } : {}),
       ...(note.valid_until_seconds !== undefined ? { validUntil: note.valid_until_seconds } : {}) });
   }
@@ -135,15 +140,29 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
       position.seconds <= note.validUntil)));
   const eligible = scoped.filter(note => note.uses.includes(use) && expandContext([note], scoped) !== null);
   // Never trim a dense set in a way that silently loses recap milestones.
-  if (!eligible.length || eligible.length > (use === 'recap' ? 8 : 24) ||
-      JSON.stringify(eligible).length > 14000) return null;
-  const aliases = eligible.map((note, i) => ({ id: `N${i + 1}`, start: note.start, end: note.end, text: note.text, topics: note.topics,
+  if (!eligible.length || eligible.length > (use === 'recap' ? 8 : 24)) return null;
+  const specific = use === 'explanation' && !broadDiscussion(question);
+  const excerpts = new Map(eligible.map(note => [note.id, specific && note.cueWords?.length
+    ? noteExcerpt(question,position,note.text,note.cueWords) : null]));
+  // Index labels aren't facts. In particular, a character tag can name the
+  // speaker before the selected edition has actually introduced them.
+  const canon = (s: string) => ' ' + s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + ' ';
+  const safeTopics = (note: PreparedSceneNote) => {
+    const sources = [note.text, ...(note.cueWords ?? [])].map(canon);
+    return note.topics.filter(t => t.trim() && sources.some(s => s.includes(canon(t))));
+  };
+  const aliases = eligible.map((note, i) => ({ id: `N${i + 1}`, start: note.start, end: note.end, text: note.text, topics: safeTopics(note),
+    ...(excerpts.get(note.id) ? { dialogue: excerpts.get(note.id)!.text } : {}),
     ...(note.limited ? { coverage: 'limited' } : {}) }));
-  const conversation = promptConversation(history, position);
+  if (JSON.stringify(aliases).length > 14000) return null;
+  // Past interpretations are visible conversation, never story evidence. Only
+  // questions may help resolve the requested subject in this episode/prefix.
+  const conversation = promptConversation(history, position).map(({ question, seconds }) => ({ question, seconds }));
   let system = conversation.length ? `${SCENE_SELECTION_PROMPT}\nEarlier conversation resolves references only; it is not evidence. Select only facts from the supplied reviewed notes.` : SCENE_SELECTION_PROMPT;
   if (eligible.some(note => note.limited)) {
     system += '\nA note marked limited may give useful facts about the requested subject while explicitly leaving part unresolved. You may select it for that subject; it will remain a limited response, not a complete answer.';
   }
+  if (specific) system += '\nA dialogue field is an exact excerpt from the same reviewed span. You may select a note when that excerpt directly addresses the viewer, even if the summary focuses on another detail. If neither answers the question, select [].';
   const value = await generate(system, JSON.stringify({ question, position, intent: use, notes: aliases,
     ...(conversation.length ? { conversation } : {}) }), 300, 'writer', {
     type: 'json_schema', json_schema: { name: 'companion_note_selection', strict: true, schema: {
@@ -164,8 +183,9 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
   // No model-authored text is rendered or stored. One note keeps its complete
   // causal explanation, role attribution and qualifications as reviewed.
   return { answer: selected.map(note => use === 'scene' && note.end < Math.max(0, position.seconds - 30)
-    ? `Earlier (${formatTimestamp(note.start)}–${formatTimestamp(note.end)}): ${note.text}` : note.text).join('\n\n'), evidence: selected.map(note => ({
+    ? `Earlier (${formatTimestamp(note.start)}–${formatTimestamp(note.end)}): ${note.text}` : note.text + (excerpts.get(note.id) ? ' The dialogue puts it this way: “'+excerpts.get(note.id)!.text+'”' : '')).join('\n\n'), evidence: selected.map((note, i) => ({
     id: `reviewed:${note.id}`, label: `Reviewed caption note · ${formatTimestamp(note.start)}–${formatTimestamp(note.end)}`,
     season: position.seasonNumber ?? null, episode: position.episodeNumber ?? null, start: note.start, end: note.end,
+    ...(note.cueIds?.length ? { citations: [{ paragraph: i+1, lineIds: note.cueIds }] } : {}),
   })), ...(selected.some(note => note.limited) ? { limited: true as const } : {}) };
 }
