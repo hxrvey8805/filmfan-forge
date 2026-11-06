@@ -240,6 +240,9 @@ export function questionIntent(question: string): 'scene' | 'recap' | 'explanati
   // A temporal modifier on a specific question does not turn it into a scene recap.
   if (/^\s*(?:why|who|whose|which|what does|what did|what do)\b/i.test(question) &&
       !/^\s*what (?:does|did|do) (?:this|that|the) (?:scene|moment)\b/i.test(question)) return 'explanation';
+  // A yes/no question about a fact stays specific even when it contains
+  // "this scene" (for example, whether a masked identity is established).
+  if (/^\s*(?:has|have|is|are|was|were|did|does|do|can|could|will|would|should)\b/i.test(question)) return 'explanation';
   if (/\b(right now|this moment|this scene|what just happened|what'?s happening|what is happening)\b/i.test(question)) return 'scene';
   return 'explanation';
 }

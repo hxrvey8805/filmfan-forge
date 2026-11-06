@@ -2,12 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   COMPANION_VERSION, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
-  parseTimestamp, safeHistory, unavailableMemoryReply,
+  parseTimestamp, safeHistory,
   type Conversation, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
 
 import { companionAnswer } from "../_shared/answer.ts";
-import { companionResponse } from "../_shared/companion-response.ts";
+import { companionResponse, exactRepeatRequest, immediateMemoryResponse } from "../_shared/companion-response.ts";
 import { companionAnswerOptions, companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
 import { databaseSolBudget } from "../_shared/sol-budget.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
@@ -122,14 +122,17 @@ serve(async req => {
       }
       return json({ answer: prior.data.answer, conversation: prior.data, usedCoins: 0 });
     }
-    let historyQuery = userDb.from('ai_conversations').select('*').eq('title_id', tmdbId)
+    let historyQuery = userDb.from('ai_conversations').select('*').eq('user_id', user.id).eq('title_id', tmdbId)
       .eq('media_type', mediaType).eq('companion_version', COMPANION_VERSION)
-      .eq('answer_status', 'answered').lte('position_seconds', seconds);
+      .lte('position_seconds', seconds);
+    const repeat = exactRepeatRequest(question);
+    if (!repeat) historyQuery = historyQuery.eq('answer_status', 'answered');
     if (mediaType === 'tv') historyQuery = historyQuery.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
     const historyResult = await historyQuery.order('created_at', { ascending: false }).limit(30);
     if (historyResult.error) throw historyResult.error;
-    const memory = conversationMemory((historyResult.data ?? []) as Conversation[], position);
-    const memoryReply = unavailableMemoryReply(question.trim(), position, memory);
+    const rows = (historyResult.data ?? []) as Conversation[];
+    const memory = repeat ? safeHistory(rows, position) : conversationMemory(rows, position);
+    const memoryReply = immediateMemoryResponse(question.trim(), position, memory);
     let evidence: Evidence[] = [];
     let coverage: EvidenceCoverage | undefined;
     let notes: PreparedSceneNote[] = [];

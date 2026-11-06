@@ -1,4 +1,4 @@
-import { evidenceLabel, formatTimestamp, permittedEvidence, questionIntent, unavailableMemoryReply,
+import { evidenceLabel, formatTimestamp, permittedEvidence, questionIntent, safeHistory, unavailableMemoryReply,
   type Conversation, type Evidence, type ViewingPosition } from './companion.ts';
 import { isRelationshipQuestion } from './question-focus.ts';
 import { asksAboutDeath } from './visual-context.ts';
@@ -6,6 +6,32 @@ import { asksAboutDeath } from './visual-context.ts';
 export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number; citations?: { paragraph: number; lineIds: string[] }[] };
 export type CheckedResponse = { answer: string; evidence: CitedEvidence[]; limited?: true; sourceGap?: true };
 export type CompanionResponse = Omit<CheckedResponse, 'limited' | 'sourceGap'> & { answer_status: 'answered' | 'insufficient_evidence'; charge: boolean };
+
+export function exactRepeatRequest(question: string): boolean {
+  return /^(?:please\s+)?(?:(?:what (?:was|is)|what['’]s)|(?:(?:can|could|would) you )?(?:repeat|show me|remind me of)) (?:your|the) (?:last|previous) (?:answer|reply|response)(?: again)?(?: please)?[?.!]*$/i.test(question.trim());
+}
+
+// A literal repeat is a read of an already verified server-owned answer. A
+// question *about* that answer still takes the normal fresh-evidence path.
+export function immediateMemoryResponse(question: string, position: ViewingPosition, history: Conversation[]): CompanionResponse | null {
+  const unavailable = unavailableMemoryReply(question, position, history);
+  const limited = (answer: string): CompanionResponse => ({ answer, evidence: [], answer_status: 'insufficient_evidence', charge: false });
+  if (unavailable) return limited(unavailable);
+  if (!exactRepeatRequest(question)) return null;
+  const row = safeHistory(history, position)[0];
+  // Never silently substitute an older verified answer for a more recent
+  // limited one. Re-run the citation boundary check before copying anything.
+  if (!row || row.answer_status !== 'answered' || typeof row.answer !== 'string' || !row.answer.trim() ||
+      !Array.isArray(row.evidence) || !row.evidence.length || row.evidence.some(e => typeof e.id !== 'string' || !e.id || typeof e.label !== 'string')) {
+    return limited(`I don’t have a verified previous answer available to repeat at ${formatTimestamp(position.seconds)}.`);
+  }
+  const evidence: CitedEvidence[] = row.evidence.map(({ id, label, season, episode, start, end, citations }) => ({
+    id, label, season, episode, start, end, ...(Array.isArray(citations) && citations.every(c => c &&
+      Number.isInteger(c.paragraph) && c.paragraph > 0 && Array.isArray(c.lineIds) && c.lineIds.every((id: unknown) => typeof id === 'string'))
+      ? { citations: citations.map(({ paragraph, lineIds }) => ({ paragraph, lineIds: [...lineIds] })) } : {}),
+  }));
+  return { answer: row.answer, evidence, answer_status: 'answered', charge: false };
+}
 
 // A failed interpretation need not hide the available scene evidence. This is
 // deliberately an uncharged, limited response, never an accepted explanation
@@ -30,8 +56,8 @@ export function limitedSceneContext(question: string, position: ViewingPosition,
 // boundary always takes precedence over scene excerpts or a model result.
 export function companionResponse(question: string, position: ViewingPosition, evidence: Evidence[],
   history: Conversation[], checked: CheckedResponse | null): CompanionResponse {
-  const memoryReply = unavailableMemoryReply(question, position, history);
-  if (memoryReply) return { answer: memoryReply, evidence: [], answer_status: 'insufficient_evidence', charge: false };
+  const memoryReply = immediateMemoryResponse(question, position, history);
+  if (memoryReply) return memoryReply;
   // Missing dialogue cannot disprove a silent event or establish that its cause
   // is an intentional mystery. Preserve the distinction from an editor-verified
   // unresolved scene and from provider errors. Never recycle the rejected quote.

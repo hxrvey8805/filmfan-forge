@@ -15,10 +15,11 @@ import { directDialogue } from './direct-dialogue.ts';
 import { questionFit } from './question-fit.ts';
 import { storyExplanation } from './story-explanation.ts';
 import { detailExplanation } from './detail-explanation.ts';
+import { immediateMemoryResponse } from './companion-response.ts';
 
 export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier' | 'analyst', format?: AnswerFormat) => Promise<unknown>;
 
-export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'caption_limited' | 'reviewed_answered' | 'reviewed_limited' | 'dialogue_answered' | 'dialogue_limited' | 'story_explained' | 'provider_limited' | 'exchange_explained';
+export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'memory_recalled' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'caption_limited' | 'reviewed_answered' | 'reviewed_limited' | 'dialogue_answered' | 'dialogue_limited' | 'story_explained' | 'provider_limited' | 'exchange_explained';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
 
 // Public orchestration: reviewed notes, then a separately checked factual
@@ -27,8 +28,10 @@ export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number
 export async function companionAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
   observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = [], options: { experimentalCaptionWriter?: boolean; captionDiscussion?: boolean } = {}) {
   const permitted = permittedEvidence(evidence, position);
-  if (unavailableMemoryReply(question, position, history)) {
-    observe({ stage: 'memory_unavailable', evidenceCount: permitted.length, claimCount: 0, attempts: 0 }); return null;
+  const memoryResponse = immediateMemoryResponse(question, position, history);
+  if (memoryResponse) {
+    observe({ stage: memoryResponse.answer_status === 'answered' ? 'memory_recalled' : 'memory_unavailable',
+      evidenceCount: permitted.length, claimCount: 0, attempts: 0 }); return null;
   }
   let attempts = 0;
   const tracked: JsonGenerator = (...args) => { attempts++; return generate(...args); };
@@ -41,7 +44,13 @@ export async function companionAnswer(question: string, position: ViewingPositio
     if (reviewedNotes.some(note => note.basis === 'scene_prefix')) {
       const visual = await reviewedSceneAnswer(question, position, reviewedNotes, history, tracked,
         { visualOnly: questionIntent(question) !== 'recap' });
-      if (visual) {
+      // Verified source facts can still answer the wrong question. Apply the
+      // same independent relevance check as caption notes before accepting a
+      // visual selection. A reviewed unresolved state may be useful context;
+      // an unrelated event about the same character is not.
+      const fit = visual && specific ? await questionFit(question, visual.answer,
+        conversationMemory(history, position).map(row => row.question.slice(0, 400)), tracked) : null;
+      if (visual && (!specific || fit === 'direct' || visual.limited && fit === 'context')) {
         observe({ stage: visual.limited ? 'reviewed_limited' : 'reviewed_answered', evidenceCount: permitted.length,
           claimCount: visual.evidence.length, attempts });
         return visual;
@@ -76,8 +85,10 @@ export async function companionAnswer(question: string, position: ViewingPositio
         return explained;
       }
     }
-    if (reviewedNotes.length) {
-      const reviewed = await reviewedSceneAnswer(question, position, reviewedNotes, history, tracked);
+    // A rejected visual selection must not come back through the caption
+    // fallback (where a qualified caption note has different fit rules).
+    if (captionNotes.length) {
+      const reviewed = await reviewedSceneAnswer(question, position, captionNotes, history, tracked);
       if (reviewed) {
         // A relevant quotation cannot make a paragraph about a different exchange relevant.
         const explanationOnly = reviewed.answer.replace(/ The dialogue puts it this way: “[^\n]*”/g, '');

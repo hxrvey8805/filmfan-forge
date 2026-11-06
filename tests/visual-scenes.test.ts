@@ -25,11 +25,12 @@ const historyRow = (answer: string, overrides = {}): Conversation => ({ id: 'lat
 
 describe('independently reviewed visual scenes', () => {
   it('acknowledges a silent event before looking for contradictory older dialogue', async () => {
-    const ask = vi.fn().mockResolvedValue({ noteIds: ['N1'] });
+    const ask = vi.fn().mockResolvedValueOnce({ noteIds: ['N1'] })
+      .mockResolvedValueOnce({ fit: 'context', receipt: 'this episode has not identified the killer' });
     const answer = await companionAnswer('Who killed Mira?', p,
       [{ id: 'earlier', season: 1, episode: 1, start: 10, end: 12, text: '[00:00:10] Mira tried to kill me.' }],
       [], ask, undefined, undefined, prepare());
-    expect(ask).toHaveBeenCalledOnce();
+    expect(ask).toHaveBeenCalledTimes(2);
     expect(answer?.answer).toBe(note.summary);
     expect(answer?.evidence[0].label).toContain('Reviewed scene note');
     // Caption anchors identify the edition; they must not masquerade as citations
@@ -99,14 +100,29 @@ describe('independently reviewed visual scenes', () => {
     expect(result).toBeNull();
   });
 
+  it('does not promote a nearby verified visual fact into an identity answer', async () => {
+    const nearby = { ...prepare()[0], limited: undefined, knowledge: 'established' as const,
+      text: 'The masked visitor is climbing the wall. The climbing does not establish an identity.' };
+    const ask = vi.fn().mockResolvedValueOnce({ noteIds: ['N1'] })
+      .mockResolvedValueOnce({ fit: 'context', receipt: 'does not establish an identity' })
+      .mockResolvedValue(null);
+    const stages: string[] = [];
+    const answer = await companionAnswer('Has this scene established who the visitor is?', p, [], [], ask,
+      event => stages.push(event.stage), undefined, [nearby]);
+    expect(answer).toBeNull();
+    expect(stages).not.toContain('reviewed_answered');
+    expect(JSON.parse(ask.mock.calls[1][1]).answer).toBe(nearby.text);
+  });
+
   it('retains required caption context when giving a visual note first consideration', async () => {
     const caption: ReviewedSceneNote = { ...note, id: 'caption-context', scene_review: undefined,
       coverage: 'complete', valid_until_seconds: undefined, review: { ...note.review, basis: 'caption_prefix' },
       reveal_seconds: 48, summary: 'The speaker says only the caretaker knows.', uses: ['explanation'], topics: [] };
     const contextual = { ...note, context_ids: [caption.id] };
-    const ask = vi.fn().mockResolvedValue({ noteIds: ['N1'] });
+    const ask = vi.fn().mockResolvedValueOnce({ noteIds: ['N1'] })
+      .mockResolvedValueOnce({ fit: 'context', receipt: 'this episode has not identified the killer' });
     const answer = await companionAnswer('Who killed Mira?', p, [], [], ask, undefined, undefined, prepare([caption, contextual]));
-    expect(ask).toHaveBeenCalledOnce();
+    expect(ask).toHaveBeenCalledTimes(2);
     const packet = JSON.parse(ask.mock.calls[0][1]);
     expect(packet.notes).toHaveLength(1);
     expect(packet.notes[0].text).toBe(note.summary);
