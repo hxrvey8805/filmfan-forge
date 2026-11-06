@@ -8,7 +8,7 @@ import {
 
 import { companionAnswer } from "../_shared/answer.ts";
 import { companionResponse, exactRepeatRequest, immediateMemoryResponse } from "../_shared/companion-response.ts";
-import { companionAnswerOptions, companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
+import { companionReleaseFor, companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
 import { databaseSolBudget } from "../_shared/sol-budget.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 import { permittedSceneNotes, type ReviewedSceneNote, type PreparedSceneNote } from "../_shared/reviewed-scenes.ts";
@@ -49,7 +49,7 @@ async function ensureCurrentSubtitles(db: SupabaseClient, position: ViewingPosit
   }
 }
 
-async function retrieve(db: SupabaseClient, position: ViewingPosition, question: string, memory: Conversation[]) {
+async function retrieve(db: SupabaseClient, position: ViewingPosition, question: string, memory: Conversation[], noteTables: string[]) {
   const searchText = subtitleSearchText(question, memory, position);
   const [prefix, relevant] = await Promise.all([
     // Rank the permitted prefix at cue level, including the boundary chunk.
@@ -63,22 +63,16 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
   if (prefix.error) throw prefix.error;
   if (relevant.error) throw relevant.error;
   const records = [...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[];
-  let query = db.from('companion_scene_notes').select('note').eq('tmdb_id', position.tmdbId)
-    .eq('media_type', position.mediaType).lte('reveal_seconds', position.seconds);
-  if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
-  else query = query.is('season_number', null).is('episode_number', null);
-  let visualQuery = db.from('companion_visual_notes').select('note').eq('tmdb_id', position.tmdbId)
-    .eq('media_type', position.mediaType).lte('reveal_seconds', position.seconds);
-  if (position.mediaType === 'tv') visualQuery = visualQuery.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
-  else visualQuery = visualQuery.is('season_number', null).is('episode_number', null);
-  const [reviewed, visual] = await Promise.all([
-    query.order('reveal_seconds', { ascending: true }).limit(1000),
-    visualQuery.order('reveal_seconds', { ascending: true }).limit(1000),
-  ]);
-  if (reviewed.error) throw reviewed.error;
-  if (visual.error) throw visual.error;
-  // These notes come only from the service-role store, never the request body.
-  const notes = permittedSceneNotes([...(reviewed.data ?? []), ...(visual.data ?? [])].map(row => row.note) as ReviewedSceneNote[], records, position);
+  const batches = await Promise.all(noteTables.map(async table => {
+    let query = db.from(table).select('note').eq('tmdb_id', position.tmdbId)
+      .eq('media_type', position.mediaType).lte('reveal_seconds', position.seconds);
+    if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
+    else query = query.is('season_number', null).is('episode_number', null);
+    const { data, error } = await query.order('reveal_seconds', { ascending: true }).limit(1000);
+    if (error) throw error;
+    return (data ?? []).map(row => row.note as ReviewedSceneNote);
+  }));
+  const notes = permittedSceneNotes(batches.flat(), records, position);
   return { ...selectSceneContext(records, position, question, memory, companionEvidenceBudget(name => Deno.env.get(name))), notes };
 }
 
@@ -92,6 +86,7 @@ serve(async req => {
       { global: { headers: { Authorization: authorization } } });
     const { data: { user }, error: authError } = await userDb.auth.getUser();
     if (authError || !user) return json({ error: 'Please log in.' }, 401);
+    const release = companionReleaseFor(user, name => Deno.env.get(name));
     let body;
     try { body = await req.json(); } catch { return json({ error: 'Invalid request' }, 400); }
     const { tmdbId, mediaType, seasonNumber, episodeNumber, timestamp, question, requestId } = body;
@@ -139,7 +134,7 @@ serve(async req => {
     let notes: PreparedSceneNote[] = [];
     if (!memoryReply) {
       await ensureCurrentSubtitles(db, position);
-      ({ evidence, coverage, notes } = await retrieve(db, position, question.trim(), memory));
+      ({ evidence, coverage, notes } = await retrieve(db, position, question.trim(), memory, release.noteTables));
     }
     let checked = null;
     if (evidence.length || notes.length) {
@@ -147,7 +142,7 @@ serve(async req => {
         databaseSolBudget((name, args) => db.rpc(name, args), user.id, id));
       checked = await companionAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
-          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes, companionAnswerOptions(name => Deno.env.get(name)));
+          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes, release.answerOptions);
     }
     const response = companionResponse(question.trim(), position, evidence, memory, checked);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;

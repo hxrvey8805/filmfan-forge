@@ -9,6 +9,16 @@ export function companionAnswerOptions(env: (name: string) => string | undefined
   return { captionDiscussion: env('COMPANION_AI_PROVIDER')?.trim() === 'openrouter-sol' };
 }
 
+// The caller passes the user returned by Auth.getUser(), never the request
+// body or user-editable profile metadata.
+export function companionReleaseFor(user: { app_metadata: Record<string, unknown> }, env: (name: string) => string | undefined) {
+  const enrolled = user.app_metadata.cinegeek_visual_beta === true;
+  const noteTables = enrolled
+    ? ['companion_scene_notes', 'companion_visual_notes']
+    : ['companion_scene_notes'];
+  return { noteTables, answerOptions: { captionDiscussion: enrolled && companionAnswerOptions(env).captionDiscussion } };
+}
+
 export function companionEvidenceBudget(env: (name: string) => string | undefined): number {
   // The legacy Groq request-size cap must not silently remove whole exchanges
   // on the separately configured OpenRouter route. Keep both bounds explicit.

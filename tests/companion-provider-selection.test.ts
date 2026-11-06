@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { companionAnswerOptions, companionEvidenceBudget, companionGenerator } from '../supabase/functions/_shared/companion-provider';
+import { companionReleaseFor, companionAnswerOptions, companionEvidenceBudget, companionGenerator } from '../supabase/functions/_shared/companion-provider';
 
 const env = (values: Record<string, string>) => (name: string) => values[name];
 const completion = () => new Response(JSON.stringify({
@@ -7,6 +7,20 @@ const completion = () => new Response(JSON.stringify({
 }));
 
 describe('server companion provider selection', () => {
+  it('limits visual sources and expanded discussions to accounts enrolled by the server', () => {
+    const sol = env({ COMPANION_AI_PROVIDER: 'openrouter-sol' });
+    for (const flag of [undefined, false, 'true']) {
+      const account = { app_metadata: { cinegeek_visual_beta: flag }, user_metadata: { cinegeek_visual_beta: true } };
+      expect(companionReleaseFor(account, sol)).toEqual({
+        noteTables: ['companion_scene_notes'], answerOptions: { captionDiscussion: false },
+      });
+    }
+    const member = { app_metadata: { cinegeek_visual_beta: true } };
+    expect(companionReleaseFor(member, sol)).toEqual({
+      noteTables: ['companion_scene_notes', 'companion_visual_notes'], answerOptions: { captionDiscussion: true },
+    });
+    expect(companionReleaseFor(member, env({})).answerOptions.captionDiscussion).toBe(false);
+  });
   it('uses an explicit route-specific evidence budget without enlarging legacy Groq requests', () => {
     expect(companionEvidenceBudget(env({}))).toBe(8500);
     expect(companionEvidenceBudget(env({ COMPANION_AI_PROVIDER: 'groq' }))).toBe(8500);
