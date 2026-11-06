@@ -1,4 +1,4 @@
-import type { ViewingPosition } from './companion.ts';
+import { usableSubtitleEdition, type ViewingPosition } from './companion.ts';
 
 type TitlePosition = Omit<ViewingPosition, 'seconds'>;
 type SubtitleSearchResult = {
@@ -33,6 +33,7 @@ export function selectSubtitleFile(results: unknown, position: TitlePosition): n
     if (!a || !feature || a.language !== 'en' || a.foreign_parts_only || a.machine_translated || a.ai_translated ||
       a.files?.length !== 1 || (a.nb_cd !== undefined && a.nb_cd !== 1) ||
       (file?.cd_number !== undefined && file.cd_number !== 1) || !Number.isInteger(file?.file_id) || file!.file_id! <= 0) return false;
+    if (!usableSubtitleEdition(position, file!.file_id)) return false;
     // Reject split-disc files: their clock can restart in a later part of a film.
     return position.mediaType === 'movie'
       ? feature.feature_type === 'Movie' && feature.tmdb_id === position.tmdbId

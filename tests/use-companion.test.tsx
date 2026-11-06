@@ -60,6 +60,18 @@ describe('companion history and in-flight responses', () => {
     const hook = await mount();
     expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
   });
+  it('hides the quarantined episode history on entry and rewind; preserves the next episode',async () => {
+    const p={...position,tmdbId:66573,episodeNumber:1};
+    const rows=[row({id:'archived',title_id:66573,episode_number:1}),row({id:'new',title_id:66573,episode_number:1,companion_version:4}),row({id:'second',title_id:66573})];
+    mock.load.mockResolvedValue({data:rows,error:null});
+    const hook=await mount(p);
+    const ids=()=>hook.result.current.messages.map(m=>m.id);
+    expect(ids()).toEqual(['new']);
+    expect(mock.load).toHaveBeenLastCalledWith(expect.objectContaining({companion_version:4}));
+    hook.rerender({position:{...p,seconds:19},enabled:true});expect(ids()).toEqual([]);await flush();expect(ids()).toEqual([]);
+    hook.rerender({position:{...p,episodeNumber:2},enabled:true});await flush();expect(ids()).toEqual(['second']);
+    expect(mock.load).toHaveBeenLastCalledWith(expect.objectContaining({companion_version:3}));
+  });
   it('uses a new request ID after the server rejects an old cached answer version', async () => {
     mock.invoke.mockResolvedValueOnce({ error: { context: { json: async () => ({
       error: 'This saved answer predates the companion update. Please ask again.', code: 'answer_version_changed',

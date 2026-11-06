@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
-  COMPANION_VERSION, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
+  companionVersionFor, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
   parseTimestamp, safeHistory,
   type Conversation, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
@@ -105,11 +105,12 @@ serve(async req => {
     const position: ViewingPosition = { tmdbId, mediaType, seconds,
       ...(mediaType === 'tv' ? { seasonNumber, episodeNumber } : {}) };
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const answerVersion = companionVersionFor(position);
     const id = requestId ?? crypto.randomUUID();
     const prior = await userDb.from('ai_conversations').select('*').eq('id', id).maybeSingle();
     if (prior.error) throw prior.error;
     if (prior.data) {
-      if (prior.data.companion_version !== COMPANION_VERSION) {
+      if (prior.data.companion_version !== answerVersion) {
         return json({ error: 'This saved answer predates the companion update. Please ask again.', code: 'answer_version_changed' }, 409);
       }
       // An ID cannot be reused to retrieve a future or different title's answer.
@@ -123,7 +124,7 @@ serve(async req => {
       return json({ answer: prior.data.answer, conversation: prior.data, usedCoins: 0 });
     }
     let historyQuery = userDb.from('ai_conversations').select('*').eq('user_id', user.id).eq('title_id', tmdbId)
-      .eq('media_type', mediaType).eq('companion_version', COMPANION_VERSION)
+      .eq('media_type', mediaType).eq('companion_version', answerVersion)
       .lte('position_seconds', seconds);
     const repeat = exactRepeatRequest(question);
     if (!repeat) historyQuery = historyQuery.eq('answer_status', 'answered');
@@ -152,7 +153,7 @@ serve(async req => {
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
     const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: response.charge,
       p_conversation: { id, title_id: tmdbId, media_type: mediaType, season_number: position.seasonNumber ?? null,
-        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds), companion_version: COMPANION_VERSION,
+        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds), companion_version: answerVersion,
         question: question.trim(), answer: response.answer, context, evidence: response.evidence,
         answer_status: response.answer_status } });
     if (saved.error) {

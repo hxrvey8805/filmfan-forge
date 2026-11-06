@@ -1,4 +1,4 @@
-import { formatTimestamp, permittedCues, promptConversation, questionIntent, unavailableMemoryReply,
+import { formatTimestamp, usableSubtitleEdition, permittedCues, promptConversation, questionIntent, unavailableMemoryReply,
   type Conversation, type Cue, type SubtitleRecord, type ViewingPosition } from './companion.ts';
 import type { JsonGenerator } from './answer.ts';
 import { noteExcerpt } from './note-excerpt.ts';
@@ -121,6 +121,7 @@ export function permittedSceneNotes(notes: ReviewedSceneNote[], records: Subtitl
         note.anchors.some(cue => !validCue(cue) || cue.start < note.start_seconds || cue.end > note.reveal_seconds)) continue;
     // Caption-only reviews may omit a provider file ID for offline exports.
     // When present, never apply them to a replacement subtitle edition.
+    if (!usableSubtitleEdition(position, note.source_file_id)) continue;
     if (note.source_file_id !== null && (!Number.isInteger(note.source_file_id) || note.source_file_id <= 0)) continue;
     const cues = scoped.filter(row => note.source_file_id === null ||
       (row as SubtitleRecord & { source_file_id?: number }).source_file_id === note.source_file_id)

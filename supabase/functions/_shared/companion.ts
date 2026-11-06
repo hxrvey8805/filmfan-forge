@@ -13,6 +13,21 @@ export interface ViewingPosition {
   seconds: number;
 }
 
+// These two contexts had cached editions with an incorrect episode or clock.
+// Previous answers did not record their subtitle edition. A scoped revision
+// keeps those rows out of the UI, model memory and idempotent retries.
+export function companionVersionFor(position: Omit<ViewingPosition, 'seconds'>): number {
+  const affectedMovie = position.mediaType === 'movie' && position.tmdbId === 329865;
+  const affectedEpisode = position.mediaType === 'tv' && position.tmdbId === 66573 &&
+    position.seasonNumber === 1 && position.episodeNumber === 1;
+  return affectedMovie || affectedEpisode ? 4 : COMPANION_VERSION;
+}
+
+export function usableSubtitleEdition(position: Omit<ViewingPosition, 'seconds'>, fileId: number | null | undefined): boolean {
+  if (fileId === 4231334 || fileId === 1160602) return false;
+  return companionVersionFor(position) === COMPANION_VERSION || (Number.isSafeInteger(fileId) && fileId! > 0);
+}
+
 export interface Cue { start: number; end: number; text: string }
 export interface Evidence {
   id: string;
@@ -36,6 +51,7 @@ export interface SubtitleRecord {
   episode_number: number | null;
   ingestion_version: number;
   cues: unknown;
+  source_file_id?: number | null;
 }
 export interface Conversation {
   id: string;
@@ -206,7 +222,7 @@ export function safeEvidence(records: SubtitleRecord[], position: ViewingPositio
 // All retrieval paths share this gate, before any ranking or excerpt creation.
 export function permittedCues(record: SubtitleRecord, position: ViewingPosition): Cue[] {
   if (record.tmdb_id !== position.tmdbId || record.media_type !== position.mediaType ||
-      record.ingestion_version !== SUBTITLE_VERSION || !Array.isArray(record.cues)) return [];
+      record.ingestion_version !== SUBTITLE_VERSION || !usableSubtitleEdition(position, record.source_file_id) || !Array.isArray(record.cues)) return [];
   return (record.cues as Cue[]).filter(cue => cue &&
     Number.isFinite(cue.start) && cue.start >= 0 && Number.isFinite(cue.end) && cue.end >= cue.start &&
     typeof cue.text === 'string' && cue.text.trim().length > 0 &&
@@ -216,7 +232,7 @@ export function permittedCues(record: SubtitleRecord, position: ViewingPosition)
 
 export function safeHistory<T extends Conversation>(rows: T[], position: ViewingPosition): T[] {
   return rows.filter(row => row.title_id === position.tmdbId && row.media_type === position.mediaType &&
-    row.companion_version === COMPANION_VERSION && row.position_seconds !== null &&
+    row.companion_version === companionVersionFor(position) && row.position_seconds !== null &&
     (position.mediaType === 'movie' || (row.season_number === position.seasonNumber && row.episode_number === position.episodeNumber)) &&
     permittedPosition(row.season_number, row.episode_number, row.position_seconds, position) &&
     // Persisted answers from older retrieval may have a correctly scoped row

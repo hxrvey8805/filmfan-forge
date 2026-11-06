@@ -1,7 +1,8 @@
-import { chunkCues, formatTimestamp, SUBTITLE_VERSION, type Cue, type ViewingPosition } from './companion.ts';
+import { chunkCues, formatTimestamp, SUBTITLE_VERSION, usableSubtitleEdition, type Cue, type ViewingPosition } from './companion.ts';
 
 // The provider and offline reviewed-source importer publish the same cache shape.
 export function subtitleCacheRows(position: Omit<ViewingPosition, 'seconds'>, fileId: number | null, cues: Cue[]) {
+  if (!usableSubtitleEdition(position, fileId)) throw new Error('Unreliable subtitle edition');
   if (!Number.isSafeInteger(position.tmdbId) || position.tmdbId <= 0 ||
       !['movie', 'tv'].includes(position.mediaType) ||
       (position.mediaType === 'tv' && (!Number.isInteger(position.seasonNumber) || position.seasonNumber! < 0 ||
