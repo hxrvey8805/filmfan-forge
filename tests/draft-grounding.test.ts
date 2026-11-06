@@ -80,3 +80,12 @@ describe('speaker and question-name grounding', () => {
     expect(draftGroundingIssues('What does Élodie say?', draft('Élodie says to wait.', ['P1']), [passage('P1', 'Wait.')])).toEqual(['identity', 'speaker']);
   });
 });
+
+ it('recognizes sentence starts after closing quotes without licensing uncited names', () => {
+  expect(draftGroundingIssues('', draft('The reply says “no.” Against that refusal, the request sounds bold.'), rows)).not.toContain('identity');
+  expect(draftGroundingIssues('', draft('The reply says “no.” Mira disputes it.'), rows)).toContain('identity');
+ });
+ it('does not interpret a speaking adverb as the name of a speaker', () => {
+  expect(draftGroundingIssues('', draft('Strictly speaking, the reply is only a promise.'), rows)).not.toContain('speaker');
+  expect(draftGroundingIssues('', draft('Rowan is speaking about the king.'), rows)).toContain('speaker');
+ });

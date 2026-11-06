@@ -66,3 +66,55 @@ it('distinguishes leaving a question unresolved from physically leaving', () => 
   expect(unqualifiedCaptionAction('The denial leaves the issue unresolved.')).toBe(false);
   expect(unqualifiedCaptionAction('Someone leaves the room.')).toBe(true);
 });
+
+it.each([
+  'The instruction brings the conversation back to procedure.',
+  'The reminder reads as a return to responsible procedure.',
+  'The reply suggests they expected to find a familiar landmark.',
+])('allows a discourse metaphor or explicitly expected discovery: %s', text => {
+  expect(unqualifiedCaptionAction(text)).toBe(false);
+});
+
+it.each([
+  'Someone brings the bag back to the room.',
+  'Someone returns to the station.',
+  'They expected to find a landmark, but found a weapon.',
+  'The reminder brings the conversation back to procedure, and someone leaves.',
+  'Someone expected to find help and then arrived at the station.',
+])('still rejects a physical act beside an abstract or expected one: %s', text => {
+  expect(unqualifiedCaptionAction(text)).toBe(true);
+});
+
+it.each(['The exchange leaves the disagreement intact.', 'The truth arrives wrapped in a request for protection.'])(
+  'recognizes a nonphysical grammatical subject: %s', text => expect(unqualifiedCaptionAction(text)).toBe(false));
+it.each(['The visitor arrives wrapped in a blanket.', 'The reply leaves the disagreement intact, then someone leaves.'])(
+  'still checks actual physical subjects and later clauses: %s', text => expect(unqualifiedCaptionAction(text)).toBe(true));
+
+it('distinguishes abstract disagreement and a negated receipt from completed action', () => {
+  expect(unqualifiedCaptionAction('Appealing to the contract leaves the disputed difference intact.')).toBe(false);
+  expect(unqualifiedCaptionAction('Following one rule does not necessarily mean receiving equal shares.')).toBe(false);
+  expect(unqualifiedCaptionAction('Someone receives equal shares.')).toBe(true);
+  expect(unqualifiedCaptionAction('The exchange leaves the disagreement intact, then someone leaves the room.')).toBe(true);
+});
+
+it('distinguishes meaning hidden in language from physically hiding an object', () => {
+  expect(unqualifiedCaptionAction('The passage explains affection hidden inside an apparently ordinary exchange.')).toBe(false);
+  expect(unqualifiedCaptionAction('The meaning is hidden in the wording.')).toBe(false);
+  expect(unqualifiedCaptionAction('The meaning is hidden in the bag.')).toBe(true);
+  expect(unqualifiedCaptionAction('A weapon is hidden inside a book.')).toBe(true);
+  expect(unqualifiedCaptionAction('Affection hidden inside words contrasts with the person leaving.')).toBe(true);
+});
+
+it('keeps conditional acceptance separate from completed acceptance', () => {
+  expect(unqualifiedCaptionAction('Would accepting require pretending to be qualified?')).toBe(false);
+  expect(unqualifiedCaptionAction('Would taking the job mean pretending to be qualified?')).toBe(false);
+  expect(unqualifiedCaptionAction('Does accepting require pretending to be qualified?')).toBe(false);
+  expect(unqualifiedCaptionAction('The question is whether accepting requires a false credential.')).toBe(false);
+  expect(unqualifiedCaptionAction('Would accepting require a lie? Someone accepts anyway.')).toBe(true);
+  expect(unqualifiedCaptionAction('Someone accepted the offer.')).toBe(true);
+});
+
+it('treats remaining room for negotiation as a quantity, without excusing departures', () => {
+  expect(unqualifiedCaptionAction('There is little room left for bargaining.')).toBe(false);
+  expect(unqualifiedCaptionAction('There is no time left for debate, then someone left.')).toBe(true);
+});

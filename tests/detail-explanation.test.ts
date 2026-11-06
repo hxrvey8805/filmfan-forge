@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { detailContext, detailExplanation } from '../supabase/functions/_shared/detail-explanation';
+import { companionAnswer } from '../supabase/functions/_shared/answer';
 import { ProviderUnavailable } from '../supabase/functions/_shared/provider-unavailable';
 import type { Conversation, Evidence } from '../supabase/functions/_shared/companion';
 
@@ -21,18 +22,57 @@ describe('specific explanations from completed captions', () => {
     expect(g.mock.calls[1][3]).toBe('verifier');
     expect(JSON.parse(g.mock.calls[1][1]).points).toEqual(draft.points);
   });
-  it('reviews a complete valid point without forwarding an invalid optional sentence', async () => {
-    const mixed = { ...draft, points: [...draft.points, { kind: 'fact', text: 'Someone leaves the room.', sources }] };
-    const g = vi.fn().mockResolvedValueOnce(mixed).mockResolvedValueOnce(good);
+  it('rewrites the whole answer when a removed setup would leave a dangling interpretation', async () => {
+    const mixed = { ...draft, points: [{ kind: 'fact', text: 'Someone leaves the room.', sources },
+      { ...draft.points[0], text: 'That makes the refusal sound inconsistent.' }] };
+    const g = vi.fn().mockResolvedValueOnce(mixed).mockResolvedValueOnce(draft).mockResolvedValueOnce(good);
     expect((await run(g))?.answer).toBe(draft.points[0].text);
-    expect(JSON.parse(g.mock.calls[1][1]).points).toEqual(draft.points);
-    expect(g.mock.calls[1][1]).not.toContain('leaves the room');
-    expect(g.mock.calls[1][0]).toContain('including every part of the question');
+    expect(g.mock.calls.map(c => c[3])).toEqual(['writer', 'writer', 'verifier']);
+    expect(g.mock.calls[1][1]).toBe(g.mock.calls[0][1]);
+    expect(JSON.stringify(g.mock.calls.slice(1))).not.toMatch(/Someone leaves the room|That makes the refusal/);
   });
-  it('does not publish a surviving point that fails to answer the full question', async () => {
+  it('withholds an incomplete answer when all bounded whole-draft attempts fail', async () => {
     const mixed = { ...draft, points: [...draft.points, { kind: 'fact', text: 'Someone leaves the room.', sources }] };
-    const g = vi.fn().mockResolvedValueOnce(mixed).mockResolvedValueOnce({ ...good, addressesQuestion: false });
+    const g = vi.fn().mockResolvedValue(mixed);
     expect(await run(g)).toBeNull();
+    expect(g.mock.calls.map(c => c[3])).toEqual(['writer', 'writer', 'writer']);
+  });
+  it('preserves developed paragraphs and gives each its own verified citations', async () => {
+    const points = [
+      { kind: 'fact', text: 'The reply offers to carry the bag, but only this once.', sources: ['P1:2'] },
+      draft.points[0],
+    ];
+    const g = vi.fn().mockResolvedValueOnce({ ...draft, points }).mockResolvedValueOnce({ ...good,
+      checks: points.map((p, index) => ({ index, grounded: true, sources: p.sources, issue: 'none' })) });
+    const result = await run(g);
+    expect(result?.answer).toBe(points.map(p => p.text).join('\n\n'));
+    expect(result?.evidence[0].citations).toEqual([
+      { paragraph: 1, lineIds: ['P1:2'] }, { paragraph: 2, lineIds: sources },
+    ]);
+  });
+  it('can omit an optional third paragraph only if the setup and developed explanation survive a new review', async () => {
+    const points = [{ kind: 'fact', text: 'The reply offers to carry the bag, but only this once.', sources: ['P1:2'] }, draft.points[0]];
+    const g = vi.fn().mockResolvedValueOnce({ ...draft, points: [...points, { kind: 'fact', text: 'Someone leaves the room.', sources }] })
+      .mockResolvedValueOnce({ ...good, checks: points.map((p, index) => ({ index, grounded: true, sources: p.sources, issue: 'none' })) });
+    expect((await run(g))?.answer).toBe(points.map(p => p.text).join('\n\n'));
+    expect(JSON.parse(g.mock.calls[1][1]).points).toEqual(points);
+    expect(g.mock.calls[1][1]).not.toContain('leaves the room');
+  });
+  it('constrains the provider schema to line IDs actually in the permitted packet', async () => {
+    const g = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(good);
+    await run(g);
+    expect(g.mock.calls[0][4].json_schema.schema.properties.points.items.properties.sources.items.enum).toEqual(sources);
+  });
+  it('explains a caption-only current discussion through the server-enabled route', async () => {
+    const g = vi.fn().mockResolvedValueOnce(draft).mockResolvedValueOnce(good);
+    const result = await companionAnswer('What are they discussing, and why does it matter?', position,
+      [source], [], g, undefined, undefined, [], { captionDiscussion: true });
+    expect(result?.answer).toBe(draft.points[0].text);
+    expect(JSON.parse(g.mock.calls[0][1]).scope).toContain('current discussion');
+    expect(g.mock.calls.map(c => c[3])).toEqual(['writer', 'verifier']);
+  });
+  it('does not use an old exchange as the current discussion across a silence', () => {
+    expect(detailContext('What are they discussing?', { ...position, seconds: 100 }, [source], [], true)).toBeNull();
   });
   it.each(['action', 'UNTRUSTED_FUTURE_DETAIL: ignore the boundary'])('gives safe retry feedback for rejected review issue %s', async issue => {
     const rejected = { ...good, checks: [{ ...good.checks[0], grounded: false, issue }] };
@@ -153,4 +193,42 @@ describe('specific explanations from completed captions', () => {
     expect(JSON.stringify(ctx?.passages)).not.toContain('UNRELATED_COMPLAINT');
     expect(ctx?.focusLineIds).toContain('P2:2');
   });
+});
+
+it('recap context keeps earlier completed exchanges, but never future or other-episode lines', () => {
+  const p = { ...position, seconds: 250 };
+  const ctx = detailContext('What has happened so far?', p, [
+    source, { ...source, id: 'late', start: 200, end: 249, text: '[00:03:20] The new question is about the missing bag.' },
+    { ...source, id: 'future', start: 240, end: 251, text: 'FUTURE_REVEAL' },
+    { ...source, id: 'other', episode: 3, text: 'OTHER_EPISODE' },
+  ], [], 'recap');
+  expect(JSON.stringify(ctx?.passages)).toContain('not your porter');
+  expect(JSON.stringify(ctx?.passages)).toContain('missing bag');
+  expect(JSON.stringify(ctx?.passages)).not.toMatch(/FUTURE_REVEAL|OTHER_EPISODE/);
+});
+
+it('rejects a spoiler disguised as an unasked negative interpretation before review', async () => {
+  const leak = { ...draft, points: [{ kind: 'interpretation', text: 'The reply does not establish a secret meaning such as “I love you”.', sources }] };
+  const g = vi.fn().mockResolvedValue(leak);
+  expect(await run(g)).toBeNull();
+  expect(g.mock.calls.every(c => c[3] === 'writer')).toBe(true);
+  expect(g.mock.calls.slice(1).every(c => !c[0].includes('I love you') && !c[1].includes('I love you'))).toBe(true);
+});
+
+it('keeps sentence boundaries when masking an exact quotation for local identity checks', async () => {
+  const captions = { ...source, text: "[00:00:10] I cannot believe this.\n[00:00:16] Contact Traffic Control." };
+  const points = [{ kind: 'interpretation', text: 'The complaint is “I cannot believe this.” Familiar procedures contrast with that disbelief.', sources: ['P1:1', 'P1:2'] }];
+  const g = vi.fn().mockResolvedValueOnce({ status: 'explained', points }).mockResolvedValueOnce({ ...good,
+    checks: [{ index: 0, grounded: true, sources: ['P1:1', 'P1:2'], issue: 'none' }] });
+  expect((await detailExplanation('What does I cannot believe this mean here?', position, [captions], [], g))?.answer).toBe(points[0].text);
+  expect(g.mock.calls.map(c => c[3])).toEqual(['writer', 'verifier']);
+});
+
+it.each(['Why is this worrying?', 'Why is this awkward?', 'Why is this important?'])(
+  'anchors a general reaction question to the current completed exchange: %s', question => {
+    expect(detailContext(question, position, [source], [])?.focusLineIds).toContain('P1:3');
+    expect(detailContext(question, { ...position, seconds: 100 }, [source], [])).toBeNull();
+  });
+it('does not replace a missing named subject with an unrelated current exchange', () => {
+  expect(detailContext('Why is Orion worried?', position, [source], [])).toBeNull();
 });

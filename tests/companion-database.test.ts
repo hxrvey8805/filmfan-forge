@@ -34,6 +34,17 @@ beforeAll(async () => {
   await pg.exec(migration('20261015195500_companion_answer_revision'));
   await pg.exec(migration('20261019160000_reviewed_scene_notes'));
   await pg.exec(migration('20261104114500_scope_companion_search_to_episode'));
+  // Exercise an upgrade, including rows already served by the previous build.
+  for (const [id, media, season, episode, file] of [
+    [66573,'tv',1,1,4231334], [329865,'movie',null,null,1160602], [329865,'movie',null,null,null],
+    [66573,'tv',1,2,11568379],
+  ] as const) {
+    await pg.query(`INSERT INTO subtitle_chunks(tmdb_id,media_type,season_number,episode_number,
+      source_file_id,chunk_index,start_seconds,end_seconds,content,ingestion_version,cues)
+      VALUES ($1,$2,$3,$4,$5,0,0,1,'quarantine_probe',3,'[]')`, [id,media,season,episode,file]);
+    await save(answer({title_id:id,media_type:media,season_number:season,episode_number:episode}),false,otherUser);
+  }
+  await pg.exec(migration('20261106093000_quarantine_subtitle_editions'));
   await pg.exec('GRANT SELECT, INSERT ON public.ai_conversations TO authenticated');
   const fixtures = [
     ['tv', 1, 1, 800, 810, 'previous', 3],
@@ -104,6 +115,28 @@ async function save(payload = answer(), charge = true, owner = user) {
 }
 
 describe('database evidence retrieval', () => {
+  it('retires both bad editions and untraceable affected rows, without hiding the neighbouring episode',async () => {
+    const rows = await pg.query('SELECT source_file_id, ingestion_version FROM subtitle_chunks WHERE content=$1 ORDER BY source_file_id', ['quarantine_probe']);
+    expect(rows.rows).toEqual([1160602,4231334,11568379,null].map(file=>({source_file_id:file,ingestion_version:file===11568379?3:0})));
+    const read = async (id:number,type:string,ep:number) => (await pg.query(
+      "SELECT content FROM match_companion_chunks($1,$2,1,$3,5000,'quarantine_probe',NULL)",[id,type,ep])).rows;
+    expect(await read(66573,'tv',1)).toEqual([]);
+    expect(await read(329865,'movie',0)).toEqual([]);
+    expect(await read(66573,'tv',2)).toHaveLength(1);
+    await expect(pg.query("UPDATE subtitle_chunks SET ingestion_version=3 WHERE source_file_id=4231334")).rejects.toThrow(/companion_usable_edition/);
+  });
+  it('invalidates old cached answers; accepts fresh scoped history without charging stale retries',async () => {
+    const rows = (await pg.query<{id:string;title_id:number;episode_number:number|null;companion_version:number}>(
+      'SELECT id,title_id,episode_number,companion_version FROM ai_conversations WHERE user_id=$1',[otherUser])).rows;
+    expect(rows.filter(r=>r.episode_number!==2).map(r=>r.companion_version)).toEqual([2,2,2]);
+    expect(rows.find(r=>r.episode_number===2)?.companion_version).toBe(3);
+    const old = rows.find(r=>r.title_id===66573 && r.episode_number===1)!;
+    const fresh = answer({title_id:66573,episode_number:1,companion_version:4});
+    await expect(save({...fresh, companion_version:3},true,otherUser)).rejects.toThrow('upgrade required');
+    await expect(save({...fresh,id:old.id},true,otherUser)).rejects.toThrow('older companion version');
+    expect((await pg.query('SELECT questions_today FROM user_ai_usage WHERE user_id=$1',[otherUser])).rows).toEqual([{questions_today:0}]);
+    expect((await save(fresh,false,otherUser)).conversation.id).toBe(fresh.id);
+  });
   it('filters future cues, episodes, seasons, and legacy chunks before keyword or vector ranking', async () => {
     expect(await search('tv', 1, 2, 30)).toEqual(['exact', 'safe']);
     expect(await search('tv', 1, 2, 30, false)).toEqual(['exact', 'safe']);

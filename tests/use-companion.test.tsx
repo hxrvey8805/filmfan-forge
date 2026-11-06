@@ -60,6 +60,18 @@ describe('companion history and in-flight responses', () => {
     const hook = await mount();
     expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
   });
+  it('hides the quarantined episode history on entry and rewind; preserves the next episode',async () => {
+    const p={...position,tmdbId:66573,episodeNumber:1};
+    const rows=[row({id:'archived',title_id:66573,episode_number:1}),row({id:'new',title_id:66573,episode_number:1,companion_version:4}),row({id:'second',title_id:66573})];
+    mock.load.mockResolvedValue({data:rows,error:null});
+    const hook=await mount(p);
+    const ids=()=>hook.result.current.messages.map(m=>m.id);
+    expect(ids()).toEqual(['new']);
+    expect(mock.load).toHaveBeenLastCalledWith(expect.objectContaining({companion_version:4}));
+    hook.rerender({position:{...p,seconds:19},enabled:true});expect(ids()).toEqual([]);await flush();expect(ids()).toEqual([]);
+    hook.rerender({position:{...p,episodeNumber:2},enabled:true});await flush();expect(ids()).toEqual(['second']);
+    expect(mock.load).toHaveBeenLastCalledWith(expect.objectContaining({companion_version:3}));
+  });
   it('uses a new request ID after the server rejects an old cached answer version', async () => {
     mock.invoke.mockResolvedValueOnce({ error: { context: { json: async () => ({
       error: 'This saved answer predates the companion update. Please ask again.', code: 'answer_version_changed',
@@ -96,6 +108,25 @@ describe('companion history and in-flight responses', () => {
     expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
     hook.rerender({ position: { ...position, seconds: 0 }, enabled: true });
     expect(hook.result.current.messages).toEqual([]);
+  });
+  it('shows an unresolved visual answer only at its eligible episode and viewing point', async () => {
+    const visual = row({ id: 'visual-ending', position_seconds: 60, answer_status: 'insufficient_evidence',
+      answer: 'The visual ending raises an unresolved question.',
+      evidence: [{ id: 'reviewed:ending', label: 'Reviewed scene note', season: 1, episode: 2, start: 45, end: 60 }] });
+    mock.load.mockResolvedValue({ data: [row(), visual], error: null });
+    const hook = await mount();
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe', 'visual-ending']);
+    hook.rerender({ position: { ...position, seconds: 59 }, enabled: true });
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+    await flush();
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+    hook.rerender({ position: { ...position, episodeNumber: 1 }, enabled: true });
+    expect(hook.result.current.messages).toEqual([]);
+    await flush();
+    expect(hook.result.current.messages).toEqual([]);
+    hook.rerender({ position, enabled: true });
+    await flush();
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe', 'visual-ending']);
   });
   it('does not apply an old episode history response after switching to an earlier episode', async () => {
     const old = deferred<unknown>();

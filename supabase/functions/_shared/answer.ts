@@ -15,28 +15,49 @@ import { directDialogue } from './direct-dialogue.ts';
 import { questionFit } from './question-fit.ts';
 import { storyExplanation } from './story-explanation.ts';
 import { detailExplanation } from './detail-explanation.ts';
+import { immediateMemoryResponse } from './companion-response.ts';
 
 export type JsonGenerator = (system: string, user: string, maxTokens: number, purpose?: 'writer' | 'verifier' | 'analyst', format?: AnswerFormat) => Promise<unknown>;
 
-export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'caption_limited' | 'reviewed_answered' | 'reviewed_limited' | 'dialogue_answered' | 'dialogue_limited' | 'story_explained' | 'provider_limited' | 'exchange_explained';
+export type AnswerCheckStage = 'no_evidence' | 'memory_unavailable' | 'memory_recalled' | 'draft_invalid' | 'draft_insufficient' | 'draft_ungrounded' | 'verification_invalid' | 'verification_rejected' | 'answered' | 'answered_partial' | 'caption_limited' | 'reviewed_answered' | 'reviewed_limited' | 'dialogue_answered' | 'dialogue_limited' | 'story_explained' | 'provider_limited' | 'exchange_explained';
 export type AnswerDiagnostics = { stage: AnswerCheckStage; evidenceCount: number; claimCount: number; attempts: number };
 
 // Public orchestration: reviewed notes, then a separately checked factual
 // explanation + optional interpretation, then literal source context. A failed
 // draft never enters the fallback, a repair prompt, or later story memory.
 export async function companionAnswer(question: string, position: ViewingPosition, evidence: Evidence[], history: Conversation[], generate: JsonGenerator,
-  observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = [], options: { experimentalCaptionWriter?: boolean } = {}) {
+  observe: (event: AnswerDiagnostics) => void = () => {}, coverage?: EvidenceCoverage, reviewedNotes: PreparedSceneNote[] = [], options: { experimentalCaptionWriter?: boolean; captionDiscussion?: boolean } = {}) {
   const permitted = permittedEvidence(evidence, position);
-  if (unavailableMemoryReply(question, position, history)) {
-    observe({ stage: 'memory_unavailable', evidenceCount: permitted.length, claimCount: 0, attempts: 0 }); return null;
+  const memoryResponse = immediateMemoryResponse(question, position, history);
+  if (memoryResponse) {
+    observe({ stage: memoryResponse.answer_status === 'answered' ? 'memory_recalled' : 'memory_unavailable',
+      evidenceCount: permitted.length, claimCount: 0, attempts: 0 }); return null;
   }
   let attempts = 0;
   const tracked: JsonGenerator = (...args) => { attempts++; return generate(...args); };
   const broad = broadDiscussion(question);
   const specific = !broad && questionIntent(question) === 'explanation';
+  const captionNotes = reviewedNotes.filter(note => note.basis !== 'scene_prefix');
   try {
+    // A separately reviewed visual event must get a chance to answer before a
+    // keyword-matched older allegation can be mistaken for its correction.
+    if (reviewedNotes.some(note => note.basis === 'scene_prefix')) {
+      const visual = await reviewedSceneAnswer(question, position, reviewedNotes, history, tracked,
+        { visualOnly: questionIntent(question) !== 'recap' });
+      // Verified source facts can still answer the wrong question. Apply the
+      // same independent relevance check as caption notes before accepting a
+      // visual selection. A reviewed unresolved state may be useful context;
+      // an unrelated event about the same character is not.
+      const fit = visual && specific ? await questionFit(question, visual.answer,
+        conversationMemory(history, position).map(row => row.question.slice(0, 400)), tracked) : null;
+      if (visual && (!specific || fit === 'direct' || visual.limited && fit === 'context')) {
+        observe({ stage: visual.limited ? 'reviewed_limited' : 'reviewed_answered', evidenceCount: permitted.length,
+          claimCount: visual.evidence.length, attempts });
+        return visual;
+      }
+    }
     if (specific) {
-      const cited = reviewedAttribution(question, position, reviewedNotes);
+      const cited = reviewedAttribution(question, position, captionNotes);
       if (cited) {
         observe({ stage: 'reviewed_limited', evidenceCount: permitted.length, claimCount: 1, attempts });
         return cited;
@@ -50,8 +71,24 @@ export async function companionAnswer(question: string, position: ViewingPositio
         return reading;
       }
     }
-    if (reviewedNotes.length) {
-      const reviewed = await reviewedSceneAnswer(question, position, reviewedNotes, history, tracked);
+    // Use caption context for developed discussion answers. Preserve reviewed
+    // recaps with checked chronology and attribution when they are available.
+    // Titles without recap notes can still use the checked caption-only path.
+    if (options.captionDiscussion === true && (broad || questionIntent(question) === 'scene') &&
+        !(questionIntent(question) === 'recap' && reviewedNotes.some(note => note.uses.includes('recap')))) {
+      const explained = questionIntent(question) === 'recap'
+        ? await detailExplanation(question, position, permitted, history, tracked, 'recap')
+        : await detailExplanation(question, position, permitted, history, tracked, true);
+      if (explained) {
+        observe({ stage: broad ? 'exchange_explained' : 'story_explained', evidenceCount: permitted.length,
+          claimCount: explained.evidence.length, attempts });
+        return explained;
+      }
+    }
+    // A rejected visual selection must not come back through the caption
+    // fallback (where a qualified caption note has different fit rules).
+    if (captionNotes.length) {
+      const reviewed = await reviewedSceneAnswer(question, position, captionNotes, history, tracked);
       if (reviewed) {
         // A relevant quotation cannot make a paragraph about a different exchange relevant.
         const explanationOnly = reviewed.answer.replace(/ The dialogue puts it this way: “[^\n]*”/g, '');
@@ -72,7 +109,7 @@ export async function companionAnswer(question: string, position: ViewingPositio
       observe({ stage: 'no_evidence', evidenceCount: 0, claimCount: 0, attempts }); return null;
     }
     if (specific) {
-      const direct = await directDialogue(question, position, permitted, history, tracked, reviewedNotes);
+      const direct = await directDialogue(question, position, permitted, history, tracked, captionNotes);
       if (direct) {
         observe({ stage: direct.limited ? 'dialogue_limited' : 'dialogue_answered', evidenceCount: permitted.length,
           claimCount: direct.evidence.length, attempts });
@@ -80,11 +117,12 @@ export async function companionAnswer(question: string, position: ViewingPositio
       }
       const excerpt = localCaptionExcerpts(question, position, permitted);
       observe({ stage: 'caption_limited', evidenceCount: permitted.length, claimCount: excerpt?.evidence.length ?? 0, attempts });
-      return excerpt;
+      return excerpt && { ...excerpt, sourceGap: true as const };
     }
-    // Free caption-only commentary still fails the manual release suite. Only the
-    // private replay opts in. No request body or provider output can enable it.
-    const explanation = broad ? (options.experimentalCaptionWriter === true
+    // The Sol route can explain caption-only discussions with the same independent
+    // source checks as specific questions. The old free experiment stays gated.
+    // Only server configuration, never a request body, enables either path.
+    const explanation = broad ? (options.experimentalCaptionWriter === true && options.captionDiscussion !== true
       ? await exchangeCommentary(question, position, permitted, history, tracked) : null)
       : await storyExplanation(question, position, permitted, history, tracked, coverage);
     if (explanation) {
@@ -101,7 +139,7 @@ export async function companionAnswer(question: string, position: ViewingPositio
   const excerpts = localCaptionExcerpts(question, position, permitted);
   observe({ stage: excerpts ? 'caption_limited' : 'draft_insufficient', evidenceCount: permitted.length,
     claimCount: excerpts?.evidence.length ?? 0, attempts });
-  return excerpts;
+  return excerpts && { ...excerpts, sourceGap: true as const };
 }
 
 // Retained for adversarial/regression evaluation of the old paraphrase path.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { COMPANION_VERSION, safeHistory, type Conversation, type ViewingPosition } from '../../supabase/functions/_shared/companion';
+import { companionVersionFor, safeHistory, type Conversation, type ViewingPosition } from '../../supabase/functions/_shared/companion';
 
 export interface CompanionMessage extends Conversation {
   evidence: { id: string; label: string; start: number; end: number }[];
@@ -43,7 +43,7 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
     const timer = setTimeout(async () => {
       let query = supabase.from('ai_conversations').select('*').eq('user_id', userId)
         .eq('title_id', tmdbId).eq('media_type', mediaType)
-        .eq('companion_version', COMPANION_VERSION).lte('position_seconds', seconds);
+        .eq('companion_version', companionVersionFor({ tmdbId, mediaType, seasonNumber, episodeNumber })).lte('position_seconds', seconds);
       if (mediaType === 'tv') query = query.eq('season_number', seasonNumber!).eq('episode_number', episodeNumber!);
       const { data, error } = await query.order('created_at', { ascending: false }).limit(30);
       if (!active) return;

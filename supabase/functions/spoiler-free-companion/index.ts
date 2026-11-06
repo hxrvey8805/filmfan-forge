@@ -1,14 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
-  COMPANION_VERSION, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
-  parseTimestamp, safeHistory, unavailableMemoryReply,
+  companionVersionFor, SUBTITLE_VERSION, conversationMemory, formatTimestamp,
+  parseTimestamp, safeHistory,
   type Conversation, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
 
 import { companionAnswer } from "../_shared/answer.ts";
-import { companionResponse } from "../_shared/companion-response.ts";
-import { companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
+import { companionResponse, exactRepeatRequest, immediateMemoryResponse } from "../_shared/companion-response.ts";
+import { companionReleaseFor, companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
 import { databaseSolBudget } from "../_shared/sol-budget.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 import { permittedSceneNotes, type ReviewedSceneNote, type PreparedSceneNote } from "../_shared/reviewed-scenes.ts";
@@ -49,7 +49,7 @@ async function ensureCurrentSubtitles(db: SupabaseClient, position: ViewingPosit
   }
 }
 
-async function retrieve(db: SupabaseClient, position: ViewingPosition, question: string, memory: Conversation[]) {
+async function retrieve(db: SupabaseClient, position: ViewingPosition, question: string, memory: Conversation[], noteTables: string[]) {
   const searchText = subtitleSearchText(question, memory, position);
   const [prefix, relevant] = await Promise.all([
     // Rank the permitted prefix at cue level, including the boundary chunk.
@@ -63,14 +63,16 @@ async function retrieve(db: SupabaseClient, position: ViewingPosition, question:
   if (prefix.error) throw prefix.error;
   if (relevant.error) throw relevant.error;
   const records = [...(prefix.data ?? []), ...(relevant.data ?? [])] as unknown as SubtitleRecord[];
-  let query = db.from('companion_scene_notes').select('note').eq('tmdb_id', position.tmdbId)
-    .eq('media_type', position.mediaType).lte('reveal_seconds', position.seconds);
-  if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
-  else query = query.is('season_number', null).is('episode_number', null);
-  const reviewed = await query.order('reveal_seconds', { ascending: true }).limit(1000);
-  if (reviewed.error) throw reviewed.error;
-  // These notes come only from the service-role store, never the request body.
-  const notes = permittedSceneNotes((reviewed.data ?? []).map(row => row.note) as ReviewedSceneNote[], records, position);
+  const batches = await Promise.all(noteTables.map(async table => {
+    let query = db.from(table).select('note').eq('tmdb_id', position.tmdbId)
+      .eq('media_type', position.mediaType).lte('reveal_seconds', position.seconds);
+    if (position.mediaType === 'tv') query = query.eq('season_number', position.seasonNumber!).eq('episode_number', position.episodeNumber!);
+    else query = query.is('season_number', null).is('episode_number', null);
+    const { data, error } = await query.order('reveal_seconds', { ascending: true }).limit(1000);
+    if (error) throw error;
+    return (data ?? []).map(row => row.note as ReviewedSceneNote);
+  }));
+  const notes = permittedSceneNotes(batches.flat(), records, position);
   return { ...selectSceneContext(records, position, question, memory, companionEvidenceBudget(name => Deno.env.get(name))), notes };
 }
 
@@ -84,6 +86,7 @@ serve(async req => {
       { global: { headers: { Authorization: authorization } } });
     const { data: { user }, error: authError } = await userDb.auth.getUser();
     if (authError || !user) return json({ error: 'Please log in.' }, 401);
+    const release = companionReleaseFor(user, name => Deno.env.get(name));
     let body;
     try { body = await req.json(); } catch { return json({ error: 'Invalid request' }, 400); }
     const { tmdbId, mediaType, seasonNumber, episodeNumber, timestamp, question, requestId } = body;
@@ -97,11 +100,12 @@ serve(async req => {
     const position: ViewingPosition = { tmdbId, mediaType, seconds,
       ...(mediaType === 'tv' ? { seasonNumber, episodeNumber } : {}) };
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const answerVersion = companionVersionFor(position);
     const id = requestId ?? crypto.randomUUID();
     const prior = await userDb.from('ai_conversations').select('*').eq('id', id).maybeSingle();
     if (prior.error) throw prior.error;
     if (prior.data) {
-      if (prior.data.companion_version !== COMPANION_VERSION) {
+      if (prior.data.companion_version !== answerVersion) {
         return json({ error: 'This saved answer predates the companion update. Please ask again.', code: 'answer_version_changed' }, 409);
       }
       // An ID cannot be reused to retrieve a future or different title's answer.
@@ -114,34 +118,37 @@ serve(async req => {
       }
       return json({ answer: prior.data.answer, conversation: prior.data, usedCoins: 0 });
     }
-    let historyQuery = userDb.from('ai_conversations').select('*').eq('title_id', tmdbId)
-      .eq('media_type', mediaType).eq('companion_version', COMPANION_VERSION)
-      .eq('answer_status', 'answered').lte('position_seconds', seconds);
+    let historyQuery = userDb.from('ai_conversations').select('*').eq('user_id', user.id).eq('title_id', tmdbId)
+      .eq('media_type', mediaType).eq('companion_version', answerVersion)
+      .lte('position_seconds', seconds);
+    const repeat = exactRepeatRequest(question);
+    if (!repeat) historyQuery = historyQuery.eq('answer_status', 'answered');
     if (mediaType === 'tv') historyQuery = historyQuery.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
     const historyResult = await historyQuery.order('created_at', { ascending: false }).limit(30);
     if (historyResult.error) throw historyResult.error;
-    const memory = conversationMemory((historyResult.data ?? []) as Conversation[], position);
-    const memoryReply = unavailableMemoryReply(question.trim(), position, memory);
+    const rows = (historyResult.data ?? []) as Conversation[];
+    const memory = repeat ? safeHistory(rows, position) : conversationMemory(rows, position);
+    const memoryReply = immediateMemoryResponse(question.trim(), position, memory);
     let evidence: Evidence[] = [];
     let coverage: EvidenceCoverage | undefined;
     let notes: PreparedSceneNote[] = [];
     if (!memoryReply) {
       await ensureCurrentSubtitles(db, position);
-      ({ evidence, coverage, notes } = await retrieve(db, position, question.trim(), memory));
+      ({ evidence, coverage, notes } = await retrieve(db, position, question.trim(), memory, release.noteTables));
     }
     let checked = null;
-    if (evidence.length) {
+    if (evidence.length || notes.length) {
       const generate = companionGenerator(name => Deno.env.get(name), fetch,
         databaseSolBudget((name, args) => db.rpc(name, args), user.id, id));
       checked = await companionAnswer(question.trim(), position, evidence, memory, generate,
         diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
-          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes);
+          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes, release.answerOptions);
     }
     const response = companionResponse(question.trim(), position, evidence, memory, checked);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
     const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: response.charge,
       p_conversation: { id, title_id: tmdbId, media_type: mediaType, season_number: position.seasonNumber ?? null,
-        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds), companion_version: COMPANION_VERSION,
+        episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds), companion_version: answerVersion,
         question: question.trim(), answer: response.answer, context, evidence: response.evidence,
         answer_status: response.answer_status } });
     if (saved.error) {

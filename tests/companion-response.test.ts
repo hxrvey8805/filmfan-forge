@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { companionResponse, limitedSceneContext } from '../supabase/functions/_shared/companion-response';
+import { companionResponse, exactRepeatRequest, immediateMemoryResponse, limitedSceneContext } from '../supabase/functions/_shared/companion-response';
 import { conversationMemory, safeHistory, type Conversation, type Evidence, type ViewingPosition } from '../supabase/functions/_shared/companion';
 import { selectSceneContext } from '../supabase/functions/_shared/scene-evidence';
 
@@ -10,6 +10,32 @@ const recent: Evidence = { id: 'recent', season: 1, episode: 2, start: 281, end:
 const conversation = (overrides = {}): Conversation => ({ id: 'a', title_id: 1, media_type: 'tv', season_number: 1, episode_number: 2,
   position_seconds: 300, companion_version: 3, question, answer: 'FUTURE_MEMORY_SENTINEL', context: '', timestamp: '00:05:00',
   created_at: '2026-10-16T10:00:00Z', answer_status: 'answered', ...overrides });
+
+describe('literal repeats of verified answers', () => {
+  const source = { id: 'reviewed:window', label: 'Reviewed scene', season: 1, episode: 2, start: 275, end: 299 };
+  const row = conversation({ answer: 'The window is open.', evidence: [source] });
+  const repeat = 'What was your last answer?';
+  it('returns the exact eligible text and sources for free after returning to the episode', () => {
+    const rows = [row, conversation({ id: 'wrong', episode_number: 1, answer: 'WRONG_EPISODE' })];
+    const result = companionResponse(repeat, position, [], rows, { answer: 'MODEL_GUESS', evidence: [] });
+    expect(result).toEqual({ answer: row.answer, evidence: [source], answer_status: 'answered', charge: false });
+    for (const p of [{ ...position, seconds: 299 }, { ...position, episodeNumber: 3 }, { ...position, tmdbId: 9 }]) {
+      expect(immediateMemoryResponse(repeat, p, rows)).toMatchObject({ answer_status: 'insufficient_evidence', evidence: [], charge: false });
+    }
+  });
+  it('does not replay an older answer in place of the latest limited one, or replay uncited text', () => {
+    const newer = { ...row, id: 'later', created_at: '2026-10-17T00:00:00Z', answer_status: 'insufficient_evidence' };
+    for (const rows of [[row, newer], [{ ...row, evidence: [] }], [{ ...row, evidence: [{ ...source, end: 301 }] }]]) {
+      expect(immediateMemoryResponse(repeat, position, rows)).toMatchObject({ answer_status: 'insufficient_evidence', charge: false });
+    }
+  });
+  it('never interprets a new question or a combined request as a verbatim repeat', () => {
+    expect(exactRepeatRequest('Could you repeat your previous reply please?')).toBe(true);
+    for (const question of ['Why did you say that in your last answer?', 'Repeat your last answer and tell me who did it.']) {
+      expect(immediateMemoryResponse(question, position, [row])).toBeNull();
+    }
+  });
+});
 
 describe('limited caption responses after an unverified explanation', () => {
   it('shows complete recent captions without inventing successful actions, identities or causes', () => {

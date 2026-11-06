@@ -1,4 +1,4 @@
-import { formatTimestamp, permittedCues, promptConversation, questionIntent, unavailableMemoryReply,
+import { formatTimestamp, usableSubtitleEdition, permittedCues, promptConversation, questionIntent, unavailableMemoryReply,
   type Conversation, type Cue, type SubtitleRecord, type ViewingPosition } from './companion.ts';
 import type { JsonGenerator } from './answer.ts';
 import { noteExcerpt } from './note-excerpt.ts';
@@ -26,7 +26,17 @@ export interface ReviewedSceneNote {
   topics: string[];
   context_ids?: string[];
   anchors: Cue[];
-  review: { status: 'reviewed'; basis: 'caption_prefix'; reference: string; reviewed_at: string };
+  review: { status: 'reviewed'; basis: 'caption_prefix' | 'scene_prefix'; reference: string; reviewed_at: string };
+  // Separate visual review from caption matching: anchors establish the edition,
+  // not the truth or first visible time of a silent event. Episode reviews may
+  // only unlock at the reviewed end boundary, never an estimated scene time.
+  scene_review?: {
+    kind: 'released_video' | 'audio_description' | 'episode_review';
+    availability: 'timed_scene' | 'episode_end';
+    reviewed_through_seconds: number;
+    knowledge: 'established' | 'unresolved';
+    references: { url: string; locator: string }[];
+  };
 }
 
 export interface PreparedSceneNote {
@@ -43,6 +53,8 @@ export interface PreparedSceneNote {
   contextIds: string[];
   limited?: true;
   validUntil?: number;
+  basis?: 'scene_prefix';
+  knowledge?: 'established' | 'unresolved';
   // Cue ordinals are local to this exact edition-checked note.
   cueIds?: string[];
   cueWords?: string[];
@@ -51,6 +63,35 @@ export interface PreparedSceneNote {
 const cueKey = (cue: Cue) => JSON.stringify([cue.start, cue.end, cue.text]);
 const validCue = (cue: Cue) => cue && Number.isFinite(cue.start) && cue.start >= 0 &&
   Number.isFinite(cue.end) && cue.end >= cue.start && typeof cue.text === 'string' && cue.text.trim().length > 0;
+
+function referenceHost(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 1500) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password && url.hostname ? url.hostname : null;
+  } catch { return null; }
+}
+
+function validSceneReview(note: ReviewedSceneNote): boolean {
+  if (note.review?.basis === 'caption_prefix') return note.scene_review === undefined;
+  const review = note.scene_review;
+  if (!review || !Number.isInteger(note.source_file_id) || note.source_file_id! <= 0 ||
+      !['released_video', 'audio_description', 'episode_review'].includes(review.kind) ||
+      !['timed_scene', 'episode_end'].includes(review.availability) ||
+      !['established', 'unresolved'].includes(review.knowledge) ||
+      !Number.isFinite(review.reviewed_through_seconds) || review.reviewed_through_seconds < note.reveal_seconds ||
+      review.reviewed_through_seconds > 43200 ||
+      !Array.isArray(review.references) || !review.references.length || review.references.length > 6 ||
+      review.references.some(ref => !ref || !referenceHost(ref.url) ||
+        typeof ref.locator !== 'string' || !ref.locator.trim() || ref.locator.length > 1000)) return false;
+  if (review.kind === 'episode_review' && (review.availability !== 'episode_end' ||
+      review.reviewed_through_seconds !== note.reveal_seconds ||
+      new Set(review.references.map(ref => referenceHost(ref.url))).size < 2)) return false;
+  // "Unknown at this point" is a reviewed story state with an expiry, not an
+  // inference from missing dialogue. Never keep it alive past its review.
+  return review.knowledge !== 'unresolved' || note.coverage === 'limited' &&
+    note.valid_until_seconds !== undefined && note.valid_until_seconds <= review.reviewed_through_seconds;
+}
 
 export function permittedSceneNotes(notes: ReviewedSceneNote[], records: SubtitleRecord[], position: ViewingPosition): PreparedSceneNote[] {
   const scoped = records.filter(row => row.tmdb_id === position.tmdbId && row.media_type === position.mediaType &&
@@ -62,7 +103,7 @@ export function permittedSceneNotes(notes: ReviewedSceneNote[], records: Subtitl
     if (!note || !/^[a-zA-Z0-9_-]{1,100}$/.test(note.id) || duplicateIds.has(note.id) ||
         note.tmdb_id !== position.tmdbId || note.media_type !== position.mediaType ||
         note.season_number !== (position.seasonNumber ?? null) || note.episode_number !== (position.episodeNumber ?? null) ||
-        note.review?.status !== 'reviewed' || note.review.basis !== 'caption_prefix' ||
+        note.review?.status !== 'reviewed' || !['caption_prefix', 'scene_prefix'].includes(note.review.basis) || !validSceneReview(note) ||
         typeof note.review.reference !== 'string' || !note.review.reference.trim() ||
         typeof note.review.reviewed_at !== 'string' || !Number.isFinite(Date.parse(note.review.reviewed_at)) ||
         !Number.isFinite(note.start_seconds) || note.start_seconds < 0 || !Number.isFinite(note.reveal_seconds) ||
@@ -80,6 +121,7 @@ export function permittedSceneNotes(notes: ReviewedSceneNote[], records: Subtitl
         note.anchors.some(cue => !validCue(cue) || cue.start < note.start_seconds || cue.end > note.reveal_seconds)) continue;
     // Caption-only reviews may omit a provider file ID for offline exports.
     // When present, never apply them to a replacement subtitle edition.
+    if (!usableSubtitleEdition(position, note.source_file_id)) continue;
     if (note.source_file_id !== null && (!Number.isInteger(note.source_file_id) || note.source_file_id <= 0)) continue;
     const cues = scoped.filter(row => note.source_file_id === null ||
       (row as SubtitleRecord & { source_file_id?: number }).source_file_id === note.source_file_id)
@@ -94,6 +136,7 @@ export function permittedSceneNotes(notes: ReviewedSceneNote[], records: Subtitl
     result.push({ id: note.id, tmdbId: note.tmdb_id, mediaType: note.media_type, season: note.season_number,
       episode: note.episode_number, start: note.start_seconds, end: note.reveal_seconds,
       cueIds: [...anchors].map((_,i) => 'C'+(i+1)), cueWords: [...anchors].map(a=>JSON.parse(a)[2] as string), text: note.summary.trim(), uses: [...note.uses], topics: [...note.topics], contextIds: [...(note.context_ids ?? [])],
+      ...(note.review.basis === 'scene_prefix' ? { basis: 'scene_prefix' as const, knowledge: note.scene_review!.knowledge } : {}),
       ...(note.coverage === 'limited' ? { limited: true as const } : {}),
       ...(note.valid_until_seconds !== undefined ? { validUntil: note.valid_until_seconds } : {}) });
   }
@@ -128,7 +171,7 @@ For a recap, include every supplied recap note, in chronological order. For a cu
 For an explanation, choose only notes explaining the requested cause or subject. Keep qualifications and uncertainty intact: the server will display the complete reviewed wording.`;
 
 export async function reviewedSceneAnswer(question: string, position: ViewingPosition, notes: PreparedSceneNote[],
-  history: Conversation[], generate: JsonGenerator) {
+  history: Conversation[], generate: JsonGenerator, options: { visualOnly?: boolean } = {}) {
   if (unavailableMemoryReply(question, position, history)) return null;
   const intent = questionIntent(question);
   const use = intent === 'recap' ? 'recap' : intent === 'scene' ? 'scene' : 'explanation';
@@ -138,12 +181,13 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
     note.end <= position.seconds && (!note.limited || note.validUntil !== undefined) &&
     (note.validUntil === undefined || (Number.isFinite(note.validUntil) && note.validUntil >= note.end &&
       position.seconds <= note.validUntil)));
-  const eligible = scoped.filter(note => note.uses.includes(use) && expandContext([note], scoped) !== null);
+  const eligible = scoped.filter(note => (!options.visualOnly || note.basis === 'scene_prefix') &&
+    note.uses.includes(use) && expandContext([note], scoped) !== null);
   // Never trim a dense set in a way that silently loses recap milestones.
   if (!eligible.length || eligible.length > (use === 'recap' ? 8 : 24)) return null;
   const specific = use === 'explanation' && !broadDiscussion(question);
   const excerpts = new Map(eligible.map(note => [note.id, specific && note.cueWords?.length
-    ? noteExcerpt(question,position,note.text,note.cueWords) : null]));
+    && note.basis !== 'scene_prefix' ? noteExcerpt(question,position,note.text,note.cueWords) : null]));
   // Index labels aren't facts. In particular, a character tag can name the
   // speaker before the selected edition has actually introduced them.
   const canon = (s: string) => ' ' + s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + ' ';
@@ -163,6 +207,7 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
     system += '\nA note marked limited may give useful facts about the requested subject while explicitly leaving part unresolved. You may select it for that subject; it will remain a limited response, not a complete answer.';
   }
   if (specific) system += '\nA dialogue field is an exact excerpt from the same reviewed span. You may select a note when that excerpt directly addresses the viewer, even if the summary focuses on another detail. If neither answers the question, select [].';
+  if (eligible.some(note => note.basis === 'scene_prefix')) system += '\nThese notes include independently reviewed visual events. A visual event does not require spoken confirmation. Select an unresolved note only for the exact event and question it leaves open; do not substitute it for a different identity or cause. An unresolved identity must remain unresolved. Never suggest suspects or theories. Earlier dialogue about the same name does not contradict a later visual observation.';
   const value = await generate(system, JSON.stringify({ question, position, intent: use, notes: aliases,
     ...(conversation.length ? { conversation } : {}) }), 300, 'writer', {
     type: 'json_schema', json_schema: { name: 'companion_note_selection', strict: true, schema: {
@@ -184,8 +229,8 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
   // causal explanation, role attribution and qualifications as reviewed.
   return { answer: selected.map(note => use === 'scene' && note.end < Math.max(0, position.seconds - 30)
     ? `Earlier (${formatTimestamp(note.start)}–${formatTimestamp(note.end)}): ${note.text}` : note.text + (excerpts.get(note.id) ? ' The dialogue puts it this way: “'+excerpts.get(note.id)!.text+'”' : '')).join('\n\n'), evidence: selected.map((note, i) => ({
-    id: `reviewed:${note.id}`, label: `Reviewed caption note · ${formatTimestamp(note.start)}–${formatTimestamp(note.end)}`,
+    id: `reviewed:${note.id}`, label: `Reviewed ${note.basis === 'scene_prefix' ? 'scene' : 'caption'} note · ${formatTimestamp(note.start)}–${formatTimestamp(note.end)}`,
     season: position.seasonNumber ?? null, episode: position.episodeNumber ?? null, start: note.start, end: note.end,
-    ...(note.cueIds?.length ? { citations: [{ paragraph: i+1, lineIds: note.cueIds }] } : {}),
+    ...(note.basis !== 'scene_prefix' && note.cueIds?.length ? { citations: [{ paragraph: i+1, lineIds: note.cueIds }] } : {}),
   })), ...(selected.some(note => note.limited) ? { limited: true as const } : {}) };
 }

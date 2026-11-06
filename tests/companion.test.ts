@@ -164,6 +164,8 @@ describe('conversation memory and answer validation', () => {
     expect(questionIntent('What is the defendant doing?')).toBe('explanation');
     expect(questionIntent('What is happening right now?')).toBe('scene');
     expect(questionIntent('Give me a recap so far')).toBe('recap');
+    expect(questionIntent('Has this scene established who the masked visitor is?')).toBe('explanation');
+    expect(questionIntent('Is he actually injured in this scene?')).toBe('explanation');
     expect(questionIntent('What do we know about Maximus and his relationship with the emperor so far?')).toBe('explanation');
   });
   it('rejects fabricated or missing evidence IDs', () => {
