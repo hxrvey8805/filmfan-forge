@@ -1,4 +1,5 @@
 // Pure helpers shared by the edge function, browser history, and regression tests.
+import { cutGroup, wholeShowRecap } from './cut-scope.ts';
 import { modelCaptionLines } from './caption-lines.ts';
 // Older checked answers predate the current grounding contract and must not
 // re-enter visible history, prompt memory, or idempotent request responses.
@@ -20,7 +21,8 @@ export function companionVersionFor(position: Omit<ViewingPosition, 'seconds'>):
   const affectedMovie = position.mediaType === 'movie' && position.tmdbId === 329865;
   const affectedEpisode = position.mediaType === 'tv' && position.tmdbId === 66573 &&
     position.seasonNumber === 1 && position.episodeNumber === 1;
-  return affectedMovie || affectedEpisode ? 4 : COMPANION_VERSION;
+  if (affectedEpisode && cutGroup(position)) return 5;
+  return affectedMovie ? 4 : COMPANION_VERSION;
 }
 
 export function usableSubtitleEdition(position: Omit<ViewingPosition, 'seconds'>, fileId: number | null | undefined): boolean {
@@ -202,7 +204,16 @@ function permittedPosition(season: number | null, episode: number | null, end: n
   return season === position.seasonNumber && episode === position.episodeNumber && end <= position.seconds;
 }
 
+// Never join words from different clocks into a single apparent conversation.
+export function conflictingEditions(records: SubtitleRecord[], p: ViewingPosition) {
+  const ids = new Set(records.filter(r => r.tmdb_id === p.tmdbId && r.media_type === p.mediaType &&
+    r.season_number === (p.seasonNumber ?? null) && r.episode_number === (p.episodeNumber ?? null) &&
+    r.ingestion_version === SUBTITLE_VERSION && usableSubtitleEdition(p, r.source_file_id)).map(r => r.source_file_id ?? null));
+  return ids.size > 1;
+}
+
 export function safeEvidence(records: SubtitleRecord[], position: ViewingPosition): Evidence[] {
+  if (conflictingEditions(records, position)) return [];
   const evidence: Evidence[] = [];
   const seen = new Set<string>();
   for (const record of records) {
@@ -221,6 +232,7 @@ export function safeEvidence(records: SubtitleRecord[], position: ViewingPositio
 
 // All retrieval paths share this gate, before any ranking or excerpt creation.
 export function permittedCues(record: SubtitleRecord, position: ViewingPosition): Cue[] {
+  if (cutGroup(position)) return [];
   if (record.tmdb_id !== position.tmdbId || record.media_type !== position.mediaType ||
       record.ingestion_version !== SUBTITLE_VERSION || !usableSubtitleEdition(position, record.source_file_id) || !Array.isArray(record.cues)) return [];
   return (record.cues as Cue[]).filter(cue => cue &&
@@ -238,9 +250,12 @@ export function safeHistory<T extends Conversation>(rows: T[], position: Viewing
     // Persisted answers from older retrieval may have a correctly scoped row
     // but citations from another episode. Never restore those into chat or memory.
     (row.evidence === undefined || (Array.isArray(row.evidence) && row.evidence.every(e => e &&
-      e.season === row.season_number && e.episode === row.episode_number &&
-      Number.isFinite(e.start) && e.start >= 0 && Number.isFinite(e.end) &&
-      e.end >= e.start && e.end <= row.position_seconds!))))
+      Number.isFinite(e.start) && e.start >= 0 && Number.isFinite(e.end) && e.end >= e.start && (
+        (e.season === row.season_number && e.episode === row.episode_number && e.end <= row.position_seconds!) ||
+        (row.media_type === 'tv' && wholeShowRecap(row.question) && Number.isInteger(e.season) && e.season >= 0 &&
+          Number.isInteger(e.episode) && e.episode >= 1 && e.end <= 43200 &&
+          (e.season < row.season_number! || (e.season === row.season_number && e.episode < row.episode_number!)) &&
+          typeof e.id === 'string' && e.id.startsWith('series:'+row.title_id+':'+e.season+':'+e.episode+':v'+companionVersionFor({tmdbId:row.title_id,mediaType:'tv',seasonNumber:e.season,episodeNumber:e.episode})+':')))))))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
@@ -252,7 +267,7 @@ export function conversationMemory(rows: Conversation[], position: ViewingPositi
 }
 
 export function questionIntent(question: string): 'scene' | 'recap' | 'explanation' {
-  if (/\b(recap|summari[sz]e|summary|(?:story|happened|happening) so far|story up to|up (?:to|until) (?:this|that|the) (?:point|moment))\b/i.test(question)) return 'recap';
+  if (wholeShowRecap(question) || /\b(catch me up|recap|summari[sz]e|summary|(?:story|happened|happening) so far|story up to|what(?: has)? happened (?:up (?:to|until)|before))\b/i.test(question)) return 'recap';
   // A temporal modifier on a specific question does not turn it into a scene recap.
   if (/^\s*(?:why|who|whose|which|what does|what did|what do)\b/i.test(question) &&
       !/^\s*what (?:does|did|do) (?:this|that|the) (?:scene|moment)\b/i.test(question)) return 'explanation';

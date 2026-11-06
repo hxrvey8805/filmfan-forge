@@ -1,5 +1,5 @@
 import { parseSubtitles, SubtitleParseError, type ViewingPosition } from './companion.ts';
-import { selectSubtitleFile, subtitleSearchParams } from './subtitle-source.ts';
+import { mentionsAlternateCut, selectSubtitleFile, subtitleSearchParams } from './subtitle-source.ts';
 
 export type SubtitleFailure = 'quota_exceeded' | 'rate_limited' | 'provider_error';
 const messages: Record<SubtitleFailure, string> = {
@@ -49,7 +49,9 @@ export async function loadSubtitleFile(position: Omit<ViewingPosition, 'seconds'
     params.sort();
     const search = await request(`https://api.opensubtitles.com/api/v1/subtitles?${params}`,
       { headers: apiHeaders }, 'search');
-    let fileId = selectSubtitleFile((await search.json()).data, position);
+    const matches = (await search.json()).data;
+    if (mentionsAlternateCut(matches, position)) return null;
+    let fileId = selectSubtitleFile(matches, position);
     // Search SDH explicitly so popular dialogue-only files cannot push caption
     // tracks off the first results page. Fall back only when no eligible SDH
     // exists, never on a provider failure or quota error. Still one download.
@@ -57,7 +59,9 @@ export async function loadSubtitleFile(position: Omit<ViewingPosition, 'seconds'
       params.set('hearing_impaired', 'include');
       const fallback = await request(`https://api.opensubtitles.com/api/v1/subtitles?${params}`,
         { headers: apiHeaders }, 'search');
-      fileId = selectSubtitleFile((await fallback.json()).data, position);
+      const additional = (await fallback.json()).data;
+      if (mentionsAlternateCut(additional, position)) return null;
+      fileId = selectSubtitleFile(additional, position);
     }
     if (!fileId) return null;
     // One download per import: do not exhaust a daily quota by retrying POSTs.

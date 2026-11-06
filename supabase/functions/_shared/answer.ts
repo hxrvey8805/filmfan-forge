@@ -1,3 +1,6 @@
+import { prefixRecap } from './prefix-recap.ts';
+import { cutGroup } from './cut-scope.ts';
+import { sharedCutAnswer } from './shared-cut-story.ts';
 import { conversationMemory, questionIntent, buildPrompts, evidenceLabel, permittedEvidence, unavailableMemoryReply, validateDraft,
   type Conversation, type Evidence, type EvidenceCoverage, type ViewingPosition } from './companion.ts';
 import { repairInstruction, verificationEvidence, verifiedSelection, VERIFICATION_PROMPT, type VerificationIssue } from './verification.ts';
@@ -33,27 +36,50 @@ export async function companionAnswer(question: string, position: ViewingPositio
     observe({ stage: memoryResponse.answer_status === 'answered' ? 'memory_recalled' : 'memory_unavailable',
       evidenceCount: permitted.length, claimCount: 0, attempts: 0 }); return null;
   }
+  // History belongs to the explicit repeat path. Every story question starts fresh.
+  history = [];
   let attempts = 0;
   const tracked: JsonGenerator = (...args) => { attempts++; return generate(...args); };
   const broad = broadDiscussion(question);
   const specific = !broad && questionIntent(question) === 'explanation';
+  // A review covering only the opening cannot stand in for a whole-prefix recap.
+  if (questionIntent(question) === 'recap' && permitted.length >= 3) {
+    const start = permitted[0].start, end = permitted.at(-1)!.end, third = (end-start)/3;
+    const beats = reviewedNotes.filter(n => n.uses.includes('recap'));
+    if (end-start > 120 && !(beats.some(n => n.start <= start+third) && beats.some(n => n.end >= end-third))) {
+      reviewedNotes = reviewedNotes.filter(n => !n.uses.includes('recap'));
+    }
+  }
   const captionNotes = reviewedNotes.filter(note => note.basis !== 'scene_prefix');
   try {
+    if (cutGroup(position)) {
+      if (options.captionDiscussion) return await sharedCutAnswer(question, position, tracked);
+      return {answer:'The cuts of this episode differ, so I can’t confirm the scene at this timestamp.', evidence:[], limited:true as const};
+    }
     // A separately reviewed visual event must get a chance to answer before a
     // keyword-matched older allegation can be mistaken for its correction.
     if (reviewedNotes.some(note => note.basis === 'scene_prefix')) {
+      const explainVisual = options.captionDiscussion === true && questionIntent(question) !== 'recap';
       const visual = await reviewedSceneAnswer(question, position, reviewedNotes, history, tracked,
-        { visualOnly: questionIntent(question) !== 'recap' });
+        { visualOnly: questionIntent(question) !== 'recap', explainVisual });
       // Verified source facts can still answer the wrong question. Apply the
       // same independent relevance check as caption notes before accepting a
       // visual selection. A reviewed unresolved state may be useful context;
       // an unrelated event about the same character is not.
-      const fit = visual && specific ? await questionFit(question, visual.answer,
+      const fit = visual && specific && !explainVisual ? await questionFit(question, visual.answer,
         conversationMemory(history, position).map(row => row.question.slice(0, 400)), tracked) : null;
-      if (visual && (!specific || fit === 'direct' || visual.limited && fit === 'context')) {
+      if (visual && (explainVisual || !specific || fit === 'direct' || visual.limited && fit === 'context')) {
         observe({ stage: visual.limited ? 'reviewed_limited' : 'reviewed_answered', evidenceCount: permitted.length,
           claimCount: visual.evidence.length, attempts });
         return visual;
+      }
+    }
+    if (options.captionDiscussion && questionIntent(question) === 'recap' && permitted.length &&
+        !captionNotes.some(note => note.uses.includes('recap'))) {
+      const recap = await prefixRecap(question,position,permitted,tracked);
+      if (recap) {
+        observe({stage:'story_explained',evidenceCount:permitted.length,claimCount:recap.evidence.length,attempts});
+        return recap;
       }
     }
     if (specific) {
@@ -74,7 +100,7 @@ export async function companionAnswer(question: string, position: ViewingPositio
     // Use caption context for developed discussion answers. Preserve reviewed
     // recaps with checked chronology and attribution when they are available.
     // Titles without recap notes can still use the checked caption-only path.
-    if (options.captionDiscussion === true && (broad || questionIntent(question) === 'scene') &&
+    if (options.captionDiscussion === true && (broad || questionIntent(question) === 'scene' || questionIntent(question) === 'recap') &&
         !(questionIntent(question) === 'recap' && reviewedNotes.some(note => note.uses.includes('recap')))) {
       const explained = questionIntent(question) === 'recap'
         ? await detailExplanation(question, position, permitted, history, tracked, 'recap')
@@ -122,7 +148,7 @@ export async function companionAnswer(question: string, position: ViewingPositio
     // The Sol route can explain caption-only discussions with the same independent
     // source checks as specific questions. The old free experiment stays gated.
     // Only server configuration, never a request body, enables either path.
-    const explanation = broad ? (options.experimentalCaptionWriter === true && options.captionDiscussion !== true
+    const explanation = broad ? (options.experimentalCaptionWriter === true || (options.captionDiscussion === true && questionIntent(question) !== 'recap')
       ? await exchangeCommentary(question, position, permitted, history, tracked) : null)
       : await storyExplanation(question, position, permitted, history, tracked, coverage);
     if (explanation) {
@@ -131,10 +157,13 @@ export async function companionAnswer(question: string, position: ViewingPositio
     }
   } catch (error) {
     if (!(error instanceof ProviderUnavailable)) throw error;
-    const excerpts = error.canShowSource ? localCaptionExcerpts(question, position, permitted) : null;
+    const excerpts = error.canShowSource && questionIntent(question) !== 'recap' ? localCaptionExcerpts(question, position, permitted) : null;
     observe({ stage: 'provider_limited', evidenceCount: permitted.length, claimCount: excerpts?.evidence.length ?? 0, attempts });
     if (excerpts) return { ...excerpts, answer: error.message + '\n\n' + excerpts.answer };
     return { limited: true as const, answer: error.message, evidence: [] };
+  }
+  if (options.captionDiscussion && questionIntent(question) === 'recap') {
+    return {answer:'I couldn’t verify a recap covering the beginning through this point.', evidence:[], limited:true as const};
   }
   const excerpts = localCaptionExcerpts(question, position, permitted);
   observe({ stage: excerpts ? 'caption_limited' : 'draft_insufficient', evidenceCount: permitted.length,

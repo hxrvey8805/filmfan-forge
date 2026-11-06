@@ -1,3 +1,6 @@
+import { episodeRevision, priorEpisodes, seriesRecap } from '../_shared/series-recap.ts';
+import type { CheckedResponse } from '../_shared/companion-response.ts';
+import { cutGroup, wholeShowRecap } from '../_shared/cut-scope.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -14,6 +17,8 @@ import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidenc
 import { permittedSceneNotes, type ReviewedSceneNote, type PreparedSceneNote } from "../_shared/reviewed-scenes.ts";
 
 import { assertSubtitlePreparation, SubtitleProviderError } from "../_shared/subtitle-provider.ts";
+
+class RecapPreparing extends Error {}
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -93,12 +98,16 @@ serve(async req => {
     const seconds = parseTimestamp(timestamp);
     if (!Number.isInteger(tmdbId) || tmdbId <= 0 || !['tv', 'movie'].includes(mediaType) ||
         seconds === null || typeof question !== 'string' || !question.trim() || question.length > 2000 ||
-        (mediaType === 'tv' && (!Number.isInteger(seasonNumber) || seasonNumber < 0 || !Number.isInteger(episodeNumber) || episodeNumber < 1)) ||
+        (mediaType === 'tv' && (!Number.isInteger(seasonNumber) || seasonNumber < 0 || seasonNumber > 200 || !Number.isInteger(episodeNumber) || episodeNumber < 1 || episodeNumber > 5000)) ||
         (requestId !== undefined && (typeof requestId !== 'string' || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestId)))) {
       return json({ error: 'Choose a title and episode, enter a valid MM:SS or HH:MM:SS timestamp, and ask a question (up to 2,000 characters).' }, 400);
     }
     const position: ViewingPosition = { tmdbId, mediaType, seconds,
       ...(mediaType === 'tv' ? { seasonNumber, episodeNumber } : {}) };
+    const fullShow = mediaType === 'tv' && wholeShowRecap(question);
+    if (fullShow && (!release.answerOptions.captionDiscussion || body.recapProtocol !== 1)) {
+      return json({error:'Whole-show recaps are available in the updated CineGeek private beta.'},409);
+    }
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const answerVersion = companionVersionFor(position);
     const id = requestId ?? crypto.randomUUID();
@@ -118,31 +127,82 @@ serve(async req => {
       }
       return json({ answer: prior.data.answer, conversation: prior.data, usedCoins: 0 });
     }
-    let historyQuery = userDb.from('ai_conversations').select('*').eq('user_id', user.id).eq('title_id', tmdbId)
-      .eq('media_type', mediaType).eq('companion_version', answerVersion)
-      .lte('position_seconds', seconds);
-    const repeat = exactRepeatRequest(question);
-    if (!repeat) historyQuery = historyQuery.eq('answer_status', 'answered');
-    if (mediaType === 'tv') historyQuery = historyQuery.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
-    const historyResult = await historyQuery.order('created_at', { ascending: false }).limit(30);
-    if (historyResult.error) throw historyResult.error;
-    const rows = (historyResult.data ?? []) as Conversation[];
-    const memory = repeat ? safeHistory(rows, position) : conversationMemory(rows, position);
+    let memory: Conversation[] = [];
+    if (exactRepeatRequest(question)) {
+      let query = userDb.from('ai_conversations').select('*').eq('user_id', user.id).eq('title_id', tmdbId)
+        .eq('media_type', mediaType).eq('companion_version', answerVersion).lte('position_seconds', seconds);
+      if (mediaType === 'tv') query = query.eq('season_number', seasonNumber).eq('episode_number', episodeNumber);
+      const result = await query.order('created_at', { ascending: false }).limit(30);
+      if (result.error) throw result.error;
+      memory = safeHistory((result.data ?? []) as Conversation[], position);
+    }
     const memoryReply = immediateMemoryResponse(question.trim(), position, memory);
     let evidence: Evidence[] = [];
     let coverage: EvidenceCoverage | undefined;
     let notes: PreparedSceneNote[] = [];
-    if (!memoryReply) {
+    const episodeQuestion = 'Recap this entire episode from its beginning up to this timestamp.';
+    if (!memoryReply && !cutGroup(position) && seconds>0) {
       await ensureCurrentSubtitles(db, position);
-      ({ evidence, coverage, notes } = await retrieve(db, position, question.trim(), memory, release.noteTables));
+      ({ evidence, coverage, notes } = await retrieve(db, position, fullShow ? episodeQuestion : question.trim(), memory, release.noteTables));
     }
-    let checked = null;
-    if (evidence.length || notes.length) {
+    let checked: CheckedResponse | null = null;
+    if (!memoryReply) {
       const generate = companionGenerator(name => Deno.env.get(name), fetch,
         databaseSolBudget((name, args) => db.rpc(name, args), user.id, id));
-      checked = await companionAnswer(question.trim(), position, evidence, memory, generate,
-        diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic,
-          evidenceChars: JSON.stringify(evidence).length, omittedPassages: coverage?.omittedPassages }), coverage, notes, release.answerOptions);
+      const readCurrent = async () => {
+        if (!cutGroup(position) && !evidence.length && !notes.length) return null;
+        return await companionAnswer(fullShow ? episodeQuestion : question.trim(), position, evidence, [], generate,
+          diagnostic => console.info('Companion answer check', { requestId: id, ...diagnostic }), coverage, notes, release.answerOptions);
+      };
+      if (!fullShow) checked = await readCurrent();
+      if (fullShow) {
+        let seasons: {season:number;count:number}[] = [];
+        const seasonOnly = /\b(?:whole|entire|this) season\b/i.test(question) && !/\b(?:show|series)\b/i.test(question);
+        let catalogComplete = seasonNumber <= 1 || seasonOnly;
+        if (!catalogComplete) {
+          // Only season numbers/counts enter the plan. Never use season overviews or future episode summaries.
+          const key = Deno.env.get('TMDB_API_KEY');
+          if (key) {
+            try {
+              const response = await fetch('https://api.themoviedb.org/3/tv/'+tmdbId+'?api_key='+encodeURIComponent(key), {signal:AbortSignal.timeout(5000)});
+              const catalog = response.ok ? await response.json() : null;
+              if (catalog?.id === tmdbId && Array.isArray(catalog.seasons)) {
+                seasons = catalog.seasons.filter((x: {season_number:number;episode_count:number}) => Number.isInteger(x.season_number) && Number.isInteger(x.episode_count) && x.episode_count>0)
+                  .map((x:{season_number:number;episode_count:number}) => ({season:x.season_number,count:x.episode_count}));
+                catalogComplete = Array.from({length:seasonNumber-1},(_,i)=>i+1).every(n=>seasons.some(s=>s.season===n));
+              }
+            } catch { /* A catalog outage must not turn a partial recap into a complete one. */ }
+          }
+        }
+        const previous = priorEpisodes(position,seasons,seasonOnly);
+        // Reuse evidence-built episode chapters across viewers. Bound cold provider work per request.
+        let cold = 0;
+        checked = await seriesRecap(question, position, previous, readCurrent, async pos => {
+          const revision = episodeRevision(pos) + (release.noteTables.includes('companion_visual_notes') ? '-visual' : '-standard');
+          const keys = {tmdb_id:tmdbId,season_number:pos.seasonNumber!,episode_number:pos.episodeNumber!,revision};
+          const cached = await db.from('companion_episode_recaps').select('chapter,prepared_at').match(keys).maybeSingle();
+          if (cached.error) throw cached.error;
+          if (cached.data?.chapter) {
+            const stored = cached.data.chapter as CheckedResponse;
+            if (!stored.limited || Date.now()-Date.parse(cached.data.prepared_at)<3600000) return stored;
+          }
+          let chapter: CheckedResponse | null;
+          if (cutGroup(pos)) chapter = await companionAnswer(episodeQuestion,pos,[],[],generate,undefined,undefined,[],release.answerOptions);
+          else {
+            if (cold >= 2) throw new RecapPreparing();
+            cold++;
+            await ensureCurrentSubtitles(db,pos);
+            const part = await retrieve(db,pos,episodeQuestion,[],release.noteTables);
+            chapter = await companionAnswer(episodeQuestion,pos,part.evidence,[],generate,undefined,part.coverage,part.notes,release.answerOptions);
+          }
+          // Briefly remember a real coverage gap so one missing episode cannot stall later chapters.
+          chapter ??= {answer:'', evidence:[], limited:true};
+          const saved = await db.rpc('store_companion_episode_recap', {p_title:tmdbId,p_season:pos.seasonNumber,
+            p_episode:pos.episodeNumber,p_revision:revision,p_chapter:chapter});
+          if (saved.error) throw saved.error;
+          return chapter;
+        }, catalogComplete);
+      }
     }
     const response = companionResponse(question.trim(), position, evidence, memory, checked);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
@@ -161,6 +221,7 @@ serve(async req => {
     return json({ ...saved.data, answer: saved.data.conversation.answer,
       status: saved.data.conversation.answer_status, evidence: saved.data.conversation.evidence, boundary: position });
   } catch (error) {
+    if (error instanceof RecapPreparing) return json({status:'preparing_recap'}, 202);
     console.error('Companion request failed', error instanceof Error ? error.message : 'database error');
     return json({ error: error instanceof Error ? error.message : 'Unable to answer right now. Please try again.' }, 503);
   }

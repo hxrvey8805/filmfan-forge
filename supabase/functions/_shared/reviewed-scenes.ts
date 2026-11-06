@@ -1,9 +1,11 @@
-import { formatTimestamp, usableSubtitleEdition, permittedCues, promptConversation, questionIntent, unavailableMemoryReply,
+import { cutGroup } from './cut-scope.ts';
+import { conflictingEditions, formatTimestamp, usableSubtitleEdition, permittedCues, promptConversation, questionIntent, unavailableMemoryReply,
   type Conversation, type Cue, type SubtitleRecord, type ViewingPosition } from './companion.ts';
 import type { JsonGenerator } from './answer.ts';
 import { noteExcerpt } from './note-excerpt.ts';
 import { broadDiscussion } from './exchange-commentary.ts';
 import { addressesNamedRelationship } from './question-focus.ts';
+import { discussScene } from './scene-discussion.ts';
 
 // Editorial data from a service-role-only store, NEVER from the question body.
 // Review is semantic work: exact matches prove which captions were reviewed,
@@ -94,6 +96,7 @@ function validSceneReview(note: ReviewedSceneNote): boolean {
 }
 
 export function permittedSceneNotes(notes: ReviewedSceneNote[], records: SubtitleRecord[], position: ViewingPosition): PreparedSceneNote[] {
+  if (cutGroup(position) || conflictingEditions(records, position)) return [];
   const scoped = records.filter(row => row.tmdb_id === position.tmdbId && row.media_type === position.mediaType &&
     row.season_number === (position.seasonNumber ?? null) && row.episode_number === (position.episodeNumber ?? null));
   const objects = notes.filter(note => note && typeof note === 'object' && !Array.isArray(note));
@@ -171,7 +174,7 @@ For a recap, include every supplied recap note, in chronological order. For a cu
 For an explanation, choose only notes explaining the requested cause or subject. Keep qualifications and uncertainty intact: the server will display the complete reviewed wording.`;
 
 export async function reviewedSceneAnswer(question: string, position: ViewingPosition, notes: PreparedSceneNote[],
-  history: Conversation[], generate: JsonGenerator, options: { visualOnly?: boolean } = {}) {
+  history: Conversation[], generate: JsonGenerator, options: { visualOnly?: boolean; explainVisual?: boolean } = {}) {
   if (unavailableMemoryReply(question, position, history)) return null;
   const intent = questionIntent(question);
   const use = intent === 'recap' ? 'recap' : intent === 'scene' ? 'scene' : 'explanation';
@@ -185,6 +188,27 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
     note.uses.includes(use) && expandContext([note], scoped) !== null);
   // Never trim a dense set in a way that silently loses recap milestones.
   if (!eligible.length || eligible.length > (use === 'recap' ? 8 : 24)) return null;
+  if (options.explainVisual && options.visualOnly && use !== 'recap') {
+    const reviewed = new Map<string, PreparedSceneNote>();
+    for (const note of eligible) {
+      for (const item of expandContext([note], scoped)!) reviewed.set(item.id, item);
+    }
+    const notesByAlias = new Map([...reviewed.values()].map((note, i) => [`N${i + 1}`, note]));
+    const discussion = await discussScene({
+      question, seconds: position.seconds, earlierQuestions: promptConversation(history, position).map(row => row.question.slice(0, 400)),
+      sources: [...notesByAlias].map(([id, n]) => ({ id, text: n.text, end: n.end, knowledge: n.knowledge })),
+    }, generate);
+    if (!discussion) return null;
+    const cited = discussion.sourceIds.map(id => notesByAlias.get(id)!);
+    if (!cited.some(note => eligible.includes(note)) ||
+        (use === 'scene' && !cited.some(note => eligible.includes(note) && note.end >= position.seconds - 30))) return null;
+    const selected = expandContext(cited, scoped);
+    if (!selected) return null;
+    return { answer: discussion.answer, evidence: selected.map(note => ({
+      id: `reviewed:${note.id}`, label: `Reviewed ${note.basis === 'scene_prefix' ? 'scene' : 'caption'} note · ${formatTimestamp(note.start)}–${formatTimestamp(note.end)}`,
+      season: note.season, episode: note.episode, start: note.start, end: note.end,
+    })), ...(discussion.limited || selected.some(note => note.limited) ? { limited: true as const } : {}) };
+  }
   const specific = use === 'explanation' && !broadDiscussion(question);
   const excerpts = new Map(eligible.map(note => [note.id, specific && note.cueWords?.length
     && note.basis !== 'scene_prefix' ? noteExcerpt(question,position,note.text,note.cueWords) : null]));

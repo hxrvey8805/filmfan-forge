@@ -1,7 +1,7 @@
 import { evidenceLabel, formatTimestamp, permittedEvidence, questionIntent, safeHistory, unavailableMemoryReply,
   type Conversation, type Evidence, type ViewingPosition } from './companion.ts';
 import { isRelationshipQuestion } from './question-focus.ts';
-import { asksAboutDeath } from './visual-context.ts';
+import { asksAboutDeath, eventCoverageReply } from './visual-context.ts';
 
 export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number; citations?: { paragraph: number; lineIds: string[] }[] };
 export type CheckedResponse = { answer: string; evidence: CitedEvidence[]; limited?: true; sourceGap?: true };
@@ -61,8 +61,9 @@ export function companionResponse(question: string, position: ViewingPosition, e
   // Missing dialogue cannot disprove a silent event or establish that its cause
   // is an intentional mystery. Preserve the distinction from an editor-verified
   // unresolved scene and from provider errors. Never recycle the rejected quote.
-  if (checked?.limited && checked.sourceGap && asksAboutDeath(question)) {
-    return { answer: 'I’m missing the scene context I’d need to answer that reliably. I won’t contradict what you saw or guess at who was responsible or why.',
+  if ((!checked || checked.limited && checked.sourceGap) && asksAboutDeath(question)) {
+    return { answer: eventCoverageReply(question, formatTimestamp(position.seconds)) ??
+        `I can’t verify what happened there from what I have by ${formatTimestamp(position.seconds)}.`,
       evidence: [], answer_status: 'insufficient_evidence', charge: false };
   }
   if (checked) return { answer: checked.answer, evidence: checked.evidence,

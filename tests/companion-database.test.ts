@@ -45,6 +45,7 @@ beforeAll(async () => {
     await save(answer({title_id:id,media_type:media,season_number:season,episode_number:episode}),false,otherUser);
   }
   await pg.exec(migration('20261106093000_quarantine_subtitle_editions'));
+  await pg.exec(migration('20261106163000_shared_cut_revision'));
   await pg.exec('GRANT SELECT, INSERT ON public.ai_conversations TO authenticated');
   const fixtures = [
     ['tv', 1, 1, 800, 810, 'previous', 3],
@@ -131,7 +132,7 @@ describe('database evidence retrieval', () => {
     expect(rows.filter(r=>r.episode_number!==2).map(r=>r.companion_version)).toEqual([2,2,2]);
     expect(rows.find(r=>r.episode_number===2)?.companion_version).toBe(3);
     const old = rows.find(r=>r.title_id===66573 && r.episode_number===1)!;
-    const fresh = answer({title_id:66573,episode_number:1,companion_version:4});
+    const fresh = answer({title_id:66573,episode_number:1,companion_version:5});
     await expect(save({...fresh, companion_version:3},true,otherUser)).rejects.toThrow('upgrade required');
     await expect(save({...fresh,id:old.id},true,otherUser)).rejects.toThrow('older companion version');
     expect((await pg.query('SELECT questions_today FROM user_ai_usage WHERE user_id=$1',[otherUser])).rows).toEqual([{questions_today:0}]);
@@ -231,4 +232,11 @@ describe('saved answers, payment and ownership', () => {
       await expect(search('tv', 1, 2, 30)).rejects.toThrow('permission denied');
     } finally { await pg.exec('RESET ROLE'); }
   });
+});
+
+it('keeps shared episode chapters private and preserves a checked chapter against a concurrent limited result', async () => {
+  const put = (doc: unknown) => pg.query('SELECT store_companion_episode_recap(1,1,1,$1,$2::jsonb)', ['test-v1',JSON.stringify(doc)]);
+  await put({limited:true,answer:'gap'});await put({answer:'checked'});await put({limited:true,answer:'late failure'});
+  expect((await pg.query('SELECT chapter FROM companion_episode_recaps')).rows).toEqual([{chapter:{answer:'checked'}}]);
+  expect((await pg.query("SELECT has_table_privilege('authenticated','companion_episode_recaps','SELECT') AS allowed")).rows).toEqual([{allowed:false}]);
 });
