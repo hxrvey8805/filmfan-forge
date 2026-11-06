@@ -103,7 +103,7 @@ function parseAssSubtitles(text: string): Cue[] {
     if (!inEvents) continue;
     if (/^Format:/i.test(line)) {
       fields = line.slice(line.indexOf(':') + 1).split(',').map(field => field.trim().toLowerCase());
-      if (new Set(fields).size !== fields.length || !fields.includes('start') || !fields.includes('end') || fields.at(-1) !== 'text') {
+      if (new Set(fields).size !== fields.length || !fields.includes('start') || !fields.includes('end') || fields[fields.length - 1] !== 'text') {
         throw new SubtitleParseError('unsupported_format');
       }
       continue;
@@ -134,7 +134,7 @@ function parseAssSubtitles(text: string): Cue[] {
   const ordered = cues.sort((a, b) => a.start - b.start || a.end - b.end);
   const joined: Cue[] = [];
   for (const cue of ordered) {
-    const previous = joined.at(-1);
+    const previous = joined[joined.length - 1];
     // DVD caption conversions may store each displayed row as a separate ASS
     // event. Join only identical intervals; a later line never inherits an
     // earlier end time. Stable sorting retains their source reading order.
