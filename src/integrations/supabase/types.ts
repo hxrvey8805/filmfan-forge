@@ -448,6 +448,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      companion_answer_revision: {
+        Args: { episode: number; media: string; season: number; title: number }
+        Returns: number
+      }
       match_companion_chunks: {
         Args: {
           p_current_episode: number
