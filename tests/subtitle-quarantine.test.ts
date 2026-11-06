@@ -14,7 +14,7 @@ describe('subtitle edition quarantine', () => {
     expect(selectSubtitleFile([result(badFile,1000)],p)).toBeNull();
     expect(selectSubtitleFile([result(badFile,1000),result(123,1)],p)).toBe(123);
     const fresh=subtitleCacheRows(scope,123,cues)[0];
-    expect(permittedCues({...fresh,id:'probe'},p)).toEqual(cues);
+    expect(permittedCues({...fresh,id:'probe'},p)).toEqual(p.mediaType === 'tv' ? [] : cues);
     for(const id of [badFile,null]){
       expect(()=>subtitleCacheRows(scope,id,cues)).toThrow('Unreliable subtitle edition');
       expect(permittedCues({...fresh,id:'probe',source_file_id:id},p)).toEqual([]);

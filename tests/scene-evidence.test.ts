@@ -117,10 +117,10 @@ describe('timestamped scene retrieval', () => {
     expect(JSON.stringify(result).length).toBeLessThanOrEqual(8500);
     expect(new Set(result.map(row => row.id)).size).toBe(result.length);
   });
-  it('uses meaningful OR terms and only safe user references for follow-ups', () => {
+  it('looks up each new question independently, even with eligible prior history', () => {
     const history = [message(), message({ id: 'future', position_seconds: 101, question: 'FUTURESECRET' }),
       message({ id: 'episode', episode_number: 3, question: 'NEXTSECRET' })];
-    expect(subtitleSearchText('Why is he hiding it?', history, position)).toContain('"sam" OR "hide" OR "key"');
+    expect(subtitleSearchText('Why is he hiding it?', history, position)).toBe(subtitleSearchText('Why is he hiding it?', [], position));
     expect(subtitleSearchText('Why is he hiding it?', history, position)).not.toMatch(/futuresecret|nextsecret/);
     expect(subtitleSearchText('What is happening right now?', [], position)).toBe('');
     expect(subtitleSearchText('What is happening at this moment, based on the dialogue?', [], position)).toBe('');

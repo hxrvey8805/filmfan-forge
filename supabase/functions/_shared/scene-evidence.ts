@@ -1,4 +1,4 @@
-import { conversationMemory, formatTimestamp, permittedCues, questionIntent,
+import { conflictingEditions, formatTimestamp, permittedCues, questionIntent,
   type Conversation, type Cue, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition } from './companion.ts';
 
 export const DEFAULT_EVIDENCE_BUDGET = 8500;
@@ -13,9 +13,7 @@ const terms = (value: string) => [...new Set(value.toLowerCase().normalize('NFKD
   .match(/[a-z0-9]+/g) ?? [])].filter(word => word.length > 2 && !stopWords.has(word));
 
 export function retrievalTerms(question: string, history: Conversation[], position: ViewingPosition): string[] {
-  const references = /\b(he|she|him|her|his|they|them|their|that|it)\b/i.test(question)
-    ? conversationMemory(history, position).slice(-2).map(row => row.question).join(' ') : '';
-  return [...new Set([...terms(question), ...terms(references)])].slice(0, 20);
+  return [...new Set(terms(question))].slice(0, 20);
 }
 
 export function subtitleSearchText(question: string, history: Conversation[], position: ViewingPosition): string {
@@ -122,7 +120,7 @@ export function selectSceneEvidence(records: SubtitleRecord[], position: Viewing
 export function selectSceneContext(records: SubtitleRecord[], position: ViewingPosition,
   question: string, history: Conversation[] = [], maxChars = DEFAULT_EVIDENCE_BUDGET): SceneContext {
   const intent = questionIntent(question);
-  const all = packets(records, position, intent === 'scene');
+  const all = conflictingEditions(records, position) ? [] : packets(records, position, intent === 'scene');
   const finish = (evidence: Evidence[]): SceneContext => {
     const selected = new Set(evidence.map(item => item.id));
     const omitted = all.filter(item => !selected.has(item.id));

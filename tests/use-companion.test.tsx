@@ -62,12 +62,12 @@ describe('companion history and in-flight responses', () => {
   });
   it('hides the quarantined episode history on entry and rewind; preserves the next episode',async () => {
     const p={...position,tmdbId:66573,episodeNumber:1};
-    const rows=[row({id:'archived',title_id:66573,episode_number:1}),row({id:'new',title_id:66573,episode_number:1,companion_version:4}),row({id:'second',title_id:66573})];
+    const rows=[row({id:'archived',title_id:66573,episode_number:1}),row({id:'new',title_id:66573,episode_number:1,companion_version:5}),row({id:'second',title_id:66573})];
     mock.load.mockResolvedValue({data:rows,error:null});
     const hook=await mount(p);
     const ids=()=>hook.result.current.messages.map(m=>m.id);
     expect(ids()).toEqual(['new']);
-    expect(mock.load).toHaveBeenLastCalledWith(expect.objectContaining({companion_version:4}));
+    expect(mock.load).toHaveBeenLastCalledWith(expect.objectContaining({companion_version:5}));
     hook.rerender({position:{...p,seconds:19},enabled:true});expect(ids()).toEqual([]);await flush();expect(ids()).toEqual([]);
     hook.rerender({position:{...p,episodeNumber:2},enabled:true});await flush();expect(ids()).toEqual(['second']);
     expect(mock.load).toHaveBeenLastCalledWith(expect.objectContaining({companion_version:3}));

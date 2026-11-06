@@ -15,7 +15,7 @@ export function sceneNoteImport(notes: ReviewedSceneNote[], records: SubtitleRec
         !['tv', 'movie'].includes(position.mediaType) || !Number.isFinite(position.seconds) || position.seconds > 43200 ||
         (position.mediaType === 'tv' && (!Number.isInteger(position.seasonNumber) || position.seasonNumber! < 0 ||
           !Number.isInteger(position.episodeNumber) || position.episodeNumber! < 1)) ||
-        !permittedSceneNotes(notes, records, position).some(item => item.id === note.id)) {
+        !permittedSceneNotes(notes, note.source_file_id === null ? records : records.filter(r => r.source_file_id === note.source_file_id), position).some(item => item.id === note.id)) {
       throw new Error('A note is invalid, lacks required context, or does not match its reviewed caption export. No import prepared.');
     }
   }

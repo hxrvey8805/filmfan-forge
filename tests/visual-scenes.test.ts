@@ -136,8 +136,9 @@ describe('missing visual evidence is not an unresolved story', () => {
   it.each(['Who killed Mira?', 'Why was Mira shot?', 'Mira’s killer?', 'Is Mira dead?'])(
     'does not contradict the viewer or recycle an irrelevant quotation: %s', question => {
       const response = companionResponse(question, p, [], [], { answer: 'OLD_ALLEGATION', evidence: [], limited: true, sourceGap: true });
-      expect(response.answer).toContain('missing the scene context');
-      expect(response.answer).not.toMatch(/OLD_ALLEGATION|not (?:dead|revealed)|hasn.t been revealed|caretaker/);
+      expect(response.answer).toContain('00:01:00');
+      if (question === 'Is Mira dead?') expect(response.answer).toContain('Mira’s fate');
+      expect(response.answer).not.toMatch(/OLD_ALLEGATION|not (?:dead|revealed)|hasn.t been revealed|caretaker|contradict what you saw/);
       expect(response).toMatchObject({ charge: false, answer_status: 'insufficient_evidence', evidence: [] });
       expect(response).not.toHaveProperty('sourceGap');
     });
@@ -146,5 +147,50 @@ describe('missing visual evidence is not an unresolved story', () => {
     expect(companionResponse('Who killed Mira?', p, [], [], error).answer).toBe(error.answer);
     const fact = { answer: 'A verified identity.', evidence: [] };
     expect(companionResponse('Who killed Mira?', p, [], [], fact).answer).toBe(fact.answer);
+  });
+});
+
+describe('beta explanations from a reviewed timeline', () => {
+  const beta = { captionDiscussion: true };
+  const after = { ...prepare()[0], end: 80, limited: undefined, validUntil: undefined,
+    text: 'A later episode identifies FUTURE_SENTINEL.', id: 'later' };
+  const cross = { ...after, end: 50, episode: 2, id: 'different-episode' };
+  const ask = (generate: Parameters<typeof companionAnswer>[4]) =>
+    companionAnswer('Is Mira dead?', p, [], [historyRow('FUTURE_MEMORY', { position_seconds: 80 })],
+      generate, undefined, undefined, [...prepare(), after, cross], beta);
+  const draft = (text: string, quote = 'shows Mira dead') => ({ points: [{ text, support: [{ id: 'N1', quote }] }] });
+
+  it('writes a focused answer using only the current reveal and verifies every sentence', async () => {
+    const generate = vi.fn().mockResolvedValueOnce(draft('Yes, Mira is dead.'))
+      .mockResolvedValueOnce({ fit: 'direct', supported: [true] });
+    const result = await ask(generate);
+    expect(result?.answer).toBe('Yes, Mira is dead.');
+    expect(result?.evidence.map(e => e.id)).toEqual(['reviewed:silent-discovery']);
+    expect(JSON.stringify(generate.mock.calls)).not.toMatch(/FUTURE_SENTINEL|FUTURE_MEMORY|different-episode/);
+    expect(generate.mock.calls.map(c => c[3])).toEqual(['writer', 'verifier']);
+  });
+
+  it.each([
+    ['direct', 'Yes, Mira is dead.'],
+    ['reject', undefined],
+  ])('uses the shortened answer only if it passes its own review (%s)', async (fit, expected) => {
+    const good = draft('Yes, Mira is dead.').points[0];
+    const bad = draft('The caretaker poisoned Mira.').points[0];
+    const generate = vi.fn().mockResolvedValueOnce({ points: [good, bad] })
+      .mockResolvedValueOnce({ fit: 'reject', supported: [true, false] })
+      .mockResolvedValueOnce({ fit, supported: [true] });
+    expect((await ask(generate))?.answer).toBe(expected);
+    expect(generate).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(generate.mock.calls[2][1]).points).toEqual([good]);
+  });
+
+  it.each([
+    [draft('Yes, Mira is dead.', 'Mira was poisoned'), { fit: 'direct', supported: [true] }],
+    [draft('The caretaker poisoned Mira.'), { fit: 'direct', supported: [false] }],
+    [draft('The caretaker poisoned Mira.'), { fit: 'reject', supported: [true] }],
+    [draft('The caretaker poisoned Mira.'), { fit: 'direct', supported: [] }],
+  ])('rejects an invented receipt, cause or invalid assessment', async (candidate, review) => {
+    const generate = vi.fn().mockResolvedValueOnce(candidate).mockResolvedValueOnce(review).mockResolvedValue(null);
+    expect(await ask(generate)).toBeNull();
   });
 });

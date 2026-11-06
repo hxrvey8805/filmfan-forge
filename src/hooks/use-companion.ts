@@ -68,9 +68,15 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
     asking.current = true;
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('spoiler-free-companion', {
-        body: { ...position, timestamp, question: question.trim(), requestId: pendingRequest.current.id },
-      });
+      const body = { ...position, recapProtocol: 1, timestamp, question: question.trim(), requestId: pendingRequest.current.id };
+      const invoke = () => supabase.functions.invoke('spoiler-free-companion', { body });
+      let { data, error } = await invoke();
+      while (!error && data?.status === 'preparing_recap') {
+        if (currentView.current !== requestView) return { stale: true };
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (currentView.current !== requestView) return { stale: true };
+        ({ data, error } = await invoke());
+      }
       if (error) {
         let message = 'The companion could not answer. Please try again.';
         try {
