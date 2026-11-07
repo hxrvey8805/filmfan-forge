@@ -118,3 +118,11 @@ it('treats remaining room for negotiation as a quantity, without excusing depart
   expect(unqualifiedCaptionAction('There is little room left for bargaining.')).toBe(false);
   expect(unqualifiedCaptionAction('There is no time left for debate, then someone left.')).toBe(true);
 });
+
+it('distinguishes room for improvement and accepted ideas from physical actions', () => {
+  expect(unqualifiedCaptionAction('The idea leaves room for improvement.')).toBe(false);
+  expect(unqualifiedCaptionAction('The praise sounds like a widely accepted ranking.')).toBe(false);
+  expect(unqualifiedCaptionAction('The idea leaves room for improvement, but someone leaves the room.')).toBe(true);
+  expect(unqualifiedCaptionAction('It is an accepted view; someone accepted the job.')).toBe(true);
+  expect(unqualifiedCaptionAction('Someone leaves the room for a meeting.')).toBe(true);
+});

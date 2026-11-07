@@ -10,6 +10,7 @@ import { draftGroundingIssues } from './draft-grounding.ts';
 import { geekVoice } from './geek-voice.ts';
 import { isSubtitleCredit, retrievalTerms } from './scene-evidence.ts';
 import { asksAboutDeath, silentEventCaution } from './visual-context.ts';
+import { unqualifiedCaptionActionTerm } from './action-grounding.ts';
 
 const object = (properties: Record<string, unknown>) => ({ type: 'object', properties,
   required: Object.keys(properties), additionalProperties: false });
@@ -109,6 +110,7 @@ export async function detailExplanation(question: string, position: ViewingPosit
   type Point = { text: string; kind: string; sources: string[] };
   let issues: string[] = [];
   for (let attempt = 0; attempt < 3; attempt++) {
+    const earlierIssues = [...issues];
     const recapInstruction = discussion === 'recap' ? '\nFor this recap, use 3–4 developed paragraphs (roughly 120–200 words) when the source spans several exchanges. Each paragraph must cite consecutive lines within ONE distinct passage, in chronological order from earlier to recent material. Explain a concrete issue and its present significance in that paragraph, rather than listing isolated activities. For a genuinely short excerpt, fewer paragraphs are enough.' : '';
     const raw = await generate(writer + visualCaution + recapInstruction + (attempt ? '\nFresh attempt. Correct these check categories without guessing: ' + issues.join(', ') : ''), wire, 1600, 'writer', draftFormat([...lines.keys()]));
     if (!record(raw) || !['explained', 'partial'].includes(String(raw.status)) || !Array.isArray(raw.points) || !raw.points.length || raw.points.length > 4) return null;
@@ -160,7 +162,11 @@ export async function detailExplanation(question: string, position: ViewingPosit
       if (p.kind === 'limit') proof.text = [...lines.values()].map(l => l.text).join('\n');
       const grounding = draftGroundingIssues(question, { status: 'answered', claims: [{ text: prose, evidenceIds: ['proof'] }] }, [proof]);
       if (grounding.length) {
-        if (grounding.includes('action')) rejected.add('A spoken account is not an observed event. Report the claim as a claim, the excuse as an excuse, and the offer as an offer; do not assert that an action happened.');
+        if (grounding.includes('action')) {
+          const action = unqualifiedCaptionActionTerm(prose);
+          rejected.add('A spoken account is not an observed event. Report the claim as a claim, the excuse as an excuse, and the offer as an offer; do not assert that an action happened.' +
+            (action ? ` The local check rejected the action term "${action}". Do not reuse that term in the new explanation. When interpreting a reaction expressed in dialogue, describe its praise, dismissal or enthusiasm rather than a physical act or an action metaphor.` : ''));
+        }
         if (grounding.includes('identity')) rejected.add('Each proper name must be spelled exactly as in that paragraph’s cited lines. Include its establishing line, or use an unnamed description. Do not correct subtitle spellings, add first names, or infer physical locations.');
         if (grounding.includes('speaker')) rejected.add('Describe the wording or exchange without assigning an unlabeled line to a named person.');
         continue;
@@ -171,8 +177,8 @@ export async function detailExplanation(question: string, position: ViewingPosit
     // Never prune the setup into a dangling conclusion or shrink a developed
     // answer to one surviving sentence. Two grounded paragraphs may stand
     // without an optional third, but the reviewer must judge them afresh.
-    if (!keptOpening || points.length < Math.min(2, raw.points.length)) { issues = [...rejected]; continue; }
-    if (discussion === 'recap' && !coversRecap(question, points.map(p => ({ text: p.text, evidenceIds: [...new Set(p.sources.map(id => id.split(':')[0]))] })), ctx.aliased)) { issues = ['Cover distinct earlier and recent passages, one passage per paragraph, in chronological order.']; continue; }
+    if (!keptOpening || points.length < Math.min(2, raw.points.length)) { issues = [...new Set([...earlierIssues, ...rejected])]; continue; }
+    if (discussion === 'recap' && !coversRecap(question, points.map(p => ({ text: p.text, evidenceIds: [...new Set(p.sources.map(id => id.split(':')[0]))] })), ctx.aliased)) { issues = [...new Set([...earlierIssues, 'Cover distinct earlier and recent passages, one passage per paragraph, in chronological order.'])]; continue; }
     const check = await generate(reviewer + visualCaution, JSON.stringify({ ...packet, points }), 900, 'verifier', reviewFormat);
     if (!record(check) || typeof check.boundarySafe !== 'boolean' || !Array.isArray(check.checks) || check.checks.length !== points.length) return null;
     const checks = check.checks;
@@ -202,6 +208,9 @@ export async function detailExplanation(question: string, position: ViewingPosit
     issues.push(...rejected);
     if (check.addressesQuestion !== true) issues.push('relevance');
     if (issues.includes('spoiler')) return null;
+    // A new rejection must not erase an earlier correction: otherwise fixing
+    // a pronoun can reintroduce the action wording rejected on attempt one.
+    issues = [...new Set([...earlierIssues, ...issues])];
   }
   return null;
 }

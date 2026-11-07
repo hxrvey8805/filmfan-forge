@@ -113,6 +113,23 @@ describe('limited reviewed context', () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
+  it('preserves a single current coverage note for a generic discussion without inventing missing significance', async () => {
+    const generate = vi.fn().mockResolvedValue({ noteIds: [] });
+    const question = 'What are the characters discussing, and why does it matter to them at this point?';
+    const result = await reviewedSceneAnswer(question, position, prepare([limited]), [], generate);
+    expect(result).toMatchObject({ answer: limited.summary, limited: true });
+    expect(generate).not.toHaveBeenCalled();
+    expect(companionResponse(question, position, [], [], result)).toMatchObject({ answer_status: 'insufficient_evidence', charge: false });
+    // A named subject still needs relevance selection; a generic coverage note
+    // cannot substitute for the requested identity or cause.
+    expect(await reviewedSceneAnswer('Why is Lee upset?', position, prepare([limited]), [], generate)).toBeNull();
+    expect(generate).toHaveBeenCalledOnce();
+    generate.mockClear();
+    expect(await reviewedSceneAnswer(question, { ...position, seconds: 13 }, prepare([limited]), [], generate)).toBeNull();
+    expect(await reviewedSceneAnswer(question, { ...position, episodeNumber: 3 }, prepare([limited]), [], generate)).toBeNull();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
   it('propagates a required context limitation even if the selected note is otherwise complete', async () => {
     const notes = prepare([limited, { ...note, id: 'event', reveal_seconds: 20, context_ids: ['plan'], summary: 'A noise follows.' }]);
     const result = await reviewedSceneAnswer('What is happening?', position, notes, [], async () => ({ noteIds: ['N2'] }));

@@ -232,7 +232,13 @@ export async function reviewedSceneAnswer(question: string, position: ViewingPos
   }
   if (specific) system += '\nA dialogue field is an exact excerpt from the same reviewed span. You may select a note when that excerpt directly addresses the viewer, even if the summary focuses on another detail. If neither answers the question, select [].';
   if (eligible.some(note => note.basis === 'scene_prefix')) system += '\nThese notes include independently reviewed visual events. A visual event does not require spoken confirmation. Select an unresolved note only for the exact event and question it leaves open; do not substitute it for a different identity or cause. An unresolved identity must remain unresolved. Never suggest suspects or theories. Earlier dialogue about the same name does not contradict a later visual observation.';
-  const value = await generate(system, JSON.stringify({ question, position, intent: use, notes: aliases,
+  // A single reviewed, current coverage note already answers a generic request
+  // for what can be established here. Do not let a selector discard that useful
+  // qualified account merely because it cannot explain an unseen action.
+  // Specific questions, old notes and competing notes still require selection.
+  const currentCoverage = use === 'explanation' && !specific && eligible.length === 1 &&
+    eligible[0].limited && eligible[0].end >= Math.max(0, position.seconds - 30);
+  const value = currentCoverage ? { noteIds: ['N1'] } : await generate(system, JSON.stringify({ question, position, intent: use, notes: aliases,
     ...(conversation.length ? { conversation } : {}) }), 300, 'writer', {
     type: 'json_schema', json_schema: { name: 'companion_note_selection', strict: true, schema: {
       type: 'object', additionalProperties: false, required: ['noteIds'], properties: { noteIds: {
