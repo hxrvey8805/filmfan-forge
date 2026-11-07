@@ -172,6 +172,25 @@ describe('specific explanations from completed captions', () => {
     expect(JSON.stringify(ctx?.passages)).toContain('just this once');
     expect(JSON.stringify(ctx?.passages)).toContain("don't call me");
   });
+  it.each(['Aristotle', 'hypatia'])('keeps the requested %s exchange instead of matching the connective "than"', name => {
+    const p = { ...position, seconds: 600 };
+    const captions: Evidence[] = [
+      { ...source, id: 'old-comparison', start: 10, end: 24,
+        text: '[00:00:10] Are they better than us?\n[00:00:20] This is an ethical mess.' },
+      { ...source, id: 'requested-exchange', start: 580, end: 599,
+        text: `[00:09:40] What do philosophers know?\n[00:09:45] ${name} says improvement takes practice.\n[00:09:55] I love ${name}!` },
+      { ...source, id: 'future', start: 600, end: 601, text: `FUTURE_REVEAL ${name}` },
+      { ...source, id: 'different-episode', episode: 3, text: `OTHER_EPISODE ${name}` },
+    ];
+    const question = `Why does praising ${name} land as a joke here, rather than just a philosophy lesson?`;
+    const context = detailContext(question, p, captions, []);
+    const wire = JSON.stringify(context?.passages);
+    expect(wire).toContain(`I love ${name}!`);
+    expect(wire).toContain('What do philosophers know?');
+    expect(wire).not.toMatch(/ethical mess|FUTURE_REVEAL|OTHER_EPISODE/);
+    // Rewinding never retrieves the completed exchange from the later time.
+    expect(JSON.stringify(detailContext(question, { ...p, seconds: 579 }, captions, [])?.passages) ?? '').not.toContain(`I love ${name}!`);
+  });
   it('retains a preceding referent even when it shares no query words', () => {
     const pos = { ...position, seconds: 200 };
     const context = detailContext('Why suggest selling the extra 0.2 kilos?', pos, [
