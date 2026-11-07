@@ -1,4 +1,3 @@
-BEGIN;
 LOCK TABLE public.ai_conversations IN SHARE ROW EXCLUSIVE MODE;
 -- Replays and old clients must never restore an answer from just the faster cut.
 UPDATE public.ai_conversations SET companion_version = 2
@@ -29,4 +28,3 @@ RETURNS void LANGUAGE sql SET search_path = public AS $$
 $$;
 REVOKE ALL ON FUNCTION public.store_companion_episode_recap(integer,integer,integer,text,jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.store_companion_episode_recap(integer,integer,integer,text,jsonb) TO service_role;
-COMMIT;
