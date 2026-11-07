@@ -8,7 +8,9 @@ export interface SceneContext { evidence: Evidence[]; coverage: EvidenceCoverage
 const stopWords = new Set(('a an the and or of to in on at by for with about from up until so far what whats is are was were ' +
   'has have had do does did be being been can could would should me my we us you your i it its this that these those ' +
   'he she they his her their him them why how who whom when where tell explain describe please know happening happened ' +
-  'point moment scene episode movie film show story recap summary summarize summarise main just here now right based dialogue').split(' '));
+  // Comparative connectives describe the question, not its subject. Otherwise
+  // a rare "than" in an unrelated scene can outrank the requested name.
+  'point moment scene episode movie film show story recap summary summarize summarise main just here now right based dialogue rather than').split(' '));
 const terms = (value: string) => [...new Set(value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
   .match(/[a-z0-9]+/g) ?? [])].filter(word => word.length > 2 && !stopWords.has(word));
 
