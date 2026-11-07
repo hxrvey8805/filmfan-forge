@@ -31,6 +31,28 @@ describe('specific explanations from completed captions', () => {
     expect(g.mock.calls[1][1]).toBe(g.mock.calls[0][1]);
     expect(JSON.stringify(g.mock.calls.slice(1))).not.toMatch(/Someone leaves the room|That makes the refusal/);
   });
+  it('identifies a rejected action term on retry without forwarding the rejected interpretation', async () => {
+    const rejected = { ...draft, points: [{ ...draft.points[0],
+      text: 'The wording sounds like cheering for a convenient answer. UNSAFE_UNSEEN_DETAIL.' }] };
+    const g = vi.fn().mockResolvedValueOnce(rejected).mockResolvedValueOnce(draft).mockResolvedValueOnce(good);
+    expect((await run(g))?.answer).toBe(draft.points[0].text);
+    expect(g.mock.calls.map(c => c[3])).toEqual(['writer', 'writer', 'verifier']);
+    expect(g.mock.calls[1][0]).toContain('rejected the action term "cheering"');
+    expect(g.mock.calls[1][1]).toBe(g.mock.calls[0][1]);
+    expect(JSON.stringify(g.mock.calls.slice(1))).not.toMatch(/UNSAFE_UNSEEN_DETAIL|cheering for a convenient answer/);
+  });
+  it('retains earlier safe feedback when a later attempt fails a different check', async () => {
+    const action = { ...draft, points: [{ ...draft.points[0], text: 'The joke sounds like cheering for a convenient answer.' }] };
+    const identity = { ...draft, points: [{ ...draft.points[0], text: 'His wording sounds like praise for a convenient answer.' }] };
+    const g = vi.fn().mockResolvedValueOnce(action).mockResolvedValueOnce(identity)
+      .mockResolvedValueOnce(draft).mockResolvedValueOnce(good);
+    expect((await run(g))?.answer).toBe(draft.points[0].text);
+    expect(g.mock.calls.map(c => c[3])).toEqual(['writer', 'writer', 'writer', 'verifier']);
+    expect(g.mock.calls[2][0]).toContain('rejected the action term "cheering"');
+    expect(g.mock.calls[2][0]).toContain('gendered pronouns for anonymous dialogue');
+    expect(g.mock.calls[2][1]).toBe(g.mock.calls[0][1]);
+    expect(JSON.stringify(g.mock.calls.slice(1))).not.toContain('His wording sounds like praise');
+  });
   it('withholds an incomplete answer when all bounded whole-draft attempts fail', async () => {
     const mixed = { ...draft, points: [...draft.points, { kind: 'fact', text: 'Someone leaves the room.', sources }] };
     const g = vi.fn().mockResolvedValue(mixed);

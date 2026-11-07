@@ -15,8 +15,11 @@ const languageSubject = /\b(?:translation|wording|phrase|metaphor|description|co
 // pass its own action check and the independent source review.
 const hypotheticalMention = /\b(?:guess|question|suggestion|claim|allegation|theory|hypothesis|speculation)\s+(?:about|of)\s+(?:(?:someone|somebody|anyone)\s+)?$/i;
 
-export function unqualifiedCaptionAction(text: string): boolean {
-  if (/^Captions: \[[^\]\r\n]+\](?:; \[[^\]\r\n]+\])*$/.test(text.trim())) return false;
+// Return only a term from the fixed action vocabulary, never rejected prose.
+// This lets a retry correct the specific wording without receiving an unsafe
+// draft (which could contain invented actions or later plot information).
+export function unqualifiedCaptionActionTerm(text: string): string | null {
+  if (/^Captions: \[[^\]\r\n]+\](?:; \[[^\]\r\n]+\])*$/.test(text.trim())) return null;
   for (const match of text.matchAll(guardedActions)) {
     const before = text.slice(0, match.index);
     const after = text.slice(match.index! + match[0].length);
@@ -32,6 +35,12 @@ export function unqualifiedCaptionAction(text: string): boolean {
     if (nonPhysicalSubject.test(before)) continue;
     if (/^(?:leaves|leaving|left)$/i.test(match[0]) &&
         /^\s+(?:the|this|that|an?) (?:issue|question|matter) (?:open|unresolved|unanswered)\b/i.test(after)) continue;
+    // These are abstract descriptions, not a departure or an acceptance act.
+    // A separate physical action later in the sentence is still checked.
+    if (/^(?:leaves|leaving|left)$/i.test(match[0]) &&
+        /^\s+room for (?:improvement|doubt|interpretation|debate|uncertainty)\b/i.test(after)) continue;
+    if (/^accepted$/i.test(match[0]) && /\b(?:an?|the|widely|generally|commonly)\s+$/i.test(before) &&
+        /^\s+(?:ranking|interpretation|view|idea|principle)\b/i.test(after)) continue;
     if (/^(?:leaves|leaving|left)$/i.test(match[0]) &&
         /^\s+(?:(?:them|us|everyone|the (?:group|viewer))\s+)?(?:stuck on|unsure|uncertain|wondering)\s+(?:about |of )?(?:whether|if|who|why|how)\b/i.test(after)) continue;
     if (/^(?:hide|hiding)$/i.test(match[0]) &&
@@ -66,7 +75,11 @@ export function unqualifiedCaptionAction(text: string): boolean {
     // Explicitly denying that one thing entails receiving another does not
     // establish a receipt. A later positive clause is still checked separately.
     if (/^receiving$/i.test(match[0]) && /\b(?:doesn['’]t|does not) (?:necessarily )?mean\s+$/i.test(before)) continue;
-    if (!reporting.test(clause)) return true;
+    if (!reporting.test(clause)) return match[0].toLowerCase();
   }
-  return false;
+  return null;
+}
+
+export function unqualifiedCaptionAction(text: string): boolean {
+  return unqualifiedCaptionActionTerm(text) !== null;
 }
