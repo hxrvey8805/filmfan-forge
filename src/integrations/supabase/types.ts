@@ -71,6 +71,33 @@ export type Database = {
         }
         Relationships: []
       }
+      companion_episode_recaps: {
+        Row: {
+          chapter: Json
+          episode_number: number
+          prepared_at: string
+          revision: string
+          season_number: number
+          tmdb_id: number
+        }
+        Insert: {
+          chapter: Json
+          episode_number: number
+          prepared_at?: string
+          revision: string
+          season_number: number
+          tmdb_id: number
+        }
+        Update: {
+          chapter?: Json
+          episode_number?: number
+          prepared_at?: string
+          revision?: string
+          season_number?: number
+          tmdb_id?: number
+        }
+        Relationships: []
+      }
       companion_scene_notes: {
         Row: {
           episode_number: number | null
@@ -547,6 +574,16 @@ export type Database = {
           p_micro_usd: number
         }
         Returns: boolean
+      }
+      store_companion_episode_recap: {
+        Args: {
+          p_chapter: Json
+          p_episode: number
+          p_revision: string
+          p_season: number
+          p_title: number
+        }
+        Returns: undefined
       }
     }
     Enums: {
