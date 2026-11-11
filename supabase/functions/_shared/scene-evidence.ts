@@ -87,6 +87,12 @@ function packets(records: SubtitleRecord[], position: ViewingPosition, focusRece
   return result.sort(chronological);
 }
 
+// Complete, boundary-filtered exchanges for the unified answering path. Scope
+// and budgeting happen after this gate; storage chunks are never cut mid-line.
+export function completeSceneEvidence(records: SubtitleRecord[], position: ViewingPosition) {
+  return conflictingEditions(records, position) ? [] : packets(records, position, true);
+}
+
 // Spread recap coverage over time; within each interval prefer a substantive
 // exchange over a one-word acknowledgement. Every passage remains eligible in
 // later rounds, so an arbitrary sample count cannot leave usable space empty.

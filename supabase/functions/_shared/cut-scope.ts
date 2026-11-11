@@ -1,5 +1,20 @@
 type Scope = { tmdbId: number; mediaType: string; seasonNumber?: number; episodeNumber?: number };
 
+export function allowsEarlierStory(question: string) {
+  return !/\b(?:only|just|solely) (?:this|the current) (?:episode|scene)\b|\b(?:don't|do not|without|exclude|ignore)\b.*\b(?:earlier|previous|past) (?:episodes?|seasons?)\b/i.test(question);
+}
+
+// A reminder explicitly asks for earlier story context, not a previous chat
+// answer. It does not change the scope of the next question or another episode.
+export function storyRecallRequest(question: string) {
+  const q = question.toLowerCase().replace(/[’]/g, "'").trim();
+  if (/\b(?:only|just|solely) (?:this|the current) (?:episode|scene)\b|\b(?:don't|do not|without|exclude|ignore)\b.*\b(?:earlier|previous|past) (?:episodes?|seasons?)\b/.test(q)) return false;
+  if (/\b(?:your|the) (?:last|previous|earlier) (?:answer|reply|response)\b|\byou (?:said|told|mentioned)\b/.test(q)) return false;
+  return /\bremind me (?:again )?(?:why|how|who|what|when|where)\b/.test(q) ||
+    /^(?:why|how|who|what|when|where)\b.+\bagain[?.!]*$/.test(q) ||
+    /\b(?:backstory|background|earlier episodes|previous episodes|previous seasons)\b/.test(q);
+}
+
 // Only the scope identifier and history revision are shared with the mobile client.
 export function cutGroup(p: Scope) {
   if (p.mediaType === 'tv' && p.tmdbId === 66573 && p.seasonNumber === 1 && p.episodeNumber === 1) {

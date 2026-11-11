@@ -1,5 +1,5 @@
 // Pure helpers shared by the edge function, browser history, and regression tests.
-import { cutGroup, wholeShowRecap } from './cut-scope.ts';
+import { cutGroup, wholeShowRecap, storyRecallRequest, allowsEarlierStory } from './cut-scope.ts';
 import { modelCaptionLines } from './caption-lines.ts';
 // Older checked answers predate the current grounding contract and must not
 // re-enter visible history, prompt memory, or idempotent request responses.
@@ -251,8 +251,8 @@ export function safeHistory<T extends Conversation>(rows: T[], position: Viewing
     // but citations from another episode. Never restore those into chat or memory.
     (row.evidence === undefined || (Array.isArray(row.evidence) && row.evidence.every(e => e &&
       Number.isFinite(e.start) && e.start >= 0 && Number.isFinite(e.end) && e.end >= e.start && (
-        (e.season === row.season_number && e.episode === row.episode_number && e.end <= row.position_seconds!) ||
-        (row.media_type === 'tv' && wholeShowRecap(row.question) && Number.isInteger(e.season) && e.season >= 0 &&
+        (e.scope !== 'completed_episode' && e.season === row.season_number && e.episode === row.episode_number && e.end <= row.position_seconds!) ||
+        (row.media_type === 'tv' && allowsEarlierStory(row.question) && questionIntent(row.question)!=='scene' && Number.isInteger(e.season) && e.season >= 0 &&
           Number.isInteger(e.episode) && e.episode >= 1 && e.end <= 43200 &&
           (e.season < row.season_number! || (e.season === row.season_number && e.episode < row.episode_number!)) &&
           typeof e.id === 'string' && e.id.startsWith('series:'+row.title_id+':'+e.season+':'+e.episode+':v'+companionVersionFor({tmdbId:row.title_id,mediaType:'tv',seasonNumber:e.season,episodeNumber:e.episode})+':')))))))
@@ -274,7 +274,7 @@ export function questionIntent(question: string): 'scene' | 'recap' | 'explanati
   // A yes/no question about a fact stays specific even when it contains
   // "this scene" (for example, whether a masked identity is established).
   if (/^\s*(?:has|have|is|are|was|were|did|does|do|can|could|will|would|should)\b/i.test(question)) return 'explanation';
-  if (/\b(right now|this moment|this scene|what just happened|what'?s happening|what is happening)\b/i.test(question)) return 'scene';
+  if (/\b(right now|this moment|this scene|what just happened|what happened here|what'?s happening|what is happening)\b/i.test(question)) return 'scene';
   return 'explanation';
 }
 

@@ -117,6 +117,11 @@ const pilot: CutReview = {
 };
 const reviews = { 'good-place-pilot': pilot };
 
+export function sharedStoryFacts(p: ViewingPosition) {
+  const group = cutGroup(p);
+  return group ? sharedCutFacts(reviews[group], p.seconds) : [];
+}
+
 export function sharedCutFacts(review: CutReview, seconds: number) {
   if (new Set(review.editions).size !== review.editions.length || !Number.isFinite(seconds)) return [];
   return review.facts.filter((f) =>
