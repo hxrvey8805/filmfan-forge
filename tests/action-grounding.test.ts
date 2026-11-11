@@ -1,5 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { unqualifiedCaptionAction } from '../supabase/functions/_shared/action-grounding';
+import { unqualifiedCaptionAction, unsupportedCaptionReaction } from '../supabase/functions/_shared/action-grounding';
+
+it('does not turn agreement or music into an observed crowd reaction',()=>{
+  expect(unsupportedCaptionReaction('A cheering crowd greets the princess.','ALL: Yes! (BUGLES PLAYING)')).toBe('cheering');
+  expect(unsupportedCaptionReaction('They arrive, then cheer.','We are here. ALL: Yes!')).toBe('cheer');
+  expect(unsupportedCaptionReaction('They celebrate the announcement.','ALL: Yes!')).toBe('celebrate');
+  expect(unsupportedCaptionReaction('A cheering crowd greets the princess.','(CROWD CHEERING)')).toBeNull();
+  expect(unsupportedCaptionReaction('The narrator reports that they cheered.','They cheered.')).toBeNull();
+});
+
+it.each(['They are admitting how they found the girl.','Mira insists the girl hide upstairs.','Someone recounts walking into the room.'])(
+  'preserves reported actions as reports: %s',text=>expect(unqualifiedCaptionAction(text)).toBe(false));
+it.each(['Mira walks in.','Someone walked into the room.','Mira insists she is right, then walks in.'])(
+  'does not turn a greeting or separate speech into an entrance: %s',text=>expect(unqualifiedCaptionAction(text)).toBe(true));
+
+it.each([
+  'The worry shifted from affording rent to finding someone willing to share.',
+  'The concern was about finding a willing flatmate.',
+])('does not mistake a concern about finding someone for a completed discovery: %s',text=>{
+  expect(unqualifiedCaptionAction(text)).toBe(false);
+});
+it.each([
+  'The worry led to finding someone hiding in the cellar.',
+  'The concern was about finding a flatmate, but they found a suspect instead.',
+  'The worry shifted from rent to finding a flatmate, then someone arrived.',
+])('still rejects actual discoveries or later actions beside a concern: %s',text=>{
+  expect(unqualifiedCaptionAction(text)).toBe(true);
+});
 
 describe('speech does not establish physical departure', () => {
   it.each([

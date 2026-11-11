@@ -4,9 +4,9 @@
 // approves it. Likewise, nearby noises/"Yes!" do not prove a plan succeeded or
 // explain an emotional reaction. These are narrow necessary conditions, not a
 // complete action parser or a substitute for semantic/relevance review.
-const guardedActions = /\b(?:leaves|leaving|left|departs?|departed|departing|walk(?:s|ed|ing)? (?:away|out)|(?:goes|went|going) back|return(?:s|ed|ing)? to|succeed(?:s|ed|ing)?|successfully|(?:is|was|are|were) successful|manag(?:es|ed|ing) to|celebrat(?:e|es|ed|ing)|cheer(?:s|ed|ing)?|arriv(?:e|es|ed|ing)|bring(?:s|ing)?|brought|hid(?:e|es|ing)?|hidden|find(?:s|ing)?|found|receiv(?:e|es|ed|ing)|accept(?:s|ed|ing)?|agre(?:e|es|ed|eing) to|(?:takes?|took|taking) (?:on )?(?:a|the) (?:job|role|position)|(?:see|sees|saw|seeing|notic(?:e|es|ed|ing)) (?:a|the|her|his|their) (?:tattoo|scar|weapon)|(?:yell|shout|scream|gasp)(?:s|ed|ing)? (?:in|with|from|out of) (?:excitement|relief|fear|anger|pain))\b/gi;
+const guardedActions = /\b(?:leaves|leaving|left|departs?|departed|departing|walk(?:s|ed|ing)? (?:away|out|into|in)|(?:goes|went|going) back|return(?:s|ed|ing)? to|succeed(?:s|ed|ing)?|successfully|(?:is|was|are|were) successful|manag(?:es|ed|ing) to|celebrat(?:e|es|ed|ing)|cheer(?:s|ed|ing)?|arriv(?:e|es|ed|ing)|bring(?:s|ing)?|brought|hid(?:e|es|ing)?|hidden|find(?:s|ing)?|found|receiv(?:e|es|ed|ing)|accept(?:s|ed|ing)?|agre(?:e|es|ed|eing) to|(?:takes?|took|taking) (?:on )?(?:a|the) (?:job|role|position)|(?:see|sees|saw|seeing|notic(?:e|es|ed|ing)) (?:a|the|her|his|their) (?:tattoo|scar|weapon)|(?:yell|shout|scream|gasp)(?:s|ed|ing)? (?:in|with|from|out of) (?:excitement|relief|fear|anger|pain))\b/gi;
 // A noun such as "the offer" is not a reporting verb licensing an action.
-const reporting = /(?<!\b(?:the|this|that|an?|their|his|her)\s)\b(?:says?|said|states?|stated|announces?|announced|mentions?|mentioned|reports?|reported|plans?|planned|intends?|intended|proposes?|proposed|asks?|asked|wants?|wanted|discuss(?:es|ed)?|describ(?:e|es|ed)|denies|denied|offers?|offered|claims?|claimed|talks? about)\b[^.!?;]{0,140}$/i;
+const reporting = /(?<!\b(?:the|this|that|an?|their|his|her)\s)\b(?:says?|said|states?|stated|announces?|announced|mentions?|mentioned|reports?|reported|plans?|planned|intends?|intended|proposes?|proposed|asks?|asked|wants?|wanted|discuss(?:es|ed)?|describ(?:e|es|ed)|denies|denied|offers?|offered|claims?|claimed|admits?|admitted|admitting|insists?|insisted|insisting|tells?|told|telling|explains?|explained|explaining|recounts?|recounted|recounting|talks? about)\b[^.!?;]{0,140}$/i;
 const nonPhysicalSubject = /\b(?:conversation|discussion|dialogue|topic|focus|question|argument|exchange|reply|answer|wording|truth|news|information)\s+(?:then\s+)?$/i;
 const abstractEffect = /\b(?:offer|request|proposal|promise)\s+(?:could|may|might)\s+$/i;
 const languageSubject = /\b(?:translation|wording|phrase|metaphor|description|comparison|interpretation|explanation|the quoted words)["'”’]?\s+$/i;
@@ -18,8 +18,8 @@ const hypotheticalMention = /\b(?:guess|question|suggestion|claim|allegation|the
 // Return only a term from the fixed action vocabulary, never rejected prose.
 // This lets a retry correct the specific wording without receiving an unsafe
 // draft (which could contain invented actions or later plot information).
-export function unqualifiedCaptionActionTerm(text: string): string | null {
-  if (/^Captions: \[[^\]\r\n]+\](?:; \[[^\]\r\n]+\])*$/.test(text.trim())) return null;
+function* unqualifiedCaptionActionTerms(text: string): Generator<string> {
+  if (/^Captions: \[[^\]\r\n]+\](?:; \[[^\]\r\n]+\])*$/.test(text.trim())) return;
   for (const match of text.matchAll(guardedActions)) {
     const before = text.slice(0, match.index);
     const after = text.slice(match.index! + match[0].length);
@@ -57,6 +57,10 @@ export function unqualifiedCaptionActionTerm(text: string): string | null {
     // An expectation of finding something does not assert a discovery.
     // The exception never covers 'found' or a later, separately stated act.
     if (/^find$/i.test(match[0]) && /\bexpect(?:s|ed|ing)? to\s+$/i.test(before)) continue;
+    // A worry about finding someone is not a claim that anyone was found.
+    // Keep this to an explicitly mental concern, never "led to finding" or
+    // completed discoveries, and still check later clauses independently.
+    if (/^finding$/i.test(match[0]) && /\b(?:worry|concern) (?:(?:is |was )?about|shift(?:s|ed)? from [^.!?;]{1,70} to)\s+$/i.test(before)) continue;
     if (/^left$/i.test(match[0]) && /^\s+(?:hand|side|foot|arm|leg|eye|ear)\b/i.test(after)) continue;
     // Remaining room/time is a quantity, not somebody departing. Check any
     // separately stated departure later in the sentence as usual.
@@ -75,7 +79,22 @@ export function unqualifiedCaptionActionTerm(text: string): string | null {
     // Explicitly denying that one thing entails receiving another does not
     // establish a receipt. A later positive clause is still checked separately.
     if (/^receiving$/i.test(match[0]) && /\b(?:doesn['’]t|does not) (?:necessarily )?mean\s+$/i.test(before)) continue;
-    if (!reporting.test(clause)) return match[0].toLowerCase();
+    if (!reporting.test(clause)) yield match[0].toLowerCase();
+  }
+}
+
+export function unqualifiedCaptionActionTerm(text: string): string | null {
+  return unqualifiedCaptionActionTerms(text).next().value ?? null;
+}
+
+// A shouted "Yes" or a musical cue is not proof of cheering/celebration.
+// Current captions need this check too; historical-action checks alone do
+// not cover it. Exact action words are necessary, not sufficient: the
+// independent reviewer still checks who did it, whether it happened, and why.
+export function unsupportedCaptionReaction(text:string, quotes:string):string|null {
+  for(const term of unqualifiedCaptionActionTerms(text)) {
+    if(/^cheer(?:s|ed|ing)?$/.test(term) && !/\bcheer(?:s|ed|ing)?\b/i.test(quotes))return term;
+    if(/^celebrat(?:e|es|ed|ing)$/.test(term) && !/\bcelebrat(?:e|es|ed|ing|ions?)\b/i.test(quotes))return term;
   }
   return null;
 }

@@ -2,8 +2,9 @@ import { evidenceLabel, formatTimestamp, permittedEvidence, questionIntent, safe
   type Conversation, type Evidence, type ViewingPosition } from './companion.ts';
 import { isRelationshipQuestion } from './question-focus.ts';
 import { asksAboutDeath, eventCoverageReply } from './visual-context.ts';
+import { storyRecallRequest } from './cut-scope.ts';
 
-export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number; citations?: { paragraph: number; lineIds: string[] }[] };
+export type CitedEvidence = { id: string; label: string; season: number | null; episode: number | null; start: number; end: number; scope?: 'completed_episode'; citations?: { paragraph: number; lineIds: string[] }[] };
 export type CheckedResponse = { answer: string; evidence: CitedEvidence[]; limited?: true; sourceGap?: true };
 export type CompanionResponse = Omit<CheckedResponse, 'limited' | 'sourceGap'> & { answer_status: 'answered' | 'insufficient_evidence'; charge: boolean };
 
@@ -25,8 +26,8 @@ export function immediateMemoryResponse(question: string, position: ViewingPosit
       !Array.isArray(row.evidence) || !row.evidence.length || row.evidence.some(e => typeof e.id !== 'string' || !e.id || typeof e.label !== 'string')) {
     return limited(`I don’t have a verified previous answer available to repeat at ${formatTimestamp(position.seconds)}.`);
   }
-  const evidence: CitedEvidence[] = row.evidence.map(({ id, label, season, episode, start, end, citations }) => ({
-    id, label, season, episode, start, end, ...(Array.isArray(citations) && citations.every(c => c &&
+  const evidence: CitedEvidence[] = row.evidence.map(({ id, label, season, episode, start, end, scope, citations }) => ({
+    id, label, season, episode, start, end, ...(scope === 'completed_episode' ? {scope} : {}), ...(Array.isArray(citations) && citations.every(c => c &&
       Number.isInteger(c.paragraph) && c.paragraph > 0 && Array.isArray(c.lineIds) && c.lineIds.every((id: unknown) => typeof id === 'string'))
       ? { citations: citations.map(({ paragraph, lineIds }) => ({ paragraph, lineIds: [...lineIds] })) } : {}),
   }));
@@ -58,6 +59,10 @@ export function companionResponse(question: string, position: ViewingPosition, e
   history: Conversation[], checked: CheckedResponse | null): CompanionResponse {
   const memoryReply = immediateMemoryResponse(question, position, history);
   if (memoryReply) return memoryReply;
+  if (position.mediaType === 'tv' && storyRecallRequest(question) && (!checked || checked.limited && checked.sourceGap)) {
+    return { answer: 'You’re asking about the earlier story. I’m missing the part that explains this, so I can’t give you a reliable reminder yet.',
+      evidence:[], answer_status:'insufficient_evidence', charge:false };
+  }
   // Missing dialogue cannot disprove a silent event or establish that its cause
   // is an intentional mystery. Preserve the distinction from an editor-verified
   // unresolved scene and from provider errors. Never recycle the rejected quote.

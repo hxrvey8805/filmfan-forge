@@ -55,6 +55,29 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('companion history and in-flight responses', () => {
+  it('keeps a story reminder with earlier-episode sources in its own viewing position', async () => {
+    const dark: ViewingPosition = {tmdbId:70523,mediaType:'tv',seasonNumber:3,episodeNumber:1,seconds:3382};
+    const remembered = row({title_id:70523,season_number:3,episode_number:1,position_seconds:3382,
+      question:'Remind me why caterina is in the past again', answer:'Katharina went into the caves to bring Mikkel home.',
+      evidence:[{id:'series:70523:2:8:v3:story:dark-katharina-search-s2-v1',label:'Story context through S2E8',
+        season:2,episode:8,start:0,end:0,scope:'completed_episode'}]});
+    mock.load.mockResolvedValue({data:[remembered],error:null});
+    const hook = await mount(dark);
+    expect(hook.result.current.messages.map(message => message.answer)).toEqual([remembered.answer]);
+    hook.rerender({position:{...dark,seconds:3381},enabled:true});
+    expect(hook.result.current.messages).toEqual([]);
+    await flush();
+    expect(hook.result.current.messages).toEqual([]);
+    hook.rerender({position:{...dark,episodeNumber:2},enabled:true});
+    await flush();
+    expect(hook.result.current.messages).toEqual([]);
+    hook.rerender({position:{...dark,seasonNumber:2,episodeNumber:8},enabled:true});
+    await flush();
+    expect(hook.result.current.messages).toEqual([]);
+    hook.rerender({position:dark,enabled:true});
+    await flush();
+    expect(hook.result.current.messages.map(message => message.answer)).toEqual([remembered.answer]);
+  });
   it('hides previously checked answers from the retired pipeline even at an eligible timestamp', async () => {
     mock.load.mockResolvedValue({ data: [row(), row({ id: 'retired', companion_version: 2, answer: 'OLD_BAD_ANSWER' })], error: null });
     const hook = await mount();
