@@ -1,0 +1,2 @@
+CAPACITOR_DEBUG = true
+#include? "CineGeekSigning.local.xcconfig"

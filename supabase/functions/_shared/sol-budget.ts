@@ -20,13 +20,24 @@ export function solBody(raw: WireBody): WireBody {
       .some(id => !plugins.some(p => p.id === id && p.enabled === false))) {
     throw new Error('Sol requires disabled plugins');
   }
+  const schema=(raw.response_format as {json_schema?:{name?:string}}|undefined)?.json_schema?.name;
+  const selection=['companion_search_terms','companion_relevant_sources','companion_budgeted_sources'].includes(schema??'');
   const body: WireBody = { ...raw, model: SOL_MODEL, stream: false,
     provider: { only: ['openai'], allow_fallbacks: false, require_parameters: true,
       max_price: { prompt: 2, completion: 10, request: 0 } },
-    reasoning: { effort: 'medium', exclude: true },
+    // Sorting already-safe source IDs is bounded clerical work. Keep the
+    // writer and independent factual/spoiler reviewer on full medium effort.
+    reasoning: { effort: selection?'low':'medium', exclude: true },
     max_tokens: Math.min(8192, Math.max(4096, Number(raw.max_tokens) || 4096)),
     tools: [], tool_choice: 'none',
   };
+  // Selection prompts put the question/cutoff before a changing source batch;
+  // their short shared prefix does not qualify for caching. Avoid paying the
+  // 25% write premium on these usually one-off batches. Explicit mode with no
+  // content breakpoints changes billing only: messages, model, reasoning and
+  // output limits remain identical. Keep writer/reviewer caching unchanged.
+  // https://openrouter.ai/docs/guides/best-practices/prompt-caching#disabling-prompt-caching
+  if (selection) body.prompt_cache_options = { mode: 'explicit' };
   delete body.temperature; delete body.models; delete body.route; delete body.transforms;
   return body;
 }

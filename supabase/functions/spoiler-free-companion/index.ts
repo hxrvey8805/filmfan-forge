@@ -13,7 +13,7 @@ import {
   type Conversation, type Evidence, type EvidenceCoverage, type SubtitleRecord, type ViewingPosition,
 } from "../_shared/companion.ts";
 
-import { companionAnswer } from "../_shared/answer.ts";
+import { companionAnswer, type JsonGenerator } from "../_shared/answer.ts";
 import { companionResponse, exactRepeatRequest, immediateMemoryResponse } from "../_shared/companion-response.ts";
 import { companionReleaseFor, companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
 import { databaseSolBudget } from "../_shared/sol-budget.ts";
@@ -43,7 +43,13 @@ async function ensureCurrentSubtitles(db: SupabaseClient, position: ViewingPosit
   const existing = await currentChunks(db, position).limit(1);
   if (existing.error) throw existing.error;
   if (existing.data?.length) return;
-  // Prepare only this episode, not every preceding episode during a question.
+  const unavailableKey = {tmdb_id:position.tmdbId,season_number:position.seasonNumber!,episode_number:position.episodeNumber!,ingestion_version:SUBTITLE_VERSION};
+  if(position.mediaType==='tv' && position.seasonNumber!>0) {
+    const absent=await db.from('companion_subtitle_unavailability').select('retry_after').match(unavailableKey).maybeSingle();
+    if(absent.error)throw absent.error;
+    if(absent.data && Date.parse(absent.data.retry_after)>Date.now())return;
+  }
+  // Earlier-story preparation calls this same path in bounded batches.
   try {
     const prepared = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-subtitles`, {
       method: 'POST', headers: { Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'Content-Type': 'application/json' },
@@ -51,7 +57,12 @@ async function ensureCurrentSubtitles(db: SupabaseClient, position: ViewingPosit
         seasonNumber: position.seasonNumber, episodeNumber: position.episodeNumber }),
       signal: AbortSignal.timeout(45000),
     });
+    const state=await prepared.clone().json().catch(()=>null);
     await assertSubtitlePreparation(prepared);
+    if(state?.reason==='unavailable' && position.mediaType==='tv' && position.seasonNumber!>0) {
+      const saved=await db.from('companion_subtitle_unavailability').upsert({...unavailableKey,retry_after:new Date(Date.now()+3600000).toISOString()});
+      if(saved.error)throw saved.error;
+    }
   } catch (error) {
     if (error instanceof SubtitleProviderError) throw error;
     throw new SubtitleProviderError('provider_error', 'prepare');
@@ -180,8 +191,10 @@ serve(async req => {
     const episodeQuestion = 'Recap this entire episode from its beginning up to this timestamp.';
     let checked: CheckedResponse | null = null;
     if (!memoryReply && release.answerOptions.captionDiscussion) {
-      const generate = companionGenerator(name => Deno.env.get(name), fetch,
-        databaseSolBudget((name, args) => db.rpc(name, args), user.id, id));
+      let activeGenerator: JsonGenerator | undefined;
+      // Source preparation must not consume the model's response deadline.
+      const generate:JsonGenerator=(...args)=>(activeGenerator ??= companionGenerator(name => Deno.env.get(name), fetch,
+        databaseSolBudget((name, args) => db.rpc(name, args), user.id, id)))(...args);
       const readData = async (pos: ViewingPosition, earlier = false) => {
         if (!earlier && !cutGroup(pos) && pos.seconds > 0) await ensureCurrentSubtitles(db, pos);
         let query = earlier
@@ -202,6 +215,13 @@ serve(async req => {
         revision:WATCH_RECAP_REVISION+':'+episodeRevision(pos)+(release.noteTables.includes('companion_visual_notes')?'-visual':'-standard')});
       checked=await answerWatchRequest(question.trim(),position,memory,generate,{
         current:pos=>readData(pos),earlier:pos=>readData(pos,true),
+        unavailable:async pos=>{
+          const result=await readPaged(db.from('companion_subtitle_unavailability').select('season_number,episode_number')
+            .eq('tmdb_id',pos.tmdbId).eq('ingestion_version',SUBTITLE_VERSION).gt('retry_after',new Date().toISOString())
+            .or(`season_number.lt.${pos.seasonNumber},and(season_number.eq.${pos.seasonNumber},episode_number.lt.${pos.episodeNumber})`)
+            .order('season_number',{ascending:true}).order('episode_number',{ascending:true}),5000);
+          return result.rows.map(row=>({season:row.season_number as number,episode:row.episode_number as number}));
+        },
         seasons:async pos=>{
           const key=Deno.env.get('TMDB_API_KEY');if(!key)return [];
           try {
@@ -215,7 +235,7 @@ serve(async req => {
         chapter:async pos=>{const cached=await db.from('companion_episode_recaps').select('chapter,prepared_at').match(chapterKeys(pos)).maybeSingle();if(cached.error)throw cached.error;
           return cached.data?.chapter && (!cached.data.chapter.limited||Date.now()-Date.parse(cached.data.prepared_at)<3600000)?cached.data.chapter as CheckedResponse:null;},
         saveChapter:async(pos,answer)=>{const keys=chapterKeys(pos);const saved=await db.rpc('store_companion_episode_recap',{p_title:tmdbId,p_season:pos.seasonNumber,p_episode:pos.episodeNumber,p_revision:keys.revision,p_chapter:answer});if(saved.error)throw saved.error;},
-        prepareLater:()=>{throw new RecapPreparing();},
+        ...(body.recapProtocol===1?{prepareLater:()=>{throw new RecapPreparing();}}:{}),
       });
     } else {
     if (!memoryReply && !cutGroup(position) && seconds>0) {

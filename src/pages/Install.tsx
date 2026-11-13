@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Download, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ const Install = () => {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
       <Card className="max-w-md w-full p-6 space-y-6">
+        <Link to="/dashboard?tab=profile" className="inline-flex items-center text-sm text-muted-foreground">← Back to Profile</Link>
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             Install CineGeek
@@ -88,7 +90,7 @@ const Install = () => {
               Install App
             </Button>
             <p className="text-xs text-center text-muted-foreground">
-              Works offline • Fast loading • Native app feel
+              Home screen access • Full screen experience
             </p>
           </div>
         ) : (
@@ -107,7 +109,7 @@ const Install = () => {
         <div className="pt-4 border-t border-border">
           <h3 className="font-semibold mb-3">App Features:</h3>
           <ul className="text-sm space-y-2 text-muted-foreground">
-            <li>✓ Works offline</li>
+            <li>Companion answers need an internet connection</li>
             <li>✓ Fast loading</li>
             <li>✓ Home screen icon</li>
             <li>✓ Full screen experience</li>

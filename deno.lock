@@ -31,11 +31,16 @@
     "https://deno.land/x/media_types@v2.9.0/mod.ts": "d63583b978d32eff8b76e1ae5d83cba2fb27baa90cc1bcb0ad15a06122ea8c19",
     "https://deno.land/x/xhr@0.1.0/mod.ts": "5200325d879e571961f0927e8e32e66fd33f4ba0d29a219560cf9e0fe9bc6cdf",
     "https://esm.sh/@supabase/supabase-js@2.117.3": "614f9e550b12b4be7054f947cc4949ebcc0eceeb8e83f7e226cc875356e9b126",
+    "https://esm.sh/@supabase/supabase-js@2.75.0": "2560166a94e3385c37b1c4fa943ee9c729a44e92fc9c61c03037852dc494853e",
     "https://esm.sh/stripe@14.21.0?target=deno": "c68b76780452938e9bbae9e312323e97869ccbdafeb83ddf372746ffa52f6b66"
   },
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@capacitor/android@8.6.0",
+        "npm:@capacitor/cli@8.6.0",
+        "npm:@capacitor/core@8.6.0",
+        "npm:@capacitor/ios@8.6.0",
         "npm:@electric-sql/pglite-pgvector@^0.0.10",
         "npm:@electric-sql/pglite@~0.5.9",
         "npm:@eslint/js@^9.32.0",

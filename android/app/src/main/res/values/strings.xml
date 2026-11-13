@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CineGeek</string>
+    <string name="title_activity_main">CineGeek</string>
+    <string name="package_name">app.cinegeek.mobile</string>
+    <string name="custom_url_scheme">app.cinegeek.mobile</string>
+</resources>

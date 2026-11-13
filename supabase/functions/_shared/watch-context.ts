@@ -36,6 +36,8 @@ export function watchSources(plan:QuestionScope, records:SubtitleRecord[], notes
       if(r.tmdb_id===p.tmdbId && r.media_type==='tv' && Number.isInteger(r.season_number) && r.season_number!>0 &&
         Number.isInteger(r.episode_number) && r.episode_number!>0 && older(r.season_number!,r.episode_number!,p))add(r.season_number,r.episode_number,43200);
     }
+    // The shared-cut pilot is verified independently of the subtitle cache.
+    if(plan.earlierStory && cutGroup({...p,seasonNumber:1,episodeNumber:1}) && older(1,1,p))add(1,1,43200);
   }
   const result:WatchSource[]=[];
   const append=(s:Omit<WatchSource,'id'>)=>result.push({...s,id:'S'+(result.length+1)});

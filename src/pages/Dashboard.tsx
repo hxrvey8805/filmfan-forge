@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
-import { Package, Menu, LogOut, Store as StoreIcon, Coins } from "lucide-react";
-import { GlassesWithLenses } from "@/components/GlassesWithLenses";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { Home, Gamepad2, UserRound, ArrowLeft, Coins } from "lucide-react";
+import { Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -9,36 +8,42 @@ import Index from "./Index";
 import Packs from "./Packs";
 import DailyPuzzle from "./DailyPuzzle";
 import Store from "./Store";
+import { GeekViewer } from "@/hooks/use-geek-outfit";
+import { useViewerSession } from "@/hooks/use-viewer-session";
+import { ContentLoading } from "@/components/ContentLoading";
+import { PlayHome } from "@/components/PlayHome";
+import { ProfileHome } from "@/components/MobileDestinations";
 
-type Tab = "home" | "packs" | "puzzle" | "store";
+type Tab = "home" | "play" | "profile";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [isGamePlaying, setIsGamePlaying] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const activeTab: Tab = isGamePlaying ? "play" : params.get("tab") === "play" ? "play" : params.get("tab") === "profile" ? "profile" : "home";
+  const playView = isGamePlaying ? "game" : params.get("view");
+  const viewer = useViewerSession();
+  const viewerId = viewer?.id ?? null;
+  const email = viewer?.email ?? "";
+  const playReturn = useRef<{ y: number; view: string } | null>(null);
+  useLayoutEffect(() => {
+    if (activeTab !== "play") { playReturn.current = null; return; }
+    if (!playView && playReturn.current) {
+      const { y, view } = playReturn.current;
+      playReturn.current = null;
+      document.querySelector<HTMLButtonElement>(`[data-play-link="${view}"]`)?.focus({ preventScroll: true });
+      window.scrollTo({ top: y, behavior: "instant" });
+    }
+  }, [activeTab, playView]);
+  const selectTab = (tab: Tab, view?: string) => {
+    if (isGamePlaying) return;
+    if (activeTab === "play" && !playView && tab === "play" && view) playReturn.current = { y: window.scrollY, view };
+    setParams(tab === "home" ? {} : { tab, ...(view ? { view } : {}) });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const [coins, setCoins] = useState<number>(0);
-  const [isGamePlaying, setIsGamePlaying] = useState(false);
-  const [hoveredElement, setHoveredElement] = useState<'questions' | 'coins' | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        loadAIUsage();
-        loadUserStats();
-      }
-    });
-  }, [navigate]);
-
-  // Refresh when navigating back from Companion page
-  useEffect(() => {
-    if (location.pathname === "/dashboard") {
-      loadAIUsage();
-      loadUserStats();
-    }
-  }, [location.pathname]);
 
   // Refresh when window gains focus (user comes back to tab/window)
   useEffect(() => {
@@ -81,14 +86,14 @@ const Dashboard = () => {
         return '';
       };
 
-      const handlePopState = (e: PopStateEvent) => {
+      const handlePopState = () => {
         if (isGamePlaying) {
-          window.history.pushState(null, '', location.pathname);
+          navigate("/dashboard?tab=play&view=game", { replace: true });
         }
       };
 
       window.addEventListener('beforeunload', handleBeforeUnload);
-      window.history.pushState(null, '', location.pathname);
+      window.history.pushState(null, '', location.pathname + location.search);
       window.addEventListener('popstate', handlePopState);
 
       return () => {
@@ -96,7 +101,7 @@ const Dashboard = () => {
         window.removeEventListener('popstate', handlePopState);
       };
     }
-  }, [isGamePlaying, location.pathname]);
+  }, [isGamePlaying, location.pathname, location.search, navigate]);
 
   const loadAIUsage = async () => {
     try {
@@ -104,7 +109,7 @@ const Dashboard = () => {
       if (!user) return;
 
       const today = new Date().toISOString().split('T')[0];
-      let { data: aiUsage } = await supabase
+      const { data: aiUsage } = await supabase
         .from('user_ai_usage')
         .select('questions_today, last_reset_date')
         .eq('user_id', user.id)
@@ -131,7 +136,7 @@ const Dashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      let { data: stats } = await supabase
+      const { data: stats } = await supabase
         .from('user_stats')
         .select('coins')
         .eq('user_id', user.id)
@@ -156,203 +161,70 @@ const Dashboard = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    toast.success("Logged out successfully");
-    navigate("/");
+    const { error } = await supabase.auth.signOut();
+    if (error) { toast.error("Couldn’t sign out. Try again."); return; }
+    toast.dismiss();
+    navigate("/", { replace: true });
   };
 
   const tabs = [
-    { id: "home" as Tab, label: "Home", icon: GlassesWithLenses },
-    { id: "puzzle" as Tab, label: "Game", icon: Menu },
-    { id: "packs" as Tab, label: "Packs", icon: Package },
-    { id: "store" as Tab, label: "Store", icon: StoreIcon },
+    { id: "home" as Tab, label: "Home", icon: Home },
+    { id: "play" as Tab, label: "Play", icon: Gamepad2 },
+    { id: "profile" as Tab, label: "Profile", icon: UserRound },
   ];
 
-  // Refresh coins and AI usage when tab changes (in case they changed in game/store)
+  // Load account totals after sign-in and refresh them when returning from Play.
   useEffect(() => {
-    if (activeTab) {
+    if (viewerId) {
       loadUserStats();
       loadAIUsage();
     }
-  }, [activeTab]);
+  }, [activeTab, playView, viewerId]);
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case "home":
-        return <Index />;
-      case "puzzle":
-        return <DailyPuzzle />;
-      case "packs":
-        return <Packs />;
-      case "store":
-        return <Store />;
-    }
-  };
-
+  if (viewer === undefined) return <ContentLoading />;
+  if (!viewer) return <Navigate to="/" replace />;
   return (
-      <div className="min-h-screen bg-background text-foreground flex flex-col pb-20">
-        {/* Header */}
-        <header className="border-b border-border bg-card/95 backdrop-blur-lg sticky top-0 z-50 shadow-sm">
-          <div className="container mx-auto px-5 py-4 safe-area-inset-top flex justify-between items-center">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              CineGeek
-            </h1>
-            <div className="flex items-center gap-3 relative">
-              {/* Minimal Spoiler-Free Companion Limit Display */}
-              {remainingFree !== null && (
-                <div 
-                  className="relative"
-                  onMouseEnter={() => setHoveredElement('questions')}
-                  onMouseLeave={() => setHoveredElement(null)}
-                >
-                  <div className={`relative w-10 h-10 transition-all duration-300 ${hoveredElement === 'questions' ? 'scale-125 z-50' : 'scale-100'}`}>
-                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                      {/* Background circle */}
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        stroke="currentColor"
-                        strokeWidth="6"
-                        fill="none"
-                        className="text-primary/20"
-                      />
-                      {/* Progress circle */}
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        stroke="url(#header-gradient)"
-                        strokeWidth="6"
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeDasharray={`${2 * Math.PI * 40}`}
-                        strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
-                        className="transition-all duration-1000 ease-out"
-                      />
-                      <defs>
-                        <linearGradient id="header-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="hsl(var(--primary))" />
-                          <stop offset="100%" stopColor="hsl(var(--accent))" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="text-xs font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
-                          {remainingFree}
-                        </div>
-                        <div className="text-[8px] text-muted-foreground leading-none">/5</div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Cinematic Popup */}
-                  {hoveredElement === 'questions' && (
-                    <div className="absolute top-full right-0 mt-3 w-72 p-4 bg-gradient-to-br from-card via-card/95 to-card border border-primary/30 rounded-xl shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 z-50">
-                      <div className="absolute -top-2 right-6 w-4 h-4 bg-card border-l border-t border-primary/30 rotate-45"></div>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                            <span className="text-sm font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                              {remainingFree}
-                            </span>
-                          </div>
-                          <h3 className="font-bold text-sm bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                            Spoiler-Free Questions
-                          </h3>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {remainingFree > 0 
-                            ? `You have ${remainingFree} free question${remainingFree !== 1 ? 's' : ''} remaining today. Once exhausted, questions cost 150 coins each.`
-                            : 'Your daily free questions are exhausted. Visit the Store to purchase more, or play Actor Connect to earn coins.'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* Coins Display */}
-              <div 
-                className="relative"
-                onMouseEnter={() => setHoveredElement('coins')}
-                onMouseLeave={() => setHoveredElement(null)}
-              >
-                <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card/80 border border-border/50 transition-all duration-300 ${hoveredElement === 'coins' ? 'scale-125 z-50 border-primary/50 bg-card' : 'scale-100'}`}>
-                  <Coins className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-bold">{coins}</span>
-                </div>
-                
-                {/* Cinematic Popup */}
-                {hoveredElement === 'coins' && (
-                  <div className="absolute top-full right-0 mt-3 w-72 p-4 bg-gradient-to-br from-card via-card/95 to-card border border-primary/30 rounded-xl shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200 z-50">
-                    <div className="absolute -top-2 right-6 w-4 h-4 bg-card border-l border-t border-primary/30 rotate-45"></div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                          <Coins className="h-4 w-4 text-primary" />
-                        </div>
-                        <h3 className="font-bold text-sm bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                          Coin Balance
-                        </h3>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        Your cinematic currency. Use coins to purchase packs from the Store or buy additional spoiler-free questions. Earn coins by winning Actor Connect games or selling cards from your collection.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            <Button variant="ghost" size="icon" onClick={handleLogout}>
-              <LogOut className="h-5 w-5" />
-            </Button>
-            </div>
-          </div>
-        </header>
-
-      {/* Main Content */}
-      <main className="flex-1 container mx-auto px-5 py-5">
-        {renderContent()}
-      </main>
-
-      {/* Bottom Navigation */}
-      <nav className="border-t border-border bg-card/98 backdrop-blur-lg fixed bottom-0 left-0 right-0 z-40 shadow-lg">
-        <div className="safe-area-inset-bottom">
-          <div className="flex items-center justify-around px-4 py-4">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              const isDisabled = isGamePlaying && !isActive;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    if (!isGamePlaying || isActive) {
-                      setActiveTab(tab.id);
-                    }
-                  }}
-                  disabled={isDisabled}
-                  className={`flex flex-col items-center gap-1.5 px-6 py-2.5 rounded-2xl transition-all min-w-[72px] min-h-[60px] ${
-                    isActive
-                      ? "text-primary scale-105 bg-primary/10"
-                      : isDisabled
-                      ? "text-muted-foreground/30 opacity-50 cursor-not-allowed"
-                      : "text-muted-foreground active:scale-95 active:bg-muted/50"
-                  }`}
-                  title={isDisabled ? "Complete the game to switch tabs" : ""}
-                >
-                  <Icon className={`h-6 w-6 ${isActive ? 'stroke-[2.5]' : 'stroke-[2]'}`} />
-                  <span className={`text-xs font-medium ${isActive ? 'font-semibold' : ''}`}>
-                    {tab.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+    <div className="app-shell min-h-dvh bg-background text-foreground">
+      <a href="#app-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 bg-primary text-primary-foreground p-3 rounded-xl">Skip to content</a>
+      <header className="app-header sticky top-0 z-30 border-b border-white/5 bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto max-w-6xl px-5 sm:px-8 h-[72px] flex items-center justify-between">
+          <button onClick={() => selectTab("home")} disabled={isGamePlaying} aria-label="CineGeek home" className="flex items-center gap-2.5">
+            <img className="brand-mark" src="/cinegeek-mark.svg" width="36" height="36" alt="" />
+            <span className="text-xl font-bold tracking-[-0.06em]">cine<span className="text-primary">geek</span><span className="text-primary">.</span></span>
+          </button>
+          <button onClick={() => selectTab(activeTab === "play" ? "play" : "profile", activeTab === "play" ? "store" : undefined)} disabled={isGamePlaying}
+            className="flex items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-muted-foreground" aria-label={activeTab === "play" ? "Open store" : "View profile and question allowance"}>
+            {activeTab === "play" ? <><Coins className="w-4 h-4 text-primary" /><span className="text-foreground tabular-nums">{coins.toLocaleString()}</span></>
+              : <><span className="w-1.5 h-1.5 rounded-full bg-primary" /><span>{remainingFree ?? "…"} free questions</span></>}
+          </button>
         </div>
-        </nav>
-      </div>
+      </header>
+      {import.meta.env.MODE === "mobile-preview" && <div className="text-center py-1.5 bg-primary/5 text-[10px] tracking-[0.14em] uppercase text-muted-foreground border-b border-white/5">Design preview · Sample library</div>}
+      <GeekViewer.Provider value={viewerId}>
+      <main id="app-content" className="mx-auto max-w-6xl px-5 sm:px-8 pt-6 sm:pt-8 pb-8">
+        {activeTab === "home" && <Index key={viewerId} />}
+        {activeTab === "play" && (playView === "game" || playView === "packs" || playView === "store" ? <div className="arcade-page">
+          <Button variant="ghost" disabled={isGamePlaying} onClick={() => selectTab("play")} className="mb-2 -ml-3 gap-1.5 text-muted-foreground"><ArrowLeft className="w-4 h-4" />Back to Play</Button>
+          {isGamePlaying && <p className="text-xs text-primary mb-4" role="status">Finish your game to switch screens.</p>}
+          {playView === "game" ? <>
+            {import.meta.env.MODE === "mobile-preview" && <p className="mb-4 text-center text-sm text-muted-foreground">Practice with sample cast credits. Preview coins reset on reload.</p>}
+            <DailyPuzzle />
+          </> : playView === "packs" ? <Packs onStore={() => selectTab("play", "store")} onBalance={setCoins} /> : <Store onBalance={setCoins} />}
+        </div> : <PlayHome onOpen={view => selectTab("play", view)} />)}
+        {activeTab === "profile" && <ProfileHome email={email} coins={coins} remainingFree={remainingFree} onLogout={handleLogout} onInstall={() => navigate("/install")} />}
+      </main>
+      </GeekViewer.Provider>
+      <nav aria-label="Main navigation" className="app-bottom-nav fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto max-w-lg flex justify-around px-5 pt-2 pb-2">
+          {tabs.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => selectTab(id)} disabled={isGamePlaying && activeTab !== id}
+            aria-current={activeTab === id ? "page" : undefined} title={isGamePlaying && activeTab !== id ? "Finish your game to switch screens" : undefined}
+            className={`nav-destination ${activeTab === id ? "text-primary" : "text-muted-foreground"} disabled:opacity-30`}>
+            <span className={`rounded-2xl px-6 py-1.5 ${activeTab === id ? "bg-primary/10" : ""}`}><Icon className="w-[22px] h-[22px]" strokeWidth={activeTab === id ? 2.3 : 1.7} /></span>
+            <span className="text-[11px] font-medium">{label}</span>
+          </button>)}
+        </div>
+      </nav>
+    </div>
   );
 };
 

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>CineGeek · Onboarding preview</title>
+<link rel="icon" type="image/svg+xml" href="/cinegeek-mark.svg" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: #181918; color: #f5f4ef; font-family: Inter, system-ui, sans-serif; }
+header { width: min(100%, 1150px); margin: auto; padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+header small { color: #ffc107; text-transform: uppercase; letter-spacing: .2em; font-size: 10px; }
+h1 { font-size: 24px; letter-spacing: -.04em; margin: 5px 0; }
+p { margin: 0; font-size: 12px; color: #a7aaa7; line-height: 1.6; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; }
+button, a { font: inherit; font-size: 12px; padding: 12px 15px; border-radius: 12px; background: transparent; border: 1px solid #ffffff20; color: #ccc; text-decoration: none; cursor: pointer; }
+button[aria-pressed=true] { background: #ffc107; color: #181918; border-color: #ffc107; }
+.stage { padding: 4px 24px 10px; display: flex; justify-content: center; align-items: center; min-height: 0; }
+iframe { box-sizing: content-box; width: 390px; max-width: calc(100% - 16px); height: min(844px, calc(100% - 16px)); border: 8px solid #343630; border-radius: 38px; box-shadow: 0 15px 50px #0006; background: #141414; }
+footer { padding: 4px 20px 10px; text-align: center; color: #a7aaa7; font-size: 11px; }
+@media (max-width: 600px) {
+  header { padding: 10px 12px; display: block; }
+  header h1 { font-size: 18px; }
+  header p { display: none; }
+  nav { margin-top: 8px; }
+  button, a { padding: 9px 10px; }
+  .stage { padding: 0; }
+  iframe { border: 0; border-radius: 0; max-width: 100%; height: 100%; }
+  footer { padding: 5px 8px; }
+}
+</style></head><body>
+<header><div><small>Local design preview · Not deployed</small><h1>A proper welcome to CineGeek.</h1><p>Meet Geek, add your titles and explore the Annual Pro offer.</p></div><nav aria-label="Preview size"><button data-width="320" aria-pressed="false">Small phone</button><button data-width="390" aria-pressed="true">Phone</button><button data-width="768" aria-pressed="false">Tablet</button><a href="/onboarding-preview">Full screen ↗</a></nav></header>
+<div class="stage"><iframe title="Interactive CineGeek onboarding preview" src="/onboarding-preview"></iframe></div>
+<footer>Design preview · Proposed prices and allowances · Live AI and purchases are off.</footer>
+<script type="module">
+if (import.meta.env.MODE !== 'mobile-preview') document.querySelector('.stage').textContent = 'Start this preview with npm run preview:mobile.';
+document.querySelectorAll('[data-width]').forEach(button=>button.addEventListener('click',()=>{document.querySelector('iframe').style.width=button.dataset.width+'px';document.querySelectorAll('[data-width]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));}));
+</script></body></html>

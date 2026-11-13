@@ -9,7 +9,12 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:mobile": "vite --mode mobile-preview --host 127.0.0.1 --port 5188 --strictPort",
+    "build:native": "vite build --mode native",
+    "native:sync": "npm run build:native && cap sync",
+    "native:ios": "npm run native:sync && cap open ios",
+    "native:android": "npm run native:sync && cap open android"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -64,7 +69,10 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
     "vite-plugin-pwa": "^1.1.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.9",
@@ -93,6 +101,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "@capacitor/cli": "8.6.0"
   }
 }

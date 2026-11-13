@@ -1,0 +1,176 @@
+.title-views { min-height: 0; display: flex; flex: 1; flex-direction: column; }
+.title-views .title-view-tabs { display: grid; flex-shrink: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: .65rem 1rem 0; height: auto; padding: 3px; border-radius: 14px; background: #222328; }
+.title-view-tabs .title-view-trigger { min-height: 44px; gap: .45rem; border-radius: 11px; color: #bdbac5; }
+.title-view-tabs .title-view-trigger[data-state=active] { background: #39352b; color: #ffdb78; }
+.title-views .title-view-panel { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; margin-top: 0; }
+.title-view-panel[data-state=inactive] { display: none; }
+.focus-room { display: grid; align-content: start; gap: 1rem; }
+.room-intro-tools { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.focus-room-intro .eyebrow { display: flex; align-items: center; gap: .5rem; color: var(--room-accent, #b1e4d9); }
+.room-style-trigger { display: inline-flex; align-items: center; justify-content: center; gap: .44rem; min-height: 44px; padding: 0 .85rem; border: 1px solid color-mix(in srgb, var(--room-accent, #b1e4d9) 35%, #292527); border-radius: 999px; background: color-mix(in srgb, var(--room-shadow, #292638) 55%, #232125); color: #f4ebe1; font-size: .78rem; font-weight: 600; }
+.room-style-trigger svg { color: var(--room-accent, #b1e4d9); }
+.room-style-trigger:focus-visible, .room-style-tile:focus-visible { outline: 2px solid #ffdb89; outline-offset: 2px; }
+.room-style-picker { z-index: 70; width: min(21rem, calc(100vw - 24px)); padding: .9rem; border-radius: 18px; background: #211f23; border-color: #514b4d; color: #fcf4e9; box-shadow: 0 12px 40px #0009; max-height: var(--radix-popover-content-available-height); overflow-y: auto; overscroll-behavior: contain; }
+.room-style-picker h3 { font-size: .95rem; font-weight: 650; margin: 0 0 .7rem; letter-spacing: -.015em; }
+.room-style-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; }
+.room-style-tile { display: flex; flex-direction: column; height: 100%; gap: .35rem; align-items: stretch; overflow: hidden; border: 1px solid #4c4648; border-radius: 10px; background: #2a272b; text-align: left; }
+.room-style-tile[aria-pressed=true] { border-color: #f0cf88; background: #393028; }
+.room-style-tile > span:last-child { padding: 0 .42rem .43rem; font-size: .75rem; font-weight: 600; line-height: 1.23; }
+.room-style-default { display: block; font-size: .64rem; font-weight: 500; color: #ddd3c4; }
+.room-style-picture { position: relative; display: block; }
+.room-style-picture svg { display: block; width: 100%; }
+.room-style-tick { position: absolute; display: grid; place-items: center; right: 3px; top: 3px; width: 17px; height: 17px; border-radius: 50%; background: #f6d48f; color: #33251c; box-shadow: 0 1px 3px #0008; }
+.room-style-tick svg { width: 11px; }
+@media (hover: hover) {
+  .room-style-trigger:hover, .room-style-tile:hover { border-color: var(--room-accent, #b1e4d9); }
+}
+.focus-room-intro h2 { margin: .2rem 0; font-size: clamp(1.5rem, 5.8vw, 2rem); font-weight: 650; letter-spacing: -.05em; line-height: 1.1; }
+.focus-room-intro > p:last-child, .focus-hint { color: hsl(var(--muted-foreground)); font-size: .84rem; line-height: 1.5; }
+.focus-room-card { margin: 0; overflow: hidden; border: 1px solid color-mix(in srgb, var(--room-accent) 42%, #282429); border-radius: 20px; background: var(--room-shadow); }
+.focus-room[data-room-style=original] .focus-room-card { border-color: #77688280; background: #292638; }
+.focus-room[data-room-style=original] figcaption { background: #252332; }
+.focus-room[data-room-style=original] .focus-format { color: #e2d4e7; }
+.focus-room-scene { --snack-cycle: 28s; display: block; width: 100%; height: auto; }
+.room-snack-shoulder { transform: rotate(74deg); }
+.room-snack-elbow { transform: rotate(-99deg); }
+.room-kernel-held { opacity: 0; }
+.room-wand-glint { opacity: 0; }
+.room-force-lift { transform: rotate(-18deg); }
+.room-force-fingers { transform: scale(0); }
+.room-kernel-web { opacity: 0; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.focus-room-scene [data-outfit="spider"] { --pickup-shoulder: 70.3deg; --pickup-elbow: -71deg; }
+.focus-room-card figcaption { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .8rem 1rem; background: color-mix(in srgb, var(--room-shadow) 75%, #252327); }
+.focus-room-card figcaption > div { min-width: 0; }
+.focus-room-card figcaption strong { display: block; margin-top: .22rem; font-size: 1.05rem; line-height: 1.2; overflow-wrap: anywhere; }
+.focus-label { display: block; font-size: .64rem; line-height: 1.3; letter-spacing: .13em; text-transform: uppercase; color: var(--room-accent, #cfbfda); font-weight: 600; }
+.focus-format { flex-shrink: 0; font-size: .76rem; color: #e5dcd3; }
+.focus-session { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .2rem .1rem 0; }
+.focus-clock { display: block; font-size: 1.65rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; letter-spacing: -.04em; }
+.focus-session-action { display: inline-flex; align-items: center; gap: .55rem; padding: .6rem 1rem; border-radius: 12px; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: .87rem; font-weight: 650; }
+.focus-session-action:disabled { opacity: .55; }
+.focus-room[data-session=active] .focus-session-action { background: #272633; color: #e6dcef; border: 1px solid #5b5168; }
+/* Waiting: level head, pupils centred in the rims, warm lamp and an unlit TV. */
+.room-head { transform-origin: 58px 55px; transform: rotate(0deg); }
+.room-gaze { transform: translate(-.65px, -.15px); }
+.room-beam, .room-tv-rim, .room-lights-down { opacity: 0; }
+.room-tv-power { fill: #b67f5e; }
+.focus-room[data-session=active] .room-head { transform: rotate(6deg); }
+.focus-room[data-session=active] .room-gaze { transform: translate(-2px, .85px); }
+.focus-room[data-session=active] .room-tv-power { fill: #b7f4db; }
+.focus-room[data-session=active] .room-tv-rim { opacity: .9; }
+.focus-room[data-session=active] .room-beam { opacity: .74; }
+.focus-room[data-session=active] .room-lamp-glow { opacity: .14; }
+.focus-room[data-session=active] .room-shelf-light { opacity: .35; }
+.focus-room[data-session=active] .room-lights-down { opacity: .36; }
+.focus-room[data-session=active] .room-shade-light { opacity: .28; }
+.focus-hint { font-size: .76rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .room-mug-steam path {
+    transform-box: fill-box; transform-origin: center bottom;
+    animation: room-steam-rise 4.8s ease-in-out -1.2s infinite;
+  }
+  .room-mug-steam path + path { animation-delay: -3.6s; }
+  .room-gaze { transition: transform .36s ease-in-out; }
+  .room-head { transition: transform .58s ease-in-out; }
+  .room-tv-power { transition: fill .28s ease-out; }
+  .room-tv-rim, .room-beam { transition: opacity .6s ease-out; }
+  .room-lamp-glow, .room-shade-light, .room-shelf-light, .room-lights-down { transition: opacity 1.2s ease-in-out; }
+  .focus-room[data-session=active] :is(.room-lamp-glow, .room-shade-light, .room-shelf-light, .room-lights-down) { transition-delay: .18s; }
+  /* Register each snack animation on Start so a new session always begins with a full bowl. */
+  .room-snack-shoulder, .room-snack-elbow, .room-kernel-held, .room-kernel-on-pile {
+    animation-duration: var(--snack-cycle); animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+  }
+  .focus-room[data-session=active] .room-snack-shoulder { animation-name: room-snack-shoulder; }
+  .focus-room[data-session=active] .room-snack-elbow { animation-name: room-snack-elbow; }
+  .focus-room[data-session=active] .room-kernel-held { animation-name: room-carry-kernel; }
+  .focus-room[data-session=active] .room-kernel-on-pile { animation-name: room-loose-kernel; }
+  .focus-room[data-session=active] .room-kernel-web { animation: room-web-catch var(--snack-cycle) ease-in-out infinite; }
+  .focus-room[data-session=active] .room-web-pull { animation: room-web-pull var(--snack-cycle) ease-in-out infinite; }
+  .focus-room[data-session=active] .room-wand-lift { animation: room-lift-wand var(--snack-cycle) ease-in-out infinite; }
+  .focus-room[data-session=active] .room-wand-glint { animation: room-cast-glint var(--snack-cycle) ease-in-out infinite; }
+  .focus-room[data-session=active] .room-force-lift { animation: room-force-lift var(--snack-cycle) ease-in-out infinite; }
+  .focus-room[data-session=active] .room-force-hand { animation: room-force-beckon var(--snack-cycle) ease-in-out infinite; }
+  .focus-room[data-session=active] .room-force-fingers { animation: room-force-open var(--snack-cycle) ease-in-out infinite; }
+  .focus-room[data-session=active] .room-kernel-levitating { animation: room-float-popcorn var(--snack-cycle) linear infinite; }
+}
+
+@keyframes room-steam-rise {
+  0%   { opacity: 0; transform: translateY(2px) scaleY(.65); }
+  28%  { opacity: .92; transform: translate(1px, -1px) rotate(5deg) scaleY(.9); }
+  60%  { opacity: .65; transform: translate(-1px, -5px) rotate(-4deg) scaleY(1.04); }
+  100% { opacity: 0; transform: translate(-3px, -11px) rotate(-9deg) scaleY(1.12); }
+}
+
+/* One quiet pick-up, bite and return; the arm rests for the rest of the cycle. */
+@keyframes room-snack-shoulder {
+  0%, 20%, 36%, 100% { transform: rotate(74deg); }
+  24%, 25% { transform: rotate(var(--pickup-shoulder, 40deg)); }
+  27% { transform: rotate(63deg); }
+  28.8% { transform: rotate(47deg); }
+  31%, 32% { transform: rotate(-41deg); }
+}
+@keyframes room-snack-elbow {
+  0%, 20%, 36%, 100% { transform: rotate(-99deg); }
+  24%, 25% { transform: rotate(var(--pickup-elbow, -28deg)); }
+  27% { transform: rotate(-79deg); }
+  28.8% { transform: rotate(-138deg); }
+  31%, 32% { transform: rotate(-115deg); }
+}
+@keyframes room-carry-kernel {
+  0%, 24%, 31.4%, 100% { opacity: 0; }
+  24.3%, 31% { opacity: 1; }
+}
+@keyframes room-loose-kernel {
+  0%, 24%, 80%, 100% { opacity: 1; }
+  24.3%, 70% { opacity: 0; }
+}
+/* The short strand and kernel reel in together. Its tip moves from 16 to 10 units past the cuff. */
+@keyframes room-web-catch {
+  0%, 21%, 32%, 100% { opacity: 0; stroke-dashoffset: 1; transform: scaleY(1); }
+  24%, 27% { opacity: .65; stroke-dashoffset: 0; transform: scaleY(1); }
+  30% { opacity: .45; stroke-dashoffset: 0; transform: scaleY(.625); }
+  31% { opacity: 0; stroke-dashoffset: 0; transform: scaleY(.625); }
+}
+@keyframes room-web-pull {
+  0%, 20%, 30%, 100% { transform: translateY(0); }
+  24%, 27% { transform: translateY(6px); }
+}
+@keyframes room-lift-wand {
+  0%, 17%, 38%, 100% { transform: rotate(0); }
+  24%, 32% { transform: rotate(-19deg); }
+}
+@keyframes room-cast-glint {
+  0%, 18%, 28%, 100% { opacity: 0; }
+  22% { opacity: .30; }
+}
+/* A two-finger lift leads the kernel off the bowl, then relaxes after the bite. */
+@keyframes room-force-lift {
+  0%, 18%, 40%, 100% { transform: rotate(-18deg); }
+  26%, 34% { transform: rotate(19deg); }
+}
+@keyframes room-force-beckon {
+  0%, 18%, 38%, 100% { transform: rotate(0); }
+  24% { transform: rotate(12deg); }
+  31%, 34% { transform: rotate(21deg); }
+}
+@keyframes room-force-open {
+  0%, 19%, 37%, 100% { transform: rotate(-30deg) scale(0); }
+  21%, 35% { transform: rotate(0) scale(1); }
+}
+/* The top kernel itself travels from the tub (214, 292) to the smile (268, 232). */
+@keyframes room-float-popcorn {
+  0%, 21% { transform: none; opacity: 1; animation-timing-function: ease-in; }
+  26% { transform: translate(7px, -25px) rotate(-7deg) scale(.96); }
+  31% { transform: translate(32px, -51px) rotate(-14deg) scale(.86); animation-timing-function: ease-out; }
+  34% { transform: translate(54px, -60px) rotate(-18deg) scale(.65); opacity: 1; }
+  35%, 69% { transform: translate(54px, -60px) rotate(-18deg) scale(.12); opacity: 0; }
+  70% { transform: none; opacity: 0; }
+  80%, 100% { transform: none; opacity: 1; }
+}
+
+.focus-protection { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 0 .65rem; padding: .35rem .85rem; border: 1px solid #ffffff18; border-radius: 15px; background: #202127; }
+.focus-protection-status { display: flex; align-items: center; gap: .5rem; margin: .4rem 0; color: #e2dfeb; font-size: .82rem; font-weight: 600; }
+.focus-protection-status svg { flex-shrink: 0; color: var(--room-accent, #a5e0cf); }
+.focus-protection-actions { display: flex; gap: .9rem; flex-wrap: wrap; }
+.focus-protection-actions button { min-height: 44px; color: var(--room-accent, #a5e0cf); font-size: .82rem; text-decoration: underline; text-underline-offset: 3px; }
+.focus-protection-actions button:disabled { opacity: .55; }

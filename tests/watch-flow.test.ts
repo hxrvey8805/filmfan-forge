@@ -95,14 +95,15 @@ describe('continuity resolves references without importing model claims',()=>{
 describe('one explanation route and bounded semantic selection',()=>{
   const genFor=(text='Sharing the cost makes the rent more affordable.')=>vi.fn(async(_system:string,user:string)=>{
     const packet=JSON.parse(user),s=packet.sources.find((s:{text:string})=>s.text.includes('rent'))??packet.sources[0];
-    const support=[{id:s.id,quote:s.text}];
+    const support=packet.points?[{id:s.id,firstLine:1,lastLine:s.text.split('\n').length}]:[{id:s.id,quote:s.text}];
     return packet.points?{boundarySafe:true,fit:'direct',checks:packet.points.map((_:unknown,index:number)=>({index,supported:true,issue:'none',attribution:'none',support}))}:{points:[{text,support}]};
   });
   it.each(['Why did Mira suggest sharing?','Remind me why Mira suggested sharing.','What does sharing the cost achieve?'])('same complete evidence reaches writer and checker: %s',async q=>{
     const gen=genFor(),plan=questionScope(q,movie),sources=watchSources(plan,[row()],[]);
     const result=await watchAnswer(q,plan,sources,gen);
     expect(result.answer).toContain('affordable');expect(result.limited).toBeUndefined();expect(gen).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(gen.mock.calls[0][1]).sources).toEqual(JSON.parse(gen.mock.calls[1][1]).sources);
+    const reviewed=JSON.parse(gen.mock.calls[1][1]).sources.map((s:{text:string})=>({...s,text:s.text.split('\n').map(line=>line.replace(/^\[\d+\] /,'')).join('\n')}));
+    expect(JSON.parse(gen.mock.calls[0][1]).sources).toEqual(reviewed);
     expect(JSON.stringify(gen.mock.calls)).not.toContain('FUTURE_SECRET');
   });
   it('zero-time recap is an empty state, not a data error',async()=>{
@@ -137,11 +138,11 @@ describe('one explanation route and bounded semantic selection',()=>{
     const sources=Array.from({length:24},(_,i)=>({...base,id:'S'+i,start:i*10,end:i*10+9,text:'A'.repeat(1300)}));
     const gen=vi.fn(async(_system:string,user:string)=>{
       const packet=JSON.parse(user);
-      if(packet.budgetCharacters)return {ids:mode==='forged'?['FUTURE']:mode==='too-large'?['S1','S4','S7','S10','S13','S16','S19','S22']:['S8']};
-      return {ids:packet.sources.map((s:{id:string})=>s.id)};
+      if(packet.budgetCharacters)return {ids:mode==='forged'?['FUTURE']:mode==='too-large'?['S1','S4','S7','S10','S13','S16','S19','S22']:['S4']};
+      return {ids:packet.sources.slice(0,8).map((s:{id:string})=>s.id)};
     });
     const selected=await selectWatchSources('Why?',plan,sources,gen);
-    if(mode==='valid')expect(selected?.map(s=>s.id)).toEqual(['S7','S8','S9']);
+    if(mode==='valid')expect(selected?.map(s=>s.id)).toEqual(['S3','S4','S5']);
     else expect(selected).toBeNull();
     expect(JSON.parse(gen.mock.calls.at(-1)![1]).budgetCharacters).toBe(19000);
   });
@@ -151,7 +152,7 @@ describe('one explanation route and bounded semantic selection',()=>{
     expect(plan.intent).toBe('scene');expect((await watchAnswer(q,plan,sources,gen)).limited).toBe(true);expect(gen).not.toHaveBeenCalled();
   });
   it('uses the same current cutoff to resolve safe follow-ups',async()=>{
-    const gen=genFor(),store={current:vi.fn().mockResolvedValue({records:[row(tv)],notes:[]}),earlier:vi.fn().mockResolvedValue({records:[],notes:[]}),seasons:vi.fn()};
+    const gen=genFor(),store={current:vi.fn().mockResolvedValue({records:[row(tv)],notes:[]}),earlier:vi.fn().mockResolvedValue({records:[],notes:[]}),seasons:vi.fn().mockResolvedValue([])};
     await answerWatchRequest('Why did she do that?',tv,[conversation()],gen,store);
     expect(JSON.parse(gen.mock.calls[0][1]).request.referenceQuestion).toBe(conversation().question);
     expect(JSON.stringify(gen.mock.calls)).not.toContain('DO_NOT_REUSE_THIS_MODEL_ANSWER');

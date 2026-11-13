@@ -1,0 +1,58 @@
+.welcome-screen {
+  display: grid; place-items: center; min-height: 100svh;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(32px, env(safe-area-inset-bottom));
+  background: radial-gradient(ellipse at 37% 28%, #1a3b3b 0%, transparent 48%),
+    radial-gradient(ellipse at 80% 68%, #2d2335 0%, transparent 52%), #10151a;
+  color: #f7f6ef;
+}
+.welcome-content { width: min(100%, 340px); text-align: center; }
+.welcome-stage {
+  position: relative; display: grid; place-items: center; isolation: isolate;
+  width: min(100%, 300px); margin: 0 auto 10px;
+}
+.welcome-stage::before {
+  content: ""; position: absolute; z-index: -1; inset: 4% -5% 0; border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 67%, #4edac826, transparent 69%);
+}
+.welcome-stage .geek-avatar {
+  width: clamp(188px, min(62vw, 32svh), 264px);
+  /* Centre Arcade's face above the wordmark; the wave extends to his right. */
+  transform: translateX(5%);
+}
+.welcome-brand h1 {
+  font-size: clamp(2.6rem, 10vw, 3.35rem); line-height: 1.08;
+  font-weight: 750; letter-spacing: -.065em; margin: 8px 0 5px;
+}
+.welcome-brand h1 span { color: hsl(var(--primary)); }
+.welcome-tagline { display: grid; justify-items: center; gap: .3rem; margin: 1rem 0 0; }
+.welcome-tagline-credit {
+  display: flex; align-items: center; justify-content: center; gap: .5em;
+  color: #b2d5cf; font: 650 .72rem/1.4 ui-monospace, monospace;
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.welcome-tagline-credit::before, .welcome-tagline-credit::after {
+  content: ""; width: .7em; height: .68em; flex: none;
+  border-inline: 2px solid #77cfc3; transform: skewX(-22deg);
+}
+.welcome-tagline-line {
+  color: #fff5da; font-family: ui-rounded, system-ui, sans-serif;
+  font-size: clamp(1.15rem, 4.9vw, 1.38rem); font-weight: 720;
+  line-height: 1.35; letter-spacing: -.028em; text-wrap: balance;
+}
+.welcome-tagline-line em {
+  position: relative; display: inline-block; font-weight: inherit;
+}
+.welcome-tagline-line em::after {
+  content: ""; position: absolute; inset: auto 1% -.07em 2%; height: .22em;
+  border-bottom: .1em solid #76ddcd; border-radius: 50%; transform: rotate(-2deg);
+}
+.welcome-actions { display: grid; gap: 11px; margin-top: clamp(22px, 5svh, 40px); }
+.welcome-actions a {
+  display: grid; place-items: center; min-height: 51px; border-radius: 15px;
+  font-size: 1rem; font-weight: 650; background: #222c32; border: 1px solid #556167;
+}
+.welcome-actions a:first-child { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: transparent; }
+.welcome-actions a:focus-visible { outline: 3px solid #a0e8d2; outline-offset: 3px; }
+@media (max-height: 600px) {
+  .welcome-stage .geek-avatar { width: 150px; }
+}

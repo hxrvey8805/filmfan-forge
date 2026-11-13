@@ -21,6 +21,13 @@ const words = (text: string) => new Set((text.match(/[\p{L}\p{N}]+(?:['’-][\p{
 // This is not fuzzy name matching or a substitute for attribution review.
 export function captionIdentityWords(text:string) {
   const result=words(text);
+  // A hyphenated acronym+noun descriptor can be the same phrase as the
+  // spaced plural in a caption ("TV-show" / "TV shows"). This does not
+  // fuzzy-match personal names or supply an acronym absent from the source.
+  for(const match of text.matchAll(/\b([A-Z]{2,})[ -]([a-z]{3,})\b/g)) {
+    result.add(token(`${match[1]}-${match[2]}`));
+    if(match[2].endsWith('s')&&!match[2].endsWith('ss'))result.add(token(`${match[1]}-${match[2].slice(0,-1)}`));
+  }
   if(new Set(text.match(/\b[a-z]+I[a-z]+\b/g)??[]).size<3)return result;
   for(const word of text.match(/[\p{L}]+/gu)??[]) {
     if(/[a-z]I(?=[a-z])/.test(word))result.add(token(word.replace(/(?<=[a-z])I(?=[a-z])/g,'l')));

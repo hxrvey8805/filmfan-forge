@@ -5,12 +5,14 @@ import type { ReviewedSceneNote } from './reviewed-scenes.ts';
 import { questionScope, recapWindows } from './question-scope.ts';
 import { watchSources } from './watch-context.ts';
 import { safeReferenceQuestion, watchAnswer } from './watch-answer.ts';
+import { earlierWatchData, storyCoverageMessage } from './earlier-watch-data.ts';
 
 export type WatchData={records:SubtitleRecord[];notes:ReviewedSceneNote[];incomplete?:boolean};
 export type WatchStore={
   current:(p:ViewingPosition)=>Promise<WatchData>;
   earlier:(p:ViewingPosition)=>Promise<WatchData>;
   seasons:(p:ViewingPosition)=>Promise<{season:number;count:number}[]>;
+  unavailable?:(p:ViewingPosition)=>Promise<{season:number;episode:number}[]>;
   chapter?:(p:ViewingPosition)=>Promise<CheckedResponse|null>;
   saveChapter?:(p:ViewingPosition,answer:CheckedResponse)=>Promise<void>;
   prepareLater?:()=>never;
@@ -22,9 +24,10 @@ export async function answerWatchRequest(question:string,p:ViewingPosition,histo
   if(plan.clarification)return watchAnswer(question,plan,[],generate,reference);
   if(plan.intent!=='recap') {
     const current=await store.current(boundary);
-    const previous=plan.earlierStory?await store.earlier(boundary):{records:[],notes:[]};
-    const result=await watchAnswer(question,plan,watchSources(plan,[...previous.records,...current.records],[...previous.notes,...current.notes]),generate,reference);
-    if(current.incomplete || previous.incomplete)return {...result,answer:result.answer+'\n\nMy available story coverage is incomplete for this request.',limited:true};
+    const previous=plan.earlierStory?await earlierWatchData(boundary,store):{records:[],notes:[],incomplete:false,coverage:undefined};
+    const incomplete=!!current.incomplete || !!previous.incomplete;
+    const result=await watchAnswer(question,{...plan,coverageIncomplete:incomplete},watchSources(plan,[...previous.records,...current.records],[...previous.notes,...current.notes]),generate,reference);
+    if(incomplete)return {...result,answer:result.answer+'\n\n'+(previous.coverage && previous.incomplete ? storyCoverageMessage(previous.coverage) : 'My available story coverage is incomplete for this request.'),limited:true};
     return result;
   }
   const needsCatalog=!!plan.collection && boundary.mediaType==='tv' && (boundary.seasonNumber!>1 && !(plan.collection==='season' && plan.season===boundary.seasonNumber));

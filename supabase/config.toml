@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.annotate-speakers]
 verify_jwt = false
+
+[functions.interpret-smart-list]
+verify_jwt = false
