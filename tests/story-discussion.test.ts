@@ -25,6 +25,48 @@ const check = (changes:Record<string,unknown> = {}) => ({boundarySafe:true,fit:'
 }]});
 
 describe('contextual story explanations with independent receipts',()=>{
+  it('rechecks an inexact reviewer citation without rewriting an otherwise approved draft',async()=>{
+    const bad=check({support:[{id:'R2',quote:'Mira suggests sharing a flat to reduce the rent!'}]});
+    const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(bad).mockResolvedValueOnce(check());
+    const result=await storyDiscussion(context,gen);
+    expect(result?.answer).toBe(draft().points[0].text);
+    expect(gen.mock.calls.map(c=>c[3])).toEqual(['writer','verifier','verifier']);
+    const first=JSON.parse(gen.mock.calls[1][1]),second=JSON.parse(gen.mock.calls[2][1]);
+    expect(second.points).toEqual(first.points);expect(second.sources).toEqual(first.sources);
+    expect(JSON.stringify(second)).not.toContain('reduce the rent!');
+    expect(result?.points[0].support).toEqual(check().checks[0].support);
+  });
+  it('copies reviewed line ranges from the original source without correcting its spelling',async()=>{
+    const text='The office is above the COVENIENCE STORE.\nMira suggests sharing a flat to reduce the rent.';
+    const ctx={...context,sources:[context.sources[0],{...context.sources[1],text}]};
+    const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(check({support:[{id:'R2',firstLine:1,lastLine:2}]}));
+    const result=await storyDiscussion(ctx,gen);
+    expect(result?.points[0].support).toEqual([{id:'R2',quote:text}]);
+    expect(JSON.parse(gen.mock.calls[1][1]).sources[1].text).toBe('[1] The office is above the COVENIENCE STORE.\n[2] Mira suggests sharing a flat to reduce the rent.');
+    expect(JSON.stringify(gen.mock.calls[1][4])).toContain('firstLine');
+  });
+  it.each([
+    {id:'R2',firstLine:0,lastLine:1},{id:'R2',firstLine:1,lastLine:2},
+    {id:'R2',firstLine:1.5,lastLine:1.5},{id:'R2',firstLine:2,lastLine:1},
+    {id:'future',firstLine:1,lastLine:1},{id:'R2',firstLine:1,lastLine:1,quote:context.sources[1].text},
+  ])('rejects invalid or mixed line references: %j',async receipt=>{
+    const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValue(check({support:[receipt]}));
+    expect(await storyDiscussion(context,gen)).toBeNull();
+  });
+  it('still rejects repeated malformed receipts and a spoiler verdict on the citation retry',async()=>{
+    const bad=check({support:[{id:'R2',quote:'Mira suggests sharing a flat to reduce the rent!'}]});
+    for(const last of [bad,{...check(),boundarySafe:false}]) {
+      const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(bad).mockResolvedValueOnce(last);
+      expect(await storyDiscussion(context,gen)).toBeNull();expect(gen).toHaveBeenCalledTimes(3);
+    }
+  });
+  it('does not reuse a draft with a semantic rejection even if another receipt is malformed',async()=>{
+    const bad={...check({support:[{id:'R2',quote:'Mira suggests sharing a flat to reduce the rent!'}]}),boundarySafe:false};
+    const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(bad).mockResolvedValueOnce({points:[]});
+    expect(await storyDiscussion(context,gen)).toBeNull();
+    expect(gen.mock.calls.map(c=>c[3])).toEqual(['writer','verifier','writer']);
+    expect(JSON.parse(gen.mock.calls[2][1])).not.toHaveProperty('points');
+  });
   it.each(['dialogue','visual'] as const)('requires actual reaction evidence from current captions, without discarding verified visual facts: %s',async kind=>{
     const text=kind==='dialogue'?'Would you like to meet her? ALL: Yes!':'The crowd cheers as the princess is introduced.';
     const ctx:StoryDiscussionContext={question:'Recap the announcement.',boundary:{season:0,episode:0,seconds:90},mediaType:'movie',
@@ -160,7 +202,7 @@ describe('contextual story explanations with independent receipts',()=>{
     // cannot enter the rewrite or be salvaged as a partial response.
     expect(JSON.parse(gen.mock.calls[2][1]).sources).toEqual(ctx.sources);
     expect(gen.mock.calls[2][1]).not.toContain(tangent.text);
-    expect(JSON.parse(gen.mock.calls[3][1]).points).toEqual(focused.points);
+    expect(JSON.parse(gen.mock.calls[3][1]).points).toEqual(focused.points.map(({text})=>({text})));
   });
   it.each(['recap','answer'] as const)('keeps later permitted events when the question explicitly requests them: %s',async intent=>{
     const extra={id:'R3',text:'Later Mira worries about the noise at a different apartment.',season:1,episode:1,end:70};
@@ -202,7 +244,7 @@ describe('contextual story explanations with independent receipts',()=>{
     expect(gen).toHaveBeenCalledTimes(4);
     expect(gen.mock.calls[2][1]).toBe(gen.mock.calls[0][1]);
     expect(JSON.stringify(gen.mock.calls.slice(2))).not.toContain('SECRET_FUTURE_REASON');
-    expect(JSON.parse(gen.mock.calls[3][1]).points).toEqual(safe.points);
+    expect(JSON.parse(gen.mock.calls[3][1]).points).toEqual(safe.points.map(({text})=>({text})));
   });
   it.each([
     {season:1,episode:3,end:0}, {season:2,episode:1,end:0}, {season:1,episode:2,end:.001},

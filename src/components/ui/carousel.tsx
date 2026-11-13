@@ -135,23 +135,14 @@ const CarouselContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HT
   ({ className, ...props }, ref) => {
     const { carouselRef, orientation } = useCarousel();
 
+    // Embla handles drags along the row. Leave the other axis to native page scrolling.
+    const touchAction = orientation === "horizontal" ? "pan-y pinch-zoom" : "pan-x pinch-zoom";
+
     return (
-      <div 
-        ref={carouselRef} 
-        className="overflow-hidden touch-pan-x" 
-        style={{ 
-          WebkitOverflowScrolling: "touch",
-          overscrollBehavior: "contain",
-        }}
-      >
+      <div ref={carouselRef} className="overflow-clip" style={{ touchAction }}>
         <div
           ref={ref}
-          className={cn("flex", orientation === "horizontal" ? "-ml-4" : "-mt-4 flex-col", className)}
-          style={{ 
-            touchAction: orientation === "horizontal" ? "pan-x pinch-zoom" : "pan-y pinch-zoom",
-            willChange: "transform",
-            WebkitOverflowScrolling: "touch",
-          }}
+          className={cn("flex will-change-transform", orientation === "horizontal" ? "-ml-4" : "-mt-4 flex-col", className)}
           {...props}
         />
       </div>

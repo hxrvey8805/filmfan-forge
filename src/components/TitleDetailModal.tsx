@@ -1,15 +1,20 @@
 import { useCompanion } from "@/hooks/use-companion";
 import { CompanionTimestamp } from "@/components/CompanionTimestamp";
-import { CompanionAnswer } from "@/components/CompanionAnswer";
-import { formatTimestamp as formatPosition } from "../../supabase/functions/_shared/companion";
-import { useState, useEffect } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { RoomChat, RoomPositionEditor } from "./RoomChat";
+import "./screening-room.css";
+import { formatTimestamp as formatPosition, type ViewingPosition } from "../../supabase/functions/_shared/companion";
+import { useState, useEffect, useRef, useContext } from "react";
+import { GeekViewer } from "@/hooks/use-geek-outfit";
+import { startingPosition, saveBookmark } from "@/lib/viewing-bookmark";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Clapperboard, Tv, Clock, Send, Loader2, Plus, Eye, Heart, X, Zap, Coins, Sparkles } from "lucide-react";
+import { MoreHorizontal, ArrowLeft, Armchair } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { FocusRoom } from "./FocusRoom";
+import { GeekWardrobe } from "./GeekWardrobe";
+import { PosterArtwork } from "./PosterArtwork";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -18,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 
 interface Title {
   id: number;
@@ -42,27 +46,63 @@ interface TitleDetailModalProps {
   sourceList?: "favourite" | "watchlist" | "watching" | "watched";
 }
 
-const TitleDetailModalContent = ({ title, open, onOpenChange, onAddToFavourites, onAddToWatchList, onAddToCurrentlyWatching, onAddToWatched, onMoveToCurrentlyWatching, onMoveToWatched, sourceList }: TitleDetailModalProps) => {
+const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFavourites, onAddToWatchList, onMoveToCurrentlyWatching, onMoveToWatched, sourceList }: TitleDetailModalProps & { viewer: string | null }) => {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [question, setQuestion] = useState("");
+  const panel = useRef<HTMLDivElement>(null);
+  const backButton = useRef<HTMLButtonElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const [inRoom, setInRoom] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [editingTime, setEditingTime] = useState(false);
+  const roomToggle = useRef<HTMLButtonElement>(null);
+  const positionButton = useRef<HTMLButtonElement>(null);
+  function enterRoom() {
+    setInRoom(true);
+    backButton.current?.focus();
+  }
+  function leaveRoom() {
+    setChatOpen(false);
+    setEditingTime(false);
+    setInRoom(false);
+    requestAnimationFrame(() => roomToggle.current?.focus());
+  }
+  // iOS can shrink only the visual viewport while the software keyboard is open.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport || !inRoom) return;
+    const el = panel.current;
+    const resize = () => {
+      el?.style.setProperty("--room-viewport-height", `${viewport.height}px`);
+      el?.style.setProperty("--room-viewport-top", `${viewport.offsetTop}px`);
+    };
+    resize();
+    viewport.addEventListener("resize", resize);
+    viewport.addEventListener("scroll", resize);
+    return () => {
+      viewport.removeEventListener("resize", resize);
+      viewport.removeEventListener("scroll", resize);
+      el?.style.removeProperty("--room-viewport-height");
+      el?.style.removeProperty("--room-viewport-top");
+    };
+  }, [inRoom]);
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const [coins, setCoins] = useState(0);
   
-  // TV-specific state
-  const [selectedSeason, setSelectedSeason] = useState("1");
-  const [selectedEpisode, setSelectedEpisode] = useState("1");
+  const [point, setPoint] = useState(() => startingPosition(viewer, title));
+  const selectedSeason = String(point.seasonNumber ?? "");
+  const selectedEpisode = String(point.episodeNumber ?? "");
   const [seasons, setSeasons] = useState<{ seasonNumber: number; name: string; episodeCount: number }[]>([]);
   const [episodes, setEpisodes] = useState<{ episodeNumber: number; name: string; runtime: number }[]>([]);
-  
-  // Timestamp state
-  const [timestampMinutes, setTimestampMinutes] = useState([0]);
+
+  // Only an explicit viewing edit moves the bookmark. The Focus clock is independent.
+  function changePosition(next: ViewingPosition) {
+    setPoint(next);
+    saveBookmark(viewer, next);
+  }
   const [maxRuntime, setMaxRuntime] = useState(120);
-  const [timestampValid, setTimestampValid] = useState(true);
-  const position = title.type === 'movie' || (selectedSeason && selectedEpisode) ? {
-    tmdbId: title.id, mediaType: title.type, seconds: Math.round(timestampMinutes[0] * 60),
-    ...(title.type === 'tv' ? { seasonNumber: Number(selectedSeason), episodeNumber: Number(selectedEpisode) } : {}),
-  } : null;
+  const [inputValid, setTimestampValid] = useState(true);
+  const timestampValid = inputValid && point.seconds <= maxRuntime * 60;
+  const position = title.type === "movie" || point.episodeNumber !== undefined ? point : null;
   const { ask, messages, isLoading, historyError } = useCompanion(position, open && timestampValid);
 
   // Fetch seasons for TV shows
@@ -216,423 +256,130 @@ const TitleDetailModalContent = ({ title, open, onOpenChange, onAddToFavourites,
     }
   };
 
-  const timestamp = formatPosition(Math.round(timestampMinutes[0] * 60));
+  const timestamp = formatPosition(point.seconds);
 
-  const handleAskQuestion = async () => {
-    if (isLoading) return;
-    if (!question.trim() || !position || !timestampValid) {
-      toast({ title: "Check your question", description: "Select what you’re watching, enter a valid timestamp, and ask a question.", variant: "destructive" });
-      return;
-    }
-    try {
-      const data = await ask(question, timestamp);
-      if (data.remainingFreeQuestions !== undefined) setRemainingFree(data.remainingFreeQuestions);
-      if (data.usedCoins) setCoins(previous => Math.max(0, previous - data.usedCoins));
-      if (data.stale) return;
-      setQuestion("");
-      toast({ title: "Answer received", description: data.conversation.answer_status === 'insufficient_evidence'
-        ? "No question or coins used." : "Conversation saved at your viewing position." });
-    } catch (error) {
-      toast({ title: "Could not answer", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
-    }
+  const episodeLabel = title.type === "tv" ? `S${selectedSeason} · E${selectedEpisode}` : "Movie";
+  const handleAskQuestion = async (question: string) => {
+    const data = await ask(question, timestamp);
+    if (data.remainingFreeQuestions !== undefined) setRemainingFree(data.remainingFreeQuestions);
+    if (data.usedCoins) setCoins(previous => Math.max(0, previous - data.usedCoins));
+    return data.stale ? undefined : data.conversation?.id;
   };
 
+  const listAction = sourceList === "watching" && onMoveToWatched
+    ? { label: "Mark as watched", run: () => { onMoveToWatched(title); onOpenChange(false); } }
+    : sourceList === "watchlist" && onMoveToCurrentlyWatching
+    ? { label: "Start watching", run: () => { onMoveToCurrentlyWatching(title); onOpenChange(false); } }
+    : sourceList === "watched" && onAddToFavourites
+    ? { label: "Add to favourites", run: () => onAddToFavourites(title) }
+    : !sourceList && onAddToWatchList ? { label: "Add to watch list", run: () => onAddToWatchList(title) } : null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="space-y-6">
-          {/* Header with Poster and Meta */}
-          <div className="flex gap-6">
-            <div className="relative aspect-[2/3] w-48 flex-shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
-              {title.posterPath ? (
-                <img 
-                  src={title.posterPath} 
-                  alt={title.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  {title.type === "movie" ? (
-                    <Clapperboard className="h-16 w-16 text-muted-foreground/50" />
-                  ) : (
-                    <Tv className="h-16 w-16 text-muted-foreground/50" />
-                  )}
+      <DialogContent ref={panel} className="title-companion p-0 gap-0 flex flex-col overflow-hidden [&>button:last-child]:hidden"
+        onEscapeKeyDown={event => {
+          if (!inRoom) return;
+          event.preventDefault();
+          if (chatOpen) setChatOpen(false);
+          else leaveRoom();
+        }}
+        onOpenAutoFocus={event => {
+          event.preventDefault();
+          opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          backButton.current?.focus();
+        }}
+        onCloseAutoFocus={event => {
+          if (opener.current?.isConnected) {
+            event.preventDefault();
+            opener.current.focus({ preventScroll: true });
+          }
+        }}>
+        <div className="companion-topbar shrink-0 border-b border-white/10 px-3 flex items-center gap-2 bg-background/95">
+          <button ref={backButton} onClick={inRoom ? leaveRoom : () => onOpenChange(false)} aria-label={inRoom ? "Back to viewing setup" : "Back to your titles"} className="flex items-center justify-center rounded-full hover:bg-white/5"><ArrowLeft className="w-5 h-5" /></button>
+          <div className="w-8 h-11 shrink-0 rounded overflow-hidden"><PosterArtwork src={title.posterPath} type={title.type} /></div>
+          <div className="min-w-0 flex-1 pl-1">
+            <DialogTitle className="text-sm truncate">{title.title}</DialogTitle>
+            <DialogDescription className="sr-only">Ask about this title at your viewing position or watch with your geek in the screening room.</DialogDescription>
+            <p className="text-xs text-muted-foreground mt-1 truncate">{inRoom ? `Screening room · ${episodeLabel}` : "Ask your geek"}</p>
+          </div>
+          {listAction && <DropdownMenu><DropdownMenuTrigger asChild>
+            <button aria-label="Title options" className="grid place-items-center rounded-full text-muted-foreground hover:bg-white/5"><MoreHorizontal size={20} /></button>
+          </DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem className="min-h-11" onSelect={listAction.run}>{listAction.label}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
+        </div>
+        <FocusRoom key={`${selectedSeason}:${selectedEpisode}`} title={title.title} active={inRoom}
+          episodeLabel={episodeLabel} validPosition={Boolean(position) && timestampValid} chatting={chatOpen}
+          setup={(options, preparing) => <div className="screening-setup companion-scroll">
+          <Card className="room-entry">
+            <GeekWardrobe compact />
+            <div className="room-entry-fields">
+              {/* Season & Episode for TV */}
+              {title.type === "tv" && (
+                <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label htmlFor="companion-season" className="text-xs text-muted-foreground">Season</label>
+                    <Select value={selectedSeason} onValueChange={value => {
+                      changePosition({ ...point, seasonNumber: Number(value), episodeNumber: undefined, seconds: 0 });
+                      setTimestampValid(true);
+                    }}>
+                      <SelectTrigger id="companion-season" className="bg-background/50 min-w-0 [&>span]:truncate">
+                        <SelectValue placeholder="Select season" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {seasons.map((season) => (
+                          <SelectItem key={season.seasonNumber} value={season.seasonNumber.toString()}>
+                            {season.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="companion-episode" className="text-xs text-muted-foreground">Episode</label>
+                    <Select value={selectedEpisode} onValueChange={value => {
+                      changePosition({ ...point, episodeNumber: Number(value), seconds: 0 });
+                      setTimestampValid(true);
+                    }}>
+                      <SelectTrigger id="companion-episode" className="bg-background/50 min-w-0 [&>span]:truncate">
+                        <SelectValue placeholder="Select episode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {episodes.map((episode) => (
+                          <SelectItem key={episode.episodeNumber} value={episode.episodeNumber.toString()}>
+                            Episode {episode.episodeNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               )}
-              <Badge 
-                variant={title.type === "tv" ? "default" : "secondary"}
-                className="absolute top-2 left-2"
-              >
-                {title.type === "tv" ? "TV Show" : "Movie"}
-              </Badge>
-            </div>
 
-            <div className="flex-1 space-y-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-3xl font-bold">{title.title}</h2>
-                  {title.year && (
-                    <p className="text-muted-foreground">{title.year}</p>
-                  )}
-                </div>
-                
-                <div className="flex gap-2">
-                  {sourceList === "favourite" ? (
-                    // Only Exit button for favourites
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onOpenChange(false)}
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Exit
-                    </Button>
-                  ) : sourceList === "watchlist" ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          onMoveToCurrentlyWatching?.(title);
-                          onOpenChange(false);
-                        }}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Move to Currently Watching
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onOpenChange(false)}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Exit
-                      </Button>
-                    </>
-                  ) : sourceList === "watching" ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          onMoveToWatched?.(title);
-                          onOpenChange(false);
-                        }}
-                      >
-                        <Clock className="h-4 w-4 mr-1" />
-                        Watched
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onOpenChange(false)}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Exit
-                      </Button>
-                    </>
-                  ) : sourceList === "watched" ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          onAddToFavourites?.(title);
-                          toast({ description: "Added to Favourites" });
-                        }}
-                      >
-                        <Heart className="h-4 w-4 mr-1" />
-                        Favourite
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onOpenChange(false)}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Exit
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          onAddToWatchList?.(title);
-                          toast({ description: "Added to Watch List" });
-                        }}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Watch List
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onOpenChange(false)}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Exit
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
+              <CompanionTimestamp key={`${selectedSeason}:${selectedEpisode}`} minutes={point.seconds / 60} maxMinutes={maxRuntime}
+                onChange={([minutes]) => changePosition({ ...point, seconds: Math.round(minutes * 60) })}
+                onValidityChange={setTimestampValid} disabled={!position} />
 
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold">Spoiler-Free AI Companion</h3>
-                <p className="text-sm text-muted-foreground">
-                  Ask questions about the story up to a specific point without spoilers
-                </p>
-                {/* Question Counter */}
-                {remainingFree !== null && (
-                  remainingFree === 0 ? (
-                    <Card className="p-4 bg-gradient-to-br from-card/90 to-card/70 border-2 border-primary/30 shadow-lg mt-2">
-                      <div className="flex flex-col items-center gap-4">
-                        {/* Enlarged 0/5 Display */}
-                        <div className="relative w-24 h-24">
-                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                            {/* Background circle */}
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="40"
-                              stroke="currentColor"
-                              strokeWidth="8"
-                              fill="none"
-                              className="text-primary/20"
-                            />
-                            {/* Progress circle - full (0 remaining) */}
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="40"
-                              stroke="url(#modal-gradient-zero)"
-                              strokeWidth="8"
-                              fill="none"
-                              strokeLinecap="round"
-                              strokeDasharray={`${2 * Math.PI * 40}`}
-                              strokeDashoffset="0"
-                              className="transition-all duration-1000 ease-out"
-                            />
-                            <defs>
-                              <linearGradient id="modal-gradient-zero" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stopColor="hsl(var(--primary))" />
-                                <stop offset="100%" stopColor="hsl(var(--accent))" />
-                              </linearGradient>
-                            </defs>
-                          </svg>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="text-center">
-                              <div className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
-                                0
-                              </div>
-                              <div className="text-sm text-muted-foreground leading-none">/5</div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Prompts */}
-                        <div className="text-center space-y-3 w-full">
-                          <p className="text-sm font-semibold text-foreground">
-                            No free questions remaining
-                          </p>
-                          <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                            {coins >= 150 ? (
-                              <Button
-                                onClick={() => {
-                                  onOpenChange(false);
-                                  navigate("/store");
-                                }}
-                                className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
-                              >
-                                <Coins className="h-4 w-4 mr-2" />
-                                Buy Question (150 coins)
-                              </Button>
-                            ) : (
-                              <>
-                                <Button
-                                  onClick={() => {
-                                    onOpenChange(false);
-                                    navigate("/store");
-                                  }}
-                                  variant="outline"
-                                  className="border-primary/40"
-                                >
-                                  <Coins className="h-4 w-4 mr-2" />
-                                  Buy Question
-                                </Button>
-                                <Button
-                                  onClick={() => {
-                                    onOpenChange(false);
-                                    navigate("/dashboard");
-                                  }}
-                                  className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
-                                >
-                                  <Sparkles className="h-4 w-4 mr-2" />
-                                  Play Game to Earn Coins
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                          {coins < 150 && (
-                            <p className="text-xs text-muted-foreground">
-                              Win Actor Connect in under 2 minutes to earn 75 coins
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  ) : (
-                    <div className="flex items-center gap-3 pt-2">
-                      <div className="relative w-12 h-12">
-                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                          {/* Background circle */}
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="40"
-                            stroke="currentColor"
-                            strokeWidth="6"
-                            fill="none"
-                            className="text-primary/20"
-                          />
-                          {/* Progress circle */}
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="40"
-                            stroke="url(#modal-gradient)"
-                            strokeWidth="6"
-                            fill="none"
-                            strokeLinecap="round"
-                            strokeDasharray={`${2 * Math.PI * 40}`}
-                            strokeDashoffset={`${2 * Math.PI * 40 * (1 - remainingFree / 5)}`}
-                            className="transition-all duration-1000 ease-out"
-                          />
-                          <defs>
-                            <linearGradient id="modal-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                              <stop offset="0%" stopColor="hsl(var(--primary))" />
-                              <stop offset="100%" stopColor="hsl(var(--accent))" />
-                            </linearGradient>
-                          </defs>
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="text-sm font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent leading-none">
-                              {remainingFree}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground leading-none">/5</div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs text-muted-foreground">
-                          {remainingFree} free question{remainingFree !== 1 ? 's' : ''} remaining today
-                        </p>
-                      </div>
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Companion Interface */}
-          <Card className="p-4 space-y-4 bg-gradient-to-br from-card to-secondary border-border">
-            {/* Season & Episode for TV */}
-            {title.type === "tv" && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Season</label>
-                  <Select value={selectedSeason} onValueChange={value => { setSelectedSeason(value); setSelectedEpisode(""); setTimestampMinutes([0]); }}>
-                    <SelectTrigger className="bg-background/50">
-                      <SelectValue placeholder="Select season" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {seasons.map((season) => (
-                        <SelectItem key={season.seasonNumber} value={season.seasonNumber.toString()}>
-                          {season.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Episode</label>
-                  <Select value={selectedEpisode} onValueChange={value => { setSelectedEpisode(value); setTimestampMinutes([0]); }}>
-                    <SelectTrigger className="bg-background/50">
-                      <SelectValue placeholder="Select episode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {episodes.map((episode) => (
-                        <SelectItem key={episode.episodeNumber} value={episode.episodeNumber.toString()}>
-                          Ep {episode.episodeNumber}: {episode.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
-            <CompanionTimestamp key={`${selectedSeason}:${selectedEpisode}`} minutes={timestampMinutes[0]} maxMinutes={maxRuntime}
-              onChange={setTimestampMinutes} onValidityChange={setTimestampValid} />
-
-            {/* Question Input */}
-            <div className="space-y-2">
-              <Textarea
-                placeholder="Ask a question about the story so far..."
-                value={question}
-                maxLength={2000}
-                onChange={(e) => setQuestion(e.target.value)}
-                className="min-h-[80px] bg-background/50"
-              />
-              <Button 
-                onClick={handleAskQuestion}
-                disabled={isLoading || !timestampValid}
-                className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Ask Question
-                  </>
-                )}
+              {options}
+              <Button ref={roomToggle} disabled={!position || !timestampValid || preparing} onClick={enterRoom} className="room-enter">
+                <Armchair size={18} /> Enter room
               </Button>
             </div>
           </Card>
-
-          {historyError && <p role="status" className="text-sm text-destructive">{historyError}</p>}
-          {/* Messages */}
-          {messages.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold">Conversation</h3>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {messages.map((msg) => (
-                  <Card key={msg.id} className="p-4 space-y-2 bg-card border-border">
-                    <div className="flex items-start justify-between">
-                      <p className="font-medium text-sm">{msg.question}</p>
-                      <Badge variant="outline" className="text-xs">{msg.context}</Badge>
-                    </div>
-                    <CompanionAnswer message={msg} />
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        </div>}>
+          {focusAction => <RoomChat focusAction={focusAction} key={`${episodeLabel}:${point.seconds}`} expanded={chatOpen} onExpand={setChatOpen}
+            timestamp={timestamp} valid={timestampValid} messages={messages} loading={isLoading}
+            historyError={historyError} onAsk={handleAskQuestion} positionButton={positionButton}
+            onEditPosition={() => setEditingTime(true)} remainingFree={remainingFree} coins={coins}
+            onStore={() => { onOpenChange(false); navigate("/dashboard?tab=play&view=store"); }} />}
+        </FocusRoom>
+        {inRoom && editingTime && <RoomPositionEditor seconds={point.seconds} maxMinutes={maxRuntime}
+          onClose={() => setEditingTime(false)} onReturnFocus={() => positionButton.current?.focus()}
+          onSave={seconds => { changePosition({ ...point, seconds }); setTimestampValid(true); setEditingTime(false); }} />}
       </DialogContent>
     </Dialog>
   );
 };
 
-// A different title starts with a fresh position and episode before rendering.
+// Resolve the bookmark before rendering history for this account and title.
 export default function TitleDetailModal(props: TitleDetailModalProps) {
-  return <TitleDetailModalContent key={`${props.title.type}:${props.title.id}`} {...props} />;
+  const viewer = useContext(GeekViewer);
+  return <TitleDetailModalContent key={`${viewer}:${props.title.type}:${props.title.id}`} viewer={viewer} {...props} />;
 }

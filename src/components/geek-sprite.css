@@ -1,0 +1,216 @@
+.geek-avatar {
+  --wave-cycle: 7.2s;
+  --costume-cycle: var(--wave-cycle); --costume-delay: 0s; --cue-strength: .9;
+  --code-step: 6px; --wink-height: .08;
+  --jacket-light: #37c9bc; --jacket-dark: #08636d; --trim: #92e6cc;
+  width: 100%; height: auto; display: block; overflow: visible; pointer-events: none;
+}
+.geek-avatar[data-lounging] {
+  --costume-cycle: var(--snack-cycle); --costume-delay: calc(var(--snack-cycle) * .31);
+  --cue-strength: .32; --code-step: 1.5px; --wink-height: .76;
+}
+.geek-avatar[data-outfit="classic"] { --shoe: #f4f3e6; --shoe-stripe: #218c89; }
+.geek-avatar[data-outfit="breaking"] { --jacket-light: #c4ae84; --jacket-dark: #786c54; --trim: #879b61; }
+.geek-avatar[data-outfit="stranger"] { --jacket-light: #ea5765; --jacket-dark: #304971; --trim: #47c8b6; }
+.geek-avatar[data-outfit="trek"] { --jacket-light: #e24a5d; --jacket-dark: #9d263d; --trim: #292b39; }
+.geek-avatar[data-outfit="matrix"] { --jacket-light: #445253; --jacket-dark: #11191e; --trim: #25312e; }
+.geek-avatar[data-outfit="jurassic"] { --jacket-light: #88b5c2; --jacket-dark: #426c83; --trim: #d95743; }
+.geek-avatar[data-outfit="jedi"] { --jacket-light: #a27a57; --jacket-dark: #624631; --trim: #e6d4ad; }
+.geek-avatar[data-outfit="chucky"] { --jacket-light: #87adf5; --jacket-dark: #365fa7; --trim: #e59353; }
+.geek-avatar[data-outfit="karate"] { --jacket-light: #fff9ee; --jacket-dark: #bdc9d4; --trim: #ece6d8; }
+.geek-avatar[data-outfit="mha"] {
+  --jacket-light: #27bd92; --jacket-dark: #11635e; --trim: #253848;
+  --glove: #f0f6de; --glove-seam: #86a598; --shoe: #e45350; --shoe-stripe: #ffb29a;
+}
+.geek-avatar[data-outfit="peaky"] {
+  --jacket-light: #4a5562; --jacket-dark: #2c3340; --trim: #646c72;
+  --shoe: #4e3931; --shoe-stripe: #bb9472;
+}
+.geek-avatar[data-outfit="spider"] {
+  --jacket-light: #fb5361; --jacket-dark: #ba2f46; --trim: #233952;
+  --shoe: #30435e; --shoe-stripe: #ff646a;
+}
+.geek-avatar[data-outfit="hogwarts"] {
+  --jacket-light: #49495b; --jacket-dark: #29293a; --trim: #833447;
+  --shoe: #463b41; --shoe-stripe: #b1987b;
+}
+.geek-avatar[data-outfit="thrones"] {
+  --jacket-light: #474349; --jacket-dark: #292831; --trim: #514844;
+  --shoe: #3c3333; --shoe-stripe: #8d7e74; --frost-reach: .93; --frost-opacity: .95;
+}
+.geek-avatar[data-outfit="thrones"][data-lounging] { --frost-reach: .24; --frost-opacity: .32; }
+.geek-avatar[data-outfit="pulp"] {
+  --jacket-light: #3d3b46; --jacket-dark: #262530; --trim: #f8eddd;
+  --shoe: #302b34; --shoe-stripe: #9a8e93;
+}
+.geek-avatar[data-outfit="gladiator"] {
+  --jacket-light: #667880; --jacket-dark: #465c66; --trim: #7d5d44;
+  --shoe: #77503c; --shoe-stripe: #cdac76;
+}
+.geek-avatar[data-outfit="wolf"] {
+  --jacket-light: #334d67; --jacket-dark: #20334c; --trim: #f6f1e2;
+  --shoe: #42332f; --shoe-stripe: #b89471;
+}
+.geek-avatar[data-outfit="scar"] {
+  --jacket-light: #f05b4d; --jacket-dark: #c53b3f; --trim: #a63337;
+  --shoe: #422f31; --shoe-stripe: #b58e71;
+}
+.geek-avatar[data-lounging] .scar-chain-glint { --cue-strength: .18; }
+.geek-avatar[data-outfit="social"] {
+  --jacket-light: #a6afb4; --jacket-dark: #78848f; --trim: #596771;
+  --shoe: #354453; --shoe-stripe: #e4dfce;
+}
+.geek-avatar[data-outfit="squid"] {
+  --jacket-light: #328975; --jacket-dark: #195c50; --trim: #205f54;
+  --shoe: #faf5df; --shoe-stripe: #abc8bc;
+}
+.squid-card-tilt { transform-origin: 19px 13px; --accent-angle: -12deg; }
+.geek-avatar[data-outfit="dune"] {
+  --jacket-light: #515758; --jacket-dark: #32383a; --trim: #414749;
+  --shoe: #524a43; --shoe-stripe: #a29078;
+}
+.geek-avatar[data-outfit="dune"] .geek-blink ellipse { fill: #173e70; stroke: #86daff; stroke-width: .42; }
+.dune-spice { opacity: 0; }
+.broker-note { opacity: 0; }
+.broker-note-track:nth-child(2) { --bill-delay: .17s; }
+.broker-note-track:nth-child(3) { --bill-delay: .32s; }
+.geek-avatar[data-lounging] .crysknife-glint { --cue-strength: .20; }
+.pulp-brow { transform-origin: 47px 38px; }
+.pulp-case-light, .pulp-lens-light { opacity: 0; }
+.blade-frost-front { transform-origin: 0 -10px; transform: scaleY(0); }
+.spider-wave-web { opacity: 0; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.geek-wave { transform-origin: 82px 81px; }
+.hero-spark { opacity: 0; }
+.costume-cue, .costume-code { opacity: 0; }
+.clapper-lid { transform-origin: 65px 86px; --accent-angle: -34deg; }
+.hat-tip { transform-origin: 84px 27px; --accent-angle: 9deg; }
+.headband-tail { transform-origin: 30px 34px; --accent-angle: 19deg; }
+.watch-fob { transform-origin: 73px 83px; --accent-angle: 23deg; }
+.geek-avatar[data-lounging] .clapper-lid { --accent-angle: -8deg; }
+.geek-avatar[data-lounging] .hat-tip { --accent-angle: 2deg; }
+.geek-avatar[data-lounging] .headband-tail { --accent-angle: 4deg; }
+.geek-avatar[data-lounging] .watch-fob { --accent-angle: 3deg; }
+.costume-saber-blade { transform-origin: 23px 80px; }
+.costume-wink { transform-box: fill-box; transform-origin: center; }
+.geek-blink { transform-box: fill-box; transform-origin: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .geek-frames, .pulp-temples { transition: transform .18s ease-out; }
+  .spotlight-open:is(:hover, :focus-visible, :active) :is(.geek-frames, .pulp-temples) { transform: translateY(-2px); }
+  .geek-avatar:not([data-still]) .geek-hover { animation: geek-idle 3.3s ease-in-out infinite; }
+  .geek-avatar[data-lounging] .geek-hover { transform-origin: 60px 94px; animation: geek-breathe 5s ease-in-out infinite; }
+  .geek-avatar:not([data-still]) .geek-wave { animation: geek-greet var(--wave-cycle) ease-in-out infinite; }
+  .geek-avatar:not([data-still]) .scar-salute { animation-name: scar-salute; }
+  .geek-avatar:not([data-still]) .broker-glance { animation: broker-watch-check var(--wave-cycle) ease-in-out infinite; }
+  .broker-note { animation: broker-note-fall var(--wave-cycle) linear var(--bill-delay, 0s) infinite; }
+  .geek-avatar:not([data-still]) .social-code path {
+    animation: social-keystroke var(--wave-cycle) linear var(--key-delay, 0s) infinite backwards;
+  }
+  .social-code path:nth-child(2) { --key-delay: calc(var(--wave-cycle) * .035); }
+  .social-code path:nth-child(3) { --key-delay: calc(var(--wave-cycle) * .07); }
+  .social-code path:nth-child(4) { --key-delay: calc(var(--wave-cycle) * .105); }
+  .geek-avatar[data-outfit="pulp"]:not([data-still], [data-lounging]) :is(.pulp-brow, .pulp-case-lid, .pulp-case-light, .pulp-lens-light) {
+    animation: var(--pulp-motion) var(--wave-cycle) ease-in-out infinite;
+  }
+  .pulp-brow { --pulp-motion: pulp-eyebrow; }
+  .pulp-case-lid { --pulp-motion: pulp-open-case; }
+  .pulp-case-light, .pulp-lens-light { --pulp-motion: pulp-gold; }
+  .hero-spark-wave { animation: hero-wave-spark var(--wave-cycle) ease-in-out infinite; }
+  .geek-avatar:not([data-still]) .dune-spice { animation: dune-drift var(--wave-cycle) ease-out infinite; }
+  .spider-wave-web { animation: spider-web-curl var(--wave-cycle) ease-in-out infinite; }
+  .geek-avatar:not([data-still]) .blade-frost-front { animation: blade-frost-creep var(--costume-cycle) ease-in-out var(--costume-delay) infinite; }
+  .hero-spark-rest { animation: hero-rest-spark var(--snack-cycle) ease-in-out infinite; }
+  .geek-avatar:not([data-still]) :is(.costume-tilt, .costume-cue, .costume-code, .costume-wink, .costume-saber-blade) {
+    animation: var(--accent-animation) var(--costume-cycle) ease-in-out var(--costume-delay) infinite;
+  }
+  .costume-tilt { --accent-animation: costume-tip; }
+  .costume-cue { --accent-animation: costume-signal; }
+  .track-next { --costume-delay: .42s; }
+  .costume-code { --accent-animation: costume-code-rain; }
+  .costume-wink { --accent-animation: costume-wink; }
+  .costume-saber-blade { --accent-animation: saber-ignite; }
+  .geek-avatar:not([data-still]) .geek-blink { animation: geek-blink 5.4s ease-in-out infinite; }
+}
+@keyframes geek-idle { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }
+@keyframes dune-drift {
+  0%, 2% { transform: translate(-3px, 3px); opacity: 0; }
+  10% { transform: translate(1px, -1px); opacity: .85; }
+  24%, 100% { transform: translate(6px, -4px); opacity: 0; }
+}
+@keyframes geek-greet {
+  0%, 23%, 100% { transform: rotate(0); }
+  5%, 15% { transform: rotate(-20deg); }
+  10%, 20% { transform: rotate(10deg); }
+}
+@keyframes scar-salute {
+  0%, 28%, 100% { transform: rotate(3deg); }
+  9%, 17% { transform: rotate(-11deg); }
+}
+@keyframes broker-watch-check {
+  0%, 3%, 22%, 100% { transform: none; }
+  8%, 14% { transform: translate(.8px, .55px); }
+}
+@keyframes broker-note-fall {
+  0% { opacity: 0; transform: translate(0, 0) rotate(-18deg); }
+  4% { opacity: 1; transform: translate(-2px, 6px) rotate(-5deg); }
+  10% { opacity: 1; transform: translate(3px, 17px) rotate(17deg) scaleY(.52); }
+  16% { opacity: 1; transform: translate(0, 30px) rotate(-11deg); }
+  23%, 100% { opacity: 0; transform: translate(-3px, 45px) rotate(9deg) scaleY(.7); }
+}
+@keyframes social-keystroke {
+  0%, 3%, 32%, 100% { opacity: 0; }
+  3.1%, 24% { opacity: 1; }
+}
+@keyframes pulp-eyebrow {
+  0%, 2%, 32%, 100% { transform: none; }
+  12%, 22% { transform: translateY(-3px) rotate(7deg); }
+}
+@keyframes pulp-open-case {
+  0%, 6%, 30%, 100% { transform: translateY(0); }
+  16%, 23% { transform: translateY(-2.8px); }
+}
+@keyframes pulp-gold {
+  0%, 8%, 29%, 100% { opacity: 0; }
+  17%, 23% { opacity: .92; }
+}
+@keyframes costume-tip {
+  0%, 20%, 100% { transform: rotate(0); }
+  7%, 10% { transform: rotate(var(--accent-angle)); }
+}
+@keyframes costume-signal {
+  0%, 2%, 16%, 100% { opacity: 0; }
+  8% { opacity: var(--cue-strength); }
+}
+@keyframes costume-code-rain {
+  0%, 2% { transform: translateY(calc(-1 * var(--code-step))); opacity: 0; }
+  8% { opacity: var(--cue-strength); }
+  20%, 100% { transform: translateY(var(--code-step)); opacity: 0; }
+}
+@keyframes costume-wink {
+  0%, 4%, 14%, 100% { transform: scaleY(1); }
+  8%, 10% { transform: scaleY(var(--wink-height)); }
+}
+@keyframes saber-ignite {
+  0%, 2%, 30%, 100% { transform: scaleY(0); opacity: 0; }
+  7%, 22% { transform: scaleY(1); opacity: 1; }
+}
+@keyframes hero-wave-spark {
+  0%, 2%, 9%, 12%, 20%, 100% { opacity: 0; }
+  5% { opacity: .95; }
+  15% { opacity: .78; }
+}
+@keyframes spider-web-curl {
+  0%, 2%, 24%, 100% { opacity: 0; stroke-dashoffset: 1; }
+  9%, 14% { opacity: .85; stroke-dashoffset: 0; }
+}
+@keyframes blade-frost-creep {
+  0%, 2%, 27%, 100% { transform: scaleY(0); }
+  16%, 19% { transform: scaleY(var(--frost-reach)); }
+}
+/* Once after the popcorn hand settles, just a glint above the resting glove. */
+@keyframes hero-rest-spark {
+  0%, 36%, 43%, 100% { opacity: 0; }
+  39.5% { opacity: .32; }
+}
+@keyframes geek-blink { 0%, 89%, 94%, 100% { transform: scaleY(1); } 91.5% { transform: scaleY(.13); } }
+
+@keyframes geek-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.008, 1.015); } }

@@ -1,0 +1,20 @@
+:root { --notice-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+:root:has(.app-bottom-nav) { --notice-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+
+[data-sonner-toaster] [data-sonner-toast].cine-notice {
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid #42504d;
+  border-radius: 14px;
+  background: #202826;
+  color: #f3f6f4;
+  box-shadow: 0 4px 18px #0004;
+  font-family: inherit;
+  overflow-wrap: anywhere;
+}
+.cine-notice [data-content] { min-width: 0; }
+.cine-notice [data-title] { font-size: .88rem; line-height: 1.35; font-weight: 600; }
+.cine-notice [data-description] { color: #c2ceca; font-size: .8rem; line-height: 1.4; }
+.cine-notice [data-icon] { color: #a6decd; flex-shrink: 0; }
+.cine-notice [data-icon] svg { width: 18px; height: 18px; }
+.cine-notice[data-type="error"] [data-icon] { color: #ffb5a5; }

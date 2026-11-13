@@ -1,0 +1,14 @@
+.auth-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100svh;
+  padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+  background: radial-gradient(ellipse at 25% 30%, #1a302f, transparent 68%), #10151a;
+}
+.auth-card { width: min(100%, 26rem); border-radius: 20px; border-color: #384244; overflow-wrap: anywhere; }
+.auth-card input[aria-invalid="true"] { border-color: #dd9b8d; }
+.auth-notice { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: #243832; color: #c9ebdc; font-size: .85rem; line-height: 1.4; }
+.auth-notice[data-kind="error"] { color: #ffcabd; background: #382c2b; }
+.auth-notice svg { flex: 0 0 17px; margin-top: 1px; }
+.auth-link,.auth-links a,.auth-links button { display: inline-flex; align-items: center; justify-content: center; color: hsl(var(--primary)); font-size: .875rem; }
+.auth-links { display: grid; justify-items: center; margin-top: 12px; }

@@ -1,0 +1,23 @@
+.launch-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: #10151a;
+}
+.launch-splash img {
+  display: block;
+  width: 208px;
+  max-width: 65vw;
+  height: auto;
+  animation: glasses-settle 700ms ease-out both;
+}
+@keyframes glasses-settle {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  40% { transform: scale(1.025) rotate(-3deg); }
+  75% { transform: scale(1) rotate(1deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .launch-splash img { animation: none; }
+}

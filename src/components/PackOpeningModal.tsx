@@ -93,7 +93,8 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
       if (error) throw error;
 
       toast({
-        title: "Card sold!",
+        variant: "success",
+        title: "Card sold",
         description: data.message,
       });
 
@@ -165,7 +166,8 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
       }
 
       toast({
-        title: "Card rejected",
+        variant: "success",
+        title: "Card declined",
         description: "The pack has been removed.",
       });
       
@@ -198,7 +200,8 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
       if (sellError) throw sellError;
 
       toast({
-        title: "Card sold!",
+        variant: "success",
+        title: "Card sold",
         description: sellData.message,
       });
 
@@ -240,7 +243,8 @@ const PackOpeningModal = ({ isOpen, onClose, packId, onPackOpened }: PackOpening
       }
 
       toast({
-        title: "Card replaced!",
+        variant: "success",
+        title: "Card replaced",
         description: `${person.name} has been added to your collection.`,
       });
 

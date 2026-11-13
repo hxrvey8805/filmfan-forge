@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,10 +23,11 @@ interface SearchModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (title: Title) => void;
-  listType: "favourite" | "watchlist" | "watching" | "watched";
+  listName?: string;
+  listType: "companion" | "favourite" | "watchlist" | "watching" | "watched";
 }
 
-const SearchModal = ({ open, onOpenChange, onSelect, listType }: SearchModalProps) => {
+const SearchModal = ({ open, onOpenChange, onSelect, listType, listName }: SearchModalProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Title[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -65,16 +67,17 @@ const SearchModal = ({ open, onOpenChange, onSelect, listType }: SearchModalProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh]">
+      <DialogContent className="w-[calc(100%-32px)] max-w-2xl max-h-[85dvh] rounded-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            Add to {
-              listType === "favourite" ? "Favourites" :
+            {listType === "companion" ? "Ask your geek" : "Add to " + (
+              listName ?? (listType === "favourite" ? "Favourites" :
               listType === "watchlist" ? "Watch List" : 
               listType === "watching" ? "Currently Watching" :
-              "Watched"
+              "Watched"))
             }
           </DialogTitle>
+          <DialogDescription>{listType === "companion" ? "Choose the movie or show you’re watching." : "Find a film or series for your library."}</DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">
@@ -89,7 +92,7 @@ const SearchModal = ({ open, onOpenChange, onSelect, listType }: SearchModalProp
             />
           </div>
 
-          <ScrollArea className="h-[400px]">
+          <ScrollArea className="h-[min(400px,50dvh)]">
             {isSearching ? (
               <div className="text-center py-8 text-muted-foreground">
                 Searching...
@@ -98,7 +101,7 @@ const SearchModal = ({ open, onOpenChange, onSelect, listType }: SearchModalProp
               <div className="grid gap-3">
                 {searchResults.map((result) => (
                   <button
-                    key={result.id}
+                    key={result.type + ":" + result.id}
                     onClick={() => handleSelect(result)}
                     className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors text-left"
                   >

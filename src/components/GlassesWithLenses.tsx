@@ -1,38 +1,27 @@
+import type { SVGProps } from "react";
 import { Glasses } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface GlassesWithLensesProps extends React.SVGProps<SVGSVGElement> {
-  className?: string;
+// The logo and the mascot use the same round rims, bridge and tinted lenses.
+export function CineGeekFrames({ children, frontOnly = false, ...props }: SVGProps<SVGSVGElement> & { frontOnly?: boolean }) {
+  const lenses = <>
+    <circle cx="6" cy="15" r="3" fill="hsl(150 70% 65%)" stroke="none" />
+    <circle cx="18" cy="15" r="3" fill="hsl(var(--accent))" stroke="none" />
+    {children}
+  </>;
+  if (frontOnly) {
+    // In the worn pose the temples sit in a separate layer beneath the hair.
+    return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...props}>
+      <circle cx="6" cy="15" r="4" /><circle cx="18" cy="15" r="4" />
+      <path d="M14 15a2 2 0 0 0-2-2 2 2 0 0 0-2 2" />
+      {lenses}
+    </svg>;
+  }
+  return <Glasses {...props}>{lenses}</Glasses>;
 }
 
-export const GlassesWithLenses = ({ className, ...props }: GlassesWithLensesProps) => {
-  return (
-    <div className={cn("relative inline-flex items-center justify-center", className)}>
-      <Glasses className="relative z-10 w-full h-full" {...props} />
-      {/* Green lens (left) - matches CineGeek gradient middle color (mint green) */}
-      <div 
-        className="absolute rounded-full opacity-75 blur-[0.5px] pointer-events-none"
-        style={{ 
-          left: '25%',
-          top: '61%',
-          width: '30%',
-          height: '30%',
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: 'hsl(150 70% 65%)', // Mint/yellowish-green from CineGeek gradient
-        }}
-      />
-      {/* Blue lens (right) */}
-      <div 
-        className="absolute rounded-full bg-accent opacity-75 blur-[0.5px] pointer-events-none"
-        style={{ 
-          right: '25%',
-          top: '61%',
-          width: '30%',
-          height: '30%',
-          transform: 'translate(50%, -50%)',
-        }}
-      />
-    </div>
-  );
-};
-
+export function GlassesWithLenses({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return <div className={cn("relative inline-flex items-center justify-center", className)}>
+    <CineGeekFrames className="w-full h-full" {...props} />
+  </div>;
+}

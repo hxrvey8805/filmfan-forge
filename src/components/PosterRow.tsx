@@ -1,4 +1,9 @@
-import { Clapperboard, Tv, Plus, Trash2, MessageSquare, Check } from "lucide-react";
+import { useId, useState } from "react";
+import { usePosterHold } from "@/hooks/use-poster-hold";
+import { PosterArtwork } from "./PosterArtwork";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
+import { Clapperboard, Tv, Plus, Trash2, MessageSquare, Check, MoreHorizontal, ListVideo } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
   Carousel,
@@ -39,6 +44,7 @@ interface PosterRowProps {
   title: string;
   items: Title[];
   onPosterClick: (title: Title) => void;
+  onMoveRequest?: (title: Title, anchor: HTMLElement, fromHold?: boolean) => void;
   onAddClick?: () => void;
   onDeleteClick?: (title: Title) => void;
   filterValue?: string;
@@ -55,17 +61,23 @@ interface PosterRowProps {
 }
 
 const PosterRow = ({ 
-  title, items, onPosterClick, onAddClick, onDeleteClick, 
+  title, items, onPosterClick, onAddClick, onDeleteClick, onMoveRequest,
   filterValue, onFilterChange, customFilters = [], onAddCustomFilter, onDeleteCustomFilter,
   personalLists = [], onAddPersonalList, onDeletePersonalList,
   selectionMode = false, selectedTitleIds = [], onToggleSelection,
 }: PosterRowProps) => {
+  const [pendingRemoval, setPendingRemoval] = useState<Title | null>(null);
+  const hold = usePosterHold();
+  const rowId = useId();
+  const canMove = !!onMoveRequest && !selectionMode;
   return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-3 px-1">
+    <section aria-label={title} className="space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <h3 className="sr-only">{title}</h3>
+        <span className="text-sm text-muted-foreground flex-1">{items.length} {items.length === 1 ? "title" : "titles"}</span>
         {onFilterChange && (
           <Select value={filterValue} onValueChange={onFilterChange}>
-            <SelectTrigger className="relative w-[160px] h-9 text-sm font-semibold bg-gradient-to-r from-primary/20 to-accent/20 border-primary/30 hover:border-primary transition-all rounded-full shadow-md text-primary [&>span]:absolute [&>span]:inset-x-0 [&>span]:text-center">
+            <SelectTrigger aria-label={`Filter ${title}`} className="w-auto max-w-[130px] gap-2 border-0 bg-transparent shadow-none text-xs text-muted-foreground rounded-xl">
               <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent className="bg-card/95 backdrop-blur-xl border-primary/30 z-50 rounded-xl shadow-2xl min-w-[160px]">
@@ -155,9 +167,10 @@ const PosterRow = ({
             </SelectContent>
           </Select>
         )}
-        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
+        {onAddClick && !selectionMode && <button onClick={onAddClick} aria-label={`Add to ${title}`} className="rounded-full text-primary hover:bg-primary/10 flex items-center justify-center"><Plus className="w-5 h-5" /></button>}
       </div>
 
+      {items.length === 0 && <div className="rounded-2xl border border-dashed border-white/15 py-6 px-4 text-sm text-muted-foreground">{filterValue && filterValue !== "all" ? "No titles in this filter yet." : "A little room for your next great watch."}{onAddClick && <button onClick={onAddClick} className="text-primary block mt-1 text-xs font-medium">Add a title</button>}</div>}
       <div className="relative">
         <Carousel
           opts={{
@@ -175,20 +188,30 @@ const PosterRow = ({
           }}
           className="w-full"
         >
-          <CarouselContent className="-ml-3 touch-pan-x">
+          <CarouselContent className="-ml-3">
             {items.map((item) => {
+              const posterId = rowId + item.type + item.id;
               const isSelectedForList = selectionMode && selectedTitleIds.includes(item.id);
               
               return (
                 <CarouselItem
-                  key={item.id}
-                  className={`pl-3 ${onAddClick ? "basis-[42%] sm:basis-1/3 md:basis-1/6" : "basis-[32%] sm:basis-1/4 md:basis-1/5"}`}
+                  key={item.type + ":" + item.id}
+                  className="pl-3 basis-[37%] min-[480px]:basis-[28%] sm:basis-1/4 md:basis-1/5 lg:basis-1/6"
                 >
                   <div className={`group relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-card shadow-md hover:shadow-xl transition-all duration-300 ${
                     selectionMode && !isSelectedForList ? "opacity-40 grayscale" : ""
                   } ${isSelectedForList ? "ring-3 ring-primary shadow-lg shadow-primary/30" : ""}`}>
                     <button
-                      onClick={() => {
+                      id={posterId}
+                      data-hold-poster={canMove ? "" : undefined}
+                      onTouchStart={canMove ? e => { const button = e.currentTarget; hold.touch(e, () => onMoveRequest(item, button, true)); } : undefined}
+                      onPointerDown={canMove ? e => { const button = e.currentTarget; hold.pointer(e, () => onMoveRequest(item, button, true)); } : undefined}
+                      onContextMenu={canMove ? e => e.preventDefault() : undefined}
+                      onDragStart={canMove ? e => e.preventDefault() : undefined}
+                      aria-label={selectionMode ? `Select ${item.title}` : `Open ${item.title}`}
+                      aria-pressed={selectionMode ? isSelectedForList : undefined}
+                      onClick={e => {
+                        if (canMove && hold.skipClick(e.currentTarget)) return;
                         if (selectionMode && onToggleSelection) {
                           onToggleSelection(item.id);
                         } else {
@@ -196,14 +219,9 @@ const PosterRow = ({
                         }
                       }}
                       className="w-full h-full active:scale-95 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-                      style={{ touchAction: selectionMode ? 'manipulation' : 'pan-x', WebkitUserSelect: 'none', userSelect: 'none' }}
+                      style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
                     >
-                      <img
-                        src={item.posterPath}
-                        alt={item.title}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
+                      <PosterArtwork src={item.posterPath} type={item.type} lazy />
                       
                       {/* Selection checkmark */}
                       {selectionMode && isSelectedForList && (
@@ -224,7 +242,7 @@ const PosterRow = ({
                       )}
 
                       {/* Progress Bar for Currently Watching */}
-                      {item.progress !== undefined && !selectionMode && (
+                      {typeof item.progress === "number" && Number.isFinite(item.progress) && item.progress >= 0 && item.progress <= 100 && !selectionMode && (
                         <div className="absolute bottom-0 left-0 right-0 bg-background/90 backdrop-blur-sm p-2">
                           <Progress value={item.progress} className="h-1.5" />
                           <p className="text-xs text-muted-foreground mt-1">{item.progress}%</p>
@@ -232,58 +250,30 @@ const PosterRow = ({
                       )}
                     </button>
 
-                    {/* Hover Overlay Actions - hidden in selection mode */}
-                    {!selectionMode && (
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onPosterClick(item);
-                          }}
-                          className="flex-1 flex flex-col items-center justify-center gap-2 hover:bg-primary/20 transition-colors"
-                          aria-label="Ask question about this title"
-                        >
-                          <MessageSquare className="h-6 w-6 text-white" />
-                          <span className="text-xs text-white font-medium">Ask</span>
-                        </button>
-
-                        {onDeleteClick && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteClick(item);
-                            }}
-                            className="flex-1 flex flex-col items-center justify-center gap-2 hover:bg-destructive/20 transition-colors"
-                            aria-label="Remove from list"
-                          >
-                            <Trash2 className="h-6 w-6 text-white" />
-                            <span className="text-xs text-white font-medium">Remove</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
+                  </div>
+                  <div className="flex items-start gap-1 mt-2">
+                    <div className="min-w-0 flex-1 pt-1"><p className="text-xs font-medium leading-snug line-clamp-2">{item.title}</p><p className="text-[10px] text-muted-foreground mt-1">{item.year ? `${item.year} · ` : ""}{item.type === "tv" ? "Series" : "Movie"}</p></div>
+                    {!selectionMode && <DropdownMenu><DropdownMenuTrigger asChild>
+                      <button aria-label={`Options for ${item.title}`} className="-mr-2 -mt-1 flex justify-center items-center text-muted-foreground rounded-full hover:bg-white/5"><MoreHorizontal className="w-4 h-4" /></button>
+                    </DropdownMenuTrigger><DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => onPosterClick(item)} className="min-h-11"><MessageSquare className="w-4 h-4 mr-2" />Ask your geek</DropdownMenuItem>
+                      {canMove && <DropdownMenuItem className="min-h-11" onSelect={() => {
+                        const anchor = document.getElementById(posterId);
+                        if (anchor) window.setTimeout(() => onMoveRequest(item, anchor), 0);
+                      }}><ListVideo className="w-4 h-4 mr-2" />Move to list…</DropdownMenuItem>}
+                      {onDeleteClick && <DropdownMenuItem onSelect={() => setPendingRemoval(item)} className="text-destructive focus:text-destructive min-h-11"><Trash2 className="w-4 h-4 mr-2" />Remove from {title}</DropdownMenuItem>}
+                    </DropdownMenuContent></DropdownMenu>}
                   </div>
                 </CarouselItem>
               );
             })}
             
-            {/* Circular Add Button - hidden in selection mode */}
-            {onAddClick && !selectionMode && (
-              <CarouselItem className="pl-3 basis-auto">
-                <div className="flex items-center justify-center h-full px-2">
-                  <button
-                    onClick={onAddClick}
-                    className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-accent text-primary-foreground flex items-center justify-center shadow-lg active:scale-95 transition-all duration-200 hover:shadow-xl min-h-[64px] min-w-[64px]"
-                    aria-label="Add new title"
-                  >
-                    <Plus className="h-7 w-7" />
-                  </button>
-                </div>
-              </CarouselItem>
-            )}
           </CarouselContent>
         </Carousel>
       </div>
+      <AlertDialog open={!!pendingRemoval} onOpenChange={open => { if (!open) setPendingRemoval(null); }}>
+        <AlertDialogContent><AlertDialogTitle>Remove {pendingRemoval?.title}?</AlertDialogTitle><AlertDialogDescription>This removes it from {title}. You can add it again using search.</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep title</AlertDialogCancel><AlertDialogAction onClick={() => { if (pendingRemoval) onDeleteClick?.(pendingRemoval); setPendingRemoval(null); }}>Remove title</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 };

@@ -8,6 +8,7 @@ export type QuestionScope = {
   window: StoryWindow; earlierStory: boolean;
   collection?: 'series' | 'season' | 'previous'; season?: number; count?: number;
   clarification?: string;
+  coverageIncomplete?: boolean;
 };
 const nums = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'];
 const n = (s: string) => /^\d+$/.test(s) ? Number(s) : nums.indexOf(s);

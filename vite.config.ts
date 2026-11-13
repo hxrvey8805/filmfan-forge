@@ -5,17 +5,19 @@ import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode, command }) => ({
   server: {
     host: "::",
     port: 8080,
   },
+  build: { outDir: mode === "native" ? "dist-native" : "dist" },
   plugins: [
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
+      disable: mode === "native",
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "robots.txt", "icon-192.png", "icon-512.png"],
+      includeAssets: ["favicon.ico", "robots.txt", "cinegeek-mark.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png"],
       manifest: {
         name: "CineGeek - Your Cinematic Companion",
         short_name: "CineGeek",
@@ -61,6 +63,9 @@ export default defineConfig(({ mode }) => ({
   ].filter(Boolean),
   resolve: {
     alias: {
+      ...(mode === "mobile-preview" && command === "serve" ? {
+        "@/integrations/supabase/client": path.resolve(__dirname, "./src/preview/client.ts"),
+      } : {}),
       "@": path.resolve(__dirname, "./src"),
     },
   },
