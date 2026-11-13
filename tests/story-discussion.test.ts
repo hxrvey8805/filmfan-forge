@@ -25,6 +25,27 @@ const check = (changes:Record<string,unknown> = {}) => ({boundarySafe:true,fit:'
 }]});
 
 describe('contextual story explanations with independent receipts',()=>{
+  it('lets the writer cite typo-containing original lines without retyping them, then independently checks them',async()=>{
+    const text='The office is above the COVENIENCE STORE.\nMira suggests sharing a flat to reduce the rent.';
+    const ctx={...context,sources:[context.sources[0],{...context.sources[1],text}]};
+    const gen=vi.fn().mockResolvedValueOnce({points:[{text:draft().points[0].text,support:[{id:'R2',firstLine:1,lastLine:2}]}]})
+      .mockResolvedValueOnce(check({support:[{id:'R2',firstLine:2,lastLine:2}]}));
+    const result=await storyDiscussion(ctx,gen);
+    expect(result?.answer).toBe(draft().points[0].text);
+    expect(gen.mock.calls.map(c=>c[3])).toEqual(['writer','verifier']);
+    expect(JSON.parse(gen.mock.calls[0][1]).sources[1].text).toBe('[1] The office is above the COVENIENCE STORE.\n[2] Mira suggests sharing a flat to reduce the rent.');
+    const schema=gen.mock.calls[0][4].json_schema.schema.properties.points.items.properties.support.items.properties;
+    expect(Object.keys(schema).sort()).toEqual(['firstLine','id','lastLine']);
+    expect(result?.points[0].support).toEqual([{id:'R2',quote:context.sources[1].text}]);
+  });
+  it.each([
+    {id:'R2',firstLine:0,lastLine:1},{id:'future',firstLine:1,lastLine:1},
+    {id:'R2',firstLine:1,lastLine:99},{id:'R2',firstLine:1,lastLine:1,quote:'corrected quote'},
+  ])('rejects invalid writer line receipts before independent review: %j',async receipt=>{
+    const gen=vi.fn().mockResolvedValue({points:[{text:draft().points[0].text,support:[receipt]}]});
+    expect(await storyDiscussion(context,gen)).toBeNull();
+    expect(gen.mock.calls.map(c=>c[3])).toEqual(['writer','writer']);
+  });
   it('rechecks an inexact reviewer citation without rewriting an otherwise approved draft',async()=>{
     const bad=check({support:[{id:'R2',quote:'Mira suggests sharing a flat to reduce the rent!'}]});
     const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(bad).mockResolvedValueOnce(check());
@@ -200,7 +221,7 @@ describe('contextual story explanations with independent receipts',()=>{
     expect(gen).toHaveBeenCalledTimes(4);
     // The permitted later context stays available; the rejected answer itself
     // cannot enter the rewrite or be salvaged as a partial response.
-    expect(JSON.parse(gen.mock.calls[2][1]).sources).toEqual(ctx.sources);
+    expect(JSON.parse(gen.mock.calls[2][1]).sources.map((s:{text:string})=>({...s,text:s.text.replace(/^\[\d+\] /gm,'')}))).toEqual(ctx.sources);
     expect(gen.mock.calls[2][1]).not.toContain(tangent.text);
     expect(JSON.parse(gen.mock.calls[3][1]).points).toEqual(focused.points.map(({text})=>({text})));
   });
