@@ -95,14 +95,14 @@ describe('continuity resolves references without importing model claims',()=>{
 describe('one explanation route and bounded semantic selection',()=>{
   const genFor=(text='Sharing the cost makes the rent more affordable.')=>vi.fn(async(_system:string,user:string)=>{
     const packet=JSON.parse(user),s=packet.sources.find((s:{text:string})=>s.text.includes('rent'))??packet.sources[0];
-    const support=packet.points?[{id:s.id,firstLine:1,lastLine:s.text.split('\n').length}]:[{id:s.id,quote:s.text}];
+    const support=[{id:s.id,firstLine:1,lastLine:s.text.split('\n').length}];
     return packet.points?{boundarySafe:true,fit:'direct',checks:packet.points.map((_:unknown,index:number)=>({index,supported:true,issue:'none',attribution:'none',support}))}:{points:[{text,support}]};
   });
   it.each(['Why did Mira suggest sharing?','Remind me why Mira suggested sharing.','What does sharing the cost achieve?'])('same complete evidence reaches writer and checker: %s',async q=>{
     const gen=genFor(),plan=questionScope(q,movie),sources=watchSources(plan,[row()],[]);
     const result=await watchAnswer(q,plan,sources,gen);
     expect(result.answer).toContain('affordable');expect(result.limited).toBeUndefined();expect(gen).toHaveBeenCalledTimes(2);
-    const reviewed=JSON.parse(gen.mock.calls[1][1]).sources.map((s:{text:string})=>({...s,text:s.text.split('\n').map(line=>line.replace(/^\[\d+\] /,'')).join('\n')}));
+    const reviewed=JSON.parse(gen.mock.calls[1][1]).sources;
     expect(JSON.parse(gen.mock.calls[0][1]).sources).toEqual(reviewed);
     expect(JSON.stringify(gen.mock.calls)).not.toContain('FUTURE_SECRET');
   });
