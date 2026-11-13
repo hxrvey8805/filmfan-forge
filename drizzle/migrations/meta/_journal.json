@@ -50,6 +50,20 @@
       "when": 1794068808965,
       "tag": "0006_shared_cut_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794576113601,
+      "tag": "0007_smart_list_interpreter",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794576125290,
+      "tag": "0008_subtitle_unavailability",
+      "breakpoints": true
     }
   ]
 }

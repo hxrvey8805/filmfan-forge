@@ -191,6 +191,30 @@ export type Database = {
         }
         Relationships: []
       }
+      companion_subtitle_unavailability: {
+        Row: {
+          episode_number: number
+          ingestion_version: number
+          retry_after: string
+          season_number: number
+          tmdb_id: number
+        }
+        Insert: {
+          episode_number: number
+          ingestion_version: number
+          retry_after: string
+          season_number: number
+          tmdb_id: number
+        }
+        Update: {
+          episode_number?: number
+          ingestion_version?: number
+          retry_after?: string
+          season_number?: number
+          tmdb_id?: number
+        }
+        Relationships: []
+      }
       companion_visual_notes: {
         Row: {
           episode_number: number | null
@@ -251,6 +275,30 @@ export type Database = {
           season_name?: string | null
           season_number?: number
           tmdb_id?: number
+        }
+        Relationships: []
+      }
+      smart_list_interpretations: {
+        Row: {
+          created_at: string
+          id: string
+          request_hash: string
+          result: Json | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          request_hash: string
+          result?: Json | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          request_hash?: string
+          result?: Json | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -565,6 +613,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: boolean
+      }
+      reserve_smart_list_interpretation: {
+        Args: { p_call: string; p_hash: string; p_user: string }
+        Returns: Json
       }
       settle_companion_sol_call: {
         Args: {
