@@ -6,6 +6,7 @@ import { questionScope, recapWindows } from './question-scope.ts';
 import { watchSources } from './watch-context.ts';
 import { safeReferenceQuestion, watchAnswer } from './watch-answer.ts';
 import { earlierWatchData, storyCoverageMessage } from './earlier-watch-data.ts';
+import type { WatchObserver } from './watch-diagnostics.ts';
 
 export type WatchData={records:SubtitleRecord[];notes:ReviewedSceneNote[];incomplete?:boolean};
 export type WatchStore={
@@ -18,15 +19,15 @@ export type WatchStore={
   prepareLater?:()=>never;
 };
 export const WATCH_RECAP_REVISION='watch-scope-v1';
-export async function answerWatchRequest(question:string,p:ViewingPosition,history:Conversation[],generate:JsonGenerator,store:WatchStore):Promise<CheckedResponse> {
+export async function answerWatchRequest(question:string,p:ViewingPosition,history:Conversation[],generate:JsonGenerator,store:WatchStore,observe?:WatchObserver):Promise<CheckedResponse> {
   const plan=questionScope(question,p), boundary=plan.boundary;
   const reference=safeReferenceQuestion(question,history,boundary);
-  if(plan.clarification)return watchAnswer(question,plan,[],generate,reference);
+  if(plan.clarification)return watchAnswer(question,plan,[],generate,reference,observe);
   if(plan.intent!=='recap') {
     const current=await store.current(boundary);
     const previous=plan.earlierStory?await earlierWatchData(boundary,store):{records:[],notes:[],incomplete:false,coverage:undefined};
     const incomplete=!!current.incomplete || !!previous.incomplete;
-    const result=await watchAnswer(question,{...plan,coverageIncomplete:incomplete},watchSources(plan,[...previous.records,...current.records],[...previous.notes,...current.notes]),generate,reference);
+    const result=await watchAnswer(question,{...plan,coverageIncomplete:incomplete},watchSources(plan,[...previous.records,...current.records],[...previous.notes,...current.notes]),generate,reference,observe);
     if(incomplete)return {...result,answer:result.answer+'\n\n'+(previous.coverage && previous.incomplete ? storyCoverageMessage(previous.coverage) : 'My available story coverage is incomplete for this request.'),limited:true};
     return result;
   }
@@ -47,7 +48,7 @@ export async function answerWatchRequest(question:string,p:ViewingPosition,histo
       const scope={...plan,boundary:at,window,collection:undefined,earlierStory:false};
       // Shared cached chapters must never contain a user's wording or chat.
       const recapQuestion=reusable?'Recap this entire episode in chronological order from its beginning through its end.':'Recap this requested section in chronological order. '+question;
-      result=await watchAnswer(recapQuestion,scope,watchSources(scope,data.records,data.notes,window),generate);
+      result=await watchAnswer(recapQuestion,scope,watchSources(scope,data.records,data.notes,window),generate,undefined,observe);
       if(data.incomplete)result={...result,answer:result.answer+'\n\nMy coverage of this section is incomplete.',limited:true};
       // The store expires limited chapters after an hour. Caching a coverage gap
       // lets later requests reach the remaining episodes instead of preparing

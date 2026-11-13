@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { unqualifiedCaptionAction, unsupportedCaptionReaction } from '../supabase/functions/_shared/action-grounding';
 
+it.each([
+  'The passage-finding instructions listed an internet café and a pub as job locations.',
+  'The clue-finding guide describes the puzzle.',
+  'The passage\u2011finding instructions listed two locations.',
+])('does not turn instructions into a discovery: %s',text=>expect(unqualifiedCaptionAction(text)).toBe(false));
+it.each([
+  'The passage-finding instructions listed locations, then someone found the passage.',
+  'The clue-finding guide mentions the room, but they arrive there.',
+  'Someone was finding the passage.',
+  'The passage-finding mission succeeded.',
+])('still checks completed acts beside instructions: %s',text=>expect(unqualifiedCaptionAction(text)).toBe(true));
+
 it('does not turn agreement or music into an observed crowd reaction',()=>{
   expect(unsupportedCaptionReaction('A cheering crowd greets the princess.','ALL: Yes! (BUGLES PLAYING)')).toBe('cheering');
   expect(unsupportedCaptionReaction('They arrive, then cheer.','We are here. ALL: Yes!')).toBe('cheer');
