@@ -1,3 +1,5 @@
+import { useProAccess } from "./use-pro-access";
+import { canWear } from "@/lib/pro-access";
 import { useViewerPreference } from "./use-viewer-preference";
 export { GeekViewer } from "./use-viewer-preference";
 
@@ -36,5 +38,6 @@ function decodeOutfit(value: string | null): Outfit | null {
 
 export function useGeekOutfit() {
   const { value: look, choose, ready } = useViewerPreference("geek", DEFAULT_OUTFIT, decodeOutfit);
-  return { look, choose, ready };
+  const access=useProAccess();
+  return { look:canWear(access,look)?look:DEFAULT_OUTFIT, choose:(next:Outfit)=>{if(canWear(access,next))choose(next);}, ready };
 }

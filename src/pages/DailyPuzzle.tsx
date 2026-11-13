@@ -1,3 +1,5 @@
+import { useProAccess } from "@/hooks/use-pro-access";
+import { accountChanged } from "@/lib/pro-access";
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -33,7 +35,7 @@ type PathStep = {
   image: string;
 };
 
-type GameState = 'loading' | 'unavailable' | 'ready' | 'playing' | 'won';
+type GameState = 'loading' | 'unavailable' | 'ready' | 'playing' | 'checking' | 'won';
 type ViewMode = 'filmography' | 'cast';
 type FilmographyFilter = 'movies' | 'tv';
 
@@ -58,6 +60,13 @@ const DailyPuzzle = () => {
   const loadId = useRef(0);
   const backCredit = useRef<string | null>(null);
   const { toast } = useToast();
+  const access=useProAccess();
+  const gameId=useRef<string|null>(null);
+  const [starting,setStarting]=useState(false);
+  const [resultError,setResultError]=useState('');
+  const [reward,setReward]=useState(0);
+  const frozenPath=useRef<PathStep[]|null>(null);
+  const expiry=useRef<number|null>(null);
 
   useEffect(() => {
     if (viewMode !== 'filmography' || !backCredit.current) return;
@@ -65,50 +74,15 @@ const DailyPuzzle = () => {
     backCredit.current = null;
   }, [viewMode]);
 
-  useEffect(() => {
-    // Restore persisted actors if available to avoid re-randomizing on navigation
-    try {
-      const savedStart = localStorage.getItem('dp_startActor');
-      const savedTarget = localStorage.getItem('dp_targetActor');
-      const savedRandomizeCount = localStorage.getItem('dp_randomizeCount');
-      if (savedStart && savedTarget) {
-        setStartActor(JSON.parse(savedStart));
-        setTargetActor(JSON.parse(savedTarget));
-        setGameState('ready');
-        // Dispatch game state change event
-        window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
-        if (savedRandomizeCount) {
-          setRandomizeCount(parseInt(savedRandomizeCount, 10));
-        }
-        return; // do not fetch new actors
-      }
-    } catch (_) {}
-    loadRandomActors();
-  }, []);
+  useEffect(() => { void loadRandomActors(); }, []);
 
-  // Timer countdown
-  useEffect(() => {
-    if (gameState === 'playing' && timeLeft > 0) {
-      const timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            toast({
-              title: "Time's up!",
-              description: "Loading new actors...",
-              variant: "destructive",
-            });
-            // Randomize actors when time runs out
-            setGameState('ready');
-            window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
-            loadRandomActors();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [gameState, timeLeft, toast]);
+  // The display follows the server deadline, including time spent backgrounded.
+  useEffect(()=>{
+    if(gameState!=='playing')return;
+    const tick=()=>{const seconds=Math.max(0,Math.ceil(((expiry.current??Date.now())-Date.now())/1000));setTimeLeft(seconds);
+      if(seconds===0){setGameState('ready');window.dispatchEvent(new CustomEvent('gameStateChange',{detail:'ready'}));accountChanged();toast({title:"Time’s up",description:"This round has ended."});}};
+    const timer=window.setInterval(tick,500);tick();return()=>clearInterval(timer);
+  },[gameState]);
 
   const loadRandomActors = async () => {
     // Check if randomize limit reached
@@ -134,6 +108,7 @@ const DailyPuzzle = () => {
       // Small delay for smooth transition
       await new Promise(resolve => setTimeout(resolve, 300));
       
+      gameId.current=null;
       setStartActor(data.actors[0]);
       setTargetActor(data.actors[1]);
       setGameState('ready');
@@ -173,27 +148,21 @@ const DailyPuzzle = () => {
   };
 
   const startGame = async () => {
-    if (!startActor) return;
-    
-    // Reset randomize count when starting game
-    setRandomizeCount(0);
-    localStorage.removeItem('dp_randomizeCount');
-    
-    setGameState('playing');
-    // Dispatch game state change event
-    window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'playing' }));
-    
-    setCurrentActor(startActor);
-    setPath([{
-      type: 'actor',
-      id: startActor.id,
-      name: startActor.name,
-      image: startActor.profilePath
-    }]);
-    setTimeLeft(120);
-    setGameStartTime(Date.now());
-    
-    await loadFilmography(startActor.id);
+    if(!startActor||!targetActor||starting||!access)return;
+    setStarting(true);
+    const id=gameId.current??crypto.randomUUID();gameId.current=id;
+    try{
+      const {data,error}=await supabase.rpc('start_cinegeek_game',{p_game:id,p_start:startActor.id,p_target:targetActor.id});
+      if(error)throw new Error(error.message);
+      const game=data as {expires_at:string;status:string};
+      if(game.status!=='playing'||Date.parse(game.expires_at)<=Date.now()){gameId.current=null;throw new Error('That round has ended. Start a new game.');}
+      expiry.current=Date.parse(game.expires_at);setTimeLeft(Math.max(0,Math.ceil((expiry.current-Date.now())/1000)));
+      setGameStartTime(Date.now());setRandomizeCount(0);setResultError('');setReward(0);frozenPath.current=null;
+      setGameState('playing');window.dispatchEvent(new CustomEvent('gameStateChange',{detail:'playing'}));accountChanged();
+      setCurrentActor(startActor);setPath([{type:'actor',id:startActor.id,name:startActor.name,image:startActor.profilePath}]);
+      await loadFilmography(startActor.id);
+    }catch(e){toast({variant:'destructive',title:'Couldn’t start this game',description:e instanceof Error?e.message:'Try again to check this same round.'});}
+    finally{setStarting(false);}
   };
 
   const loadFilmography = async (actorId: number) => {
@@ -204,7 +173,7 @@ const DailyPuzzle = () => {
     setFilmographySearch("");
     try {
       const { data, error } = await supabase.functions.invoke('actor-connect', {
-        body: { action: 'getActorFilmography', actorId }
+        body: { action: 'getActorFilmography', actorId, gameId:gameId.current }
       });
 
       if (request !== loadId.current) return;
@@ -248,7 +217,7 @@ const DailyPuzzle = () => {
       const idKey = type === 'movie' ? 'movieId' : 'tvId';
       
       const { data, error } = await supabase.functions.invoke('actor-connect', {
-        body: { action, [idKey]: contentId }
+        body: { action, [idKey]: contentId, gameId:gameId.current }
       });
 
       if (request !== loadId.current) return;
@@ -270,53 +239,25 @@ const DailyPuzzle = () => {
     setViewMode('filmography');
   };
 
+  const submitWin=async()=>{
+    if(!frozenPath.current||!gameId.current)return;
+    setResultError('');setIsLoading(true);
+    try{
+      const {data,error}=await supabase.functions.invoke('game-result',{body:{gameId:gameId.current,path:frozenPath.current.map(({type,id})=>({type,id}))}});
+      if(error||data?.error)throw new Error(data?.error??'Your result is saved. Retry verification shortly.');
+      if(!data?.won)throw new Error('That path could not be verified as a win.');
+      setReward(data.xp);setGameState('won');accountChanged();window.dispatchEvent(new CustomEvent('gameStateChange',{detail:'won'}));
+      toast({variant:'success',title:`${data.xp} XP earned`,description:data.xp===0?'You have reached today’s XP cap.':'Connection verified!'});
+    }catch(e){setResultError(e instanceof Error?e.message:'Please retry verification.');}
+    finally{setIsLoading(false);}
+  };
   const selectActor = async (actor: CastMember) => {
-    const timeTaken = gameStartTime ? Math.floor((Date.now() - gameStartTime) / 1000) : 0;
-    
-    // Check if this is the target actor
-    if (actor.id === targetActor?.id) {
-      setPath(prev => [...prev, {
-        type: 'actor',
-        id: actor.id,
-        name: actor.name,
-        image: actor.profilePath
-      }]);
-      
-      const wonInTime = timeTaken <= 120;
-      setGameState('won');
-      // Dispatch game state change event
-      window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'won' }));
-      
-      if (wonInTime) {
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) throw new Error("No active player");
-          let { data: stats, error } = await supabase.from('user_stats')
-            .select('coins').eq('user_id', user.id).maybeSingle();
-          if (error) throw error;
-          if (!stats) {
-            const created = await supabase.from('user_stats').insert({ user_id: user.id, coins: 100 })
-              .select('coins').single();
-            if (created.error) throw created.error;
-            stats = created.data;
-          }
-          const awarded = await supabase.from('user_stats').update({ coins: stats.coins + 75 })
-            .eq('user_id', user.id).select('coins').single();
-          if (awarded.error || !awarded.data) throw awarded.error ?? new Error("Reward unconfirmed");
-          toast({ variant: "success", title: "75 coins added", description: `Connected in ${timeTaken}s.` });
-        } catch (error) {
-          console.error('Error awarding coins:', error);
-          toast({ variant: "destructive", title: "Couldn’t confirm your coin reward", description: "Check your balance in Play." });
-        }
-      }
-
-      // A finished pair is available for Retry until the player requests a new one.
-      localStorage.removeItem('dp_startActor');
-      localStorage.removeItem('dp_targetActor');
-      localStorage.removeItem('dp_randomizeCount');
-      setRandomizeCount(0);
-      
-      return;
+    if(gameState!=='playing'||isLoading)return;
+    if(path.some(p=>p.type==='actor'&&p.id===actor.id)){toast({title:'Try a new connection',description:'An actor can only appear once in a path.'});return;}
+    if(path.length>=20 && actor.id!==targetActor?.id){toast({title:'Path limit reached',description:'Reach the target within ten connections.'});return;}
+    if(actor.id===targetActor?.id){
+      const finished=[...path,{type:'actor' as const,id:actor.id,name:actor.name,image:actor.profilePath}];
+      frozenPath.current=finished;setPath(finished);setGameState('checking');await submitWin();return;
     }
 
     // Add actor to path and load their filmography
@@ -337,6 +278,8 @@ const DailyPuzzle = () => {
   };
 
   const resetGame = () => {
+    if(gameId.current)void supabase.rpc('end_cinegeek_game',{p_game:gameId.current});
+    gameId.current=null;frozenPath.current=null;setResultError('');
     setGameState('ready');
     // Dispatch game state change event
     window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'ready' }));
@@ -394,7 +337,7 @@ const DailyPuzzle = () => {
     <div className="max-w-4xl mx-auto space-y-5 animate-fade-in pb-4">
       <header className="play-subhead"><p className="arcade-kicker"><i /> CineGeek Arcade</p>
         <h1>Actor Connect</h1>
-        {gameState === 'ready' && <p className="play-muted">Pick a credit, then a cast member. Reach the target in two minutes to earn 75 coins.</p>}
+        {gameState === 'ready' && <p className="play-muted">Pick a credit, then a cast member. Reach the target in two minutes to earn up to 75 XP.</p>}
       </header>
 
       {gameState !== 'playing' && startActor && targetActor && <>
@@ -492,10 +435,13 @@ const DailyPuzzle = () => {
         </Card>
       )}
 
+      {gameState==='checking'&&<div className="play-panel" role="status"><strong>{isLoading?'Checking your connection…':'Verification pending'}</strong>{resultError&&<p className="text-sm mt-2">{resultError}</p>}<Button className="mt-3" disabled={isLoading} onClick={()=>void submitWin()}>Retry verification</Button><Button variant="ghost" disabled={isLoading} onClick={resetGame}>Leave result</Button></div>}
+      {gameState==='won'&&<p className="text-primary">{reward} XP earned · daily earning cap 225 XP</p>}
+      {gameState==='ready'&&<p className="text-sm text-muted-foreground">{access?.plan==='free'?`${access.gamesRemaining??0} free game remaining today · resets at midnight UTC`:'Pro · unlimited games, up to 225 XP earned daily'}</p>}
       {/* Start/Reset Buttons */}
       {gameState === 'ready' && <div className="game-actions">
-        <button className="play-action primary" onClick={startGame} disabled={isRandomizing}>Start game <ArrowRight /></button>
-        <button className="play-action" onClick={shufflePair} disabled={isRandomizing || randomizeCount >= 3}>
+        <button className="play-action primary" onClick={startGame} disabled={starting||isRandomizing||!access||access.gamesRemaining===0}>Start game <ArrowRight /></button>
+        <button className="play-action" onClick={shufflePair} disabled={starting||isRandomizing || randomizeCount >= 3}>
           <RotateCcw />{isRandomizing ? 'Finding actors…' : `Shuffle pair · ${Math.max(0,3 - randomizeCount)} left`}
         </button>
       </div>}
@@ -513,7 +459,7 @@ const DailyPuzzle = () => {
           </Button>
           <Button 
             onClick={() => {
-              setGameState('loading');
+              resetGame();setGameState('loading');
               window.dispatchEvent(new CustomEvent('gameStateChange', { detail: 'loading' }));
               loadRandomActors();
             }}

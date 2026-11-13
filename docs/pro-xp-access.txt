@@ -1,0 +1,89 @@
+CineGeek: XP, plans and collectibles — local candidate, 13 November 2026
+
+User-approved scope
+Replace coins with earned XP, keep AI questions separate, add Free/Monthly/Annual
+access rules and Your Plan in Profile, test all three, leave purchases disabled.
+Free also has the animated Focus room, using Arcade Geek only. Companion answer
+production, model selection, retrieval, memory and spoiler validation are unchanged.
+
+Access
+Free: manual lists, default animated Geek, one Actor Connect start per UTC day,
+collectible packs with XP, zero included questions. Verified purchased questions
+remain usable without Pro and do not unlock Pro features.
+Monthly: Smart Lists, unlimited games, one daily spin after the first verified win,
+15 successful questions per subscription month, skins unlockable for 1,500 XP.
+Annual: same monthly question allowance, all existing/new skins while subscribed,
+Annual film buff badge, other Monthly benefits. No automatic complimentary grants.
+Expiry/revocation returns to Free without deleting saved lists, selected outfit or
+owned skins. Free displays Arcade; renewed eligibility can restore that selection.
+
+Prices remain 8.99 GBP/month and 79.99 GBP/year. Annual displays 6.67 GBP/month
+as a rounded monthly equivalent with '79.99 GBP billed yearly' directly below,
+and the approximately 26% saving against 12 monthly payments. Both onboarding
+and Your Plan use this presentation. No checkout, trial or top-up is enabled.
+
+XP
+75 XP per server-verified win; 225 daily maximum from wins and spin XP together.
+Available XP is spendable; lifetime XP never decreases and determines the displayed
+level (1 + floor(lifetime XP / 1000)). Both XP counters start at zero for new users.
+Existing legacy balances migrate once 1:1; old balances remain intact for audit.
+Packs cost 150 XP. XP cannot buy questions, subscriptions, cash or spins.
+A daily Pro win spin has 50% chance of up to 25 XP (within remaining daily cap),
+20% actor pack, 20% director pack, 10% collectible badge. Duplicate badges add no
+extra reward; probabilities and cap behaviour are shown in Play.
+
+Collectibles
+Maximum five actors plus five directors. Revealing does not add a card. The server
+stores the person before exposing it; reopening retrieves the same person. A user
+can keep or skip. A full shelf requires replacing one owned card of the same type.
+No selling, XP refunds or rerolls. Duplicates can be skipped. Closing leaves the
+pack pending. Decisions, replacement and consumption occur in one transaction.
+The browser cannot directly write balances, packs, cards or verification results.
+Wallet locking serializes redemptions/acceptance and idempotency prevents double
+spends/rewards. Redemption request IDs survive navigation and uncertain responses.
+
+Verification
+New database tests execute the real migrations in PostgreSQL/PGlite and exercise
+all plans, expiry/revocation, balances, game cap/deadline/proof leases, service-only
+rewards, duplicate submissions, spins, independent collection caps, replacement,
+wrong-owner requests, skip/no refunds, immutable reveals and Smart List cache gates.
+PGlite serializes the parallel request test; it checks final state/idempotency, not
+real multi-connection PostgreSQL lock scheduling. Production uses wallet row locks.
+UI tests cover default animated Focus, paid skin restrictions, Free manual lists,
+Your Plan, disabled purchases, keep/skip/replacement, and retry request identity.
+Existing timestamp, recap, Focus timer, rewind and episode-history checks remain.
+No live model calls, subscription grants, AI credit spending or purchases are needed.
+Mobile visual review: 390 x 844 local sample account, all three plans; annual
+monthly-equivalent presentation reviewed in both Profile and onboarding.
+
+Rollout prerequisites — nothing in this candidate has been deployed
+1. Reconcile historic paid coin balances and premium packs before applying a 1:1
+   XP conversion or retiring Stripe webhooks. No historic payment is erased here.
+   Current old balances are retained; reconciliation is a release gate, not waived.
+2. Apply 20261113190000_companion_monthly_allowance then
+   20261113200000_pro_xp_collections in staging. Back up inventory/balances and
+   check for pre-existing collections already exceeding five cards per type.
+3. Deploy game-result, actor-connect, open-pack and interpret-smart-list together;
+   deploy the 410 replacements for sell-card, calculate-person-value, legacy
+   sort-by-custom-filter, create-payment-intent, verify-payment and stripe-webhook.
+   open-pack/game-result validate the bearer token themselves, as actor-connect does.
+4. Coordinate the new native client: old clients can no longer directly mint
+   balances or cards. Do not apply this migration alone to the existing live app.
+5. Monthly question accounting remains staged disabled by the prior migration.
+   Its monetary thresholds must be configured from the approved spending policy
+   before enabling it. Until then the existing private-beta route remains labelled
+   private beta. No changes here raise or activate a production spending limit;
+   the existing global companion budget remains $5.
+6. Apple receipt verification, purchase/restore flows and subscription lifecycle
+   events are a separate task. Only trusted server purchase verification may grant
+   entitlements or purchased questions. Clients cannot set their own plan.
+
+Local design preview uses sample data, never real grants. samplePlan=monthly or
+samplePlan=annual affects only the explicit mobile-preview client; native and
+production builds use the real server access RPC. No live accounts were modified.
+
+Final local validation
+13 November 2026: 71 test files / 1,070 tests passed. TypeScript frontend check,
+Deno checks for game-result/open-pack/actor-connect/interpret-smart-list, and the
+native Vite build passed. git diff --check passed. The build retains the existing
+large-chunk advisory; no build errors. No live AI calls or deployed changes.

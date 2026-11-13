@@ -1,5 +1,7 @@
+import { useProAccess } from "@/hooks/use-pro-access";
+import { accountChanged } from "@/lib/pro-access";
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { Home, Gamepad2, UserRound, ArrowLeft, Coins } from "lucide-react";
+import { Home, Gamepad2, UserRound, ArrowLeft, Zap } from "lucide-react";
 import { Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -45,7 +47,9 @@ const Dashboard = () => {
   };
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
   const allowance = useQuestionAllowance();
-  const [coins, setCoins] = useState<number>(0);
+  const access=useProAccess();
+  const xp=access?.xp??0;
+  const refreshXp=()=>accountChanged();
 
   // Refresh when window gains focus (user comes back to tab/window)
   useEffect(() => {
@@ -133,34 +137,7 @@ const Dashboard = () => {
     }
   };
 
-  const loadUserStats = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: stats } = await supabase
-        .from('user_stats')
-        .select('coins')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!stats) {
-        // Create stats if they don't exist
-        const { data: newStats } = await supabase
-          .from('user_stats')
-          .insert({ user_id: user.id, coins: 100 })
-          .select()
-          .single();
-        if (newStats) {
-          setCoins(newStats.coins);
-        }
-      } else {
-        setCoins(stats.coins);
-      }
-    } catch (error) {
-      console.error('Error loading user stats:', error);
-    }
-  };
+  const loadUserStats = () => accountChanged();
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -196,7 +173,7 @@ const Dashboard = () => {
           </button>
           <button onClick={() => selectTab(activeTab === "play" ? "play" : "profile", activeTab === "play" ? "store" : undefined)} disabled={isGamePlaying}
             className="flex items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-muted-foreground" aria-label={activeTab === "play" ? "Open store" : "View profile and question allowance"}>
-            {activeTab === "play" ? <><Coins className="w-4 h-4 text-primary" /><span className="text-foreground tabular-nums">{coins.toLocaleString()}</span></>
+            {activeTab === "play" ? <><Zap className="w-4 h-4 text-primary" /><span className="text-foreground tabular-nums">{xp.toLocaleString()} XP</span></>
               : <><span className="w-1.5 h-1.5 rounded-full bg-primary" /><span>{allowance.mode === 'monthly' ? `${allowance.included + allowance.purchased} questions` : allowance.mode === 'beta' ? `${remainingFree ?? '…'} free questions` : 'Questions'}</span></>}
           </button>
         </div>
@@ -209,11 +186,11 @@ const Dashboard = () => {
           <Button variant="ghost" disabled={isGamePlaying} onClick={() => selectTab("play")} className="mb-2 -ml-3 gap-1.5 text-muted-foreground"><ArrowLeft className="w-4 h-4" />Back to Play</Button>
           {isGamePlaying && <p className="text-xs text-primary mb-4" role="status">Finish your game to switch screens.</p>}
           {playView === "game" ? <>
-            {import.meta.env.MODE === "mobile-preview" && <p className="mb-4 text-center text-sm text-muted-foreground">Practice with sample cast credits. Preview coins reset on reload.</p>}
+            {import.meta.env.MODE === "mobile-preview" && <p className="mb-4 text-center text-sm text-muted-foreground">Practice with sample cast credits. Preview rewards are sample data.</p>}
             <DailyPuzzle />
-          </> : playView === "packs" ? <Packs onStore={() => selectTab("play", "store")} onBalance={setCoins} /> : <Store onBalance={setCoins} />}
+          </> : playView === "packs" ? <Packs onStore={() => selectTab("play", "store")} onBalance={refreshXp} /> : <Store onBalance={refreshXp} />}
         </div> : <PlayHome onOpen={view => selectTab("play", view)} />)}
-        {activeTab === "profile" && <ProfileHome email={email} coins={coins} remainingFree={remainingFree} allowance={allowance} onLogout={handleLogout} onInstall={() => navigate("/install")} />}
+        {activeTab === "profile" && <ProfileHome email={email} allowance={allowance} onLogout={handleLogout} onInstall={() => navigate("/install")} />}
       </main>
       </GeekViewer.Provider>
       <nav aria-label="Main navigation" className="app-bottom-nav fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-background/95 backdrop-blur-xl">

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import {planFixture} from './pro-access-fixture';
+vi.mock('@/hooks/use-pro-access',()=>({useProAccess:()=>planFixture('annual')}));
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { HomeLists } from '../src/components/HomeLists';

@@ -40,13 +40,13 @@ interface ChatProps {
   timestamp: string; valid: boolean; onEditPosition: () => void; positionButton: RefObject<HTMLButtonElement>;
   messages: CompanionMessage[]; historyError: string | null; loading: boolean;
   onAsk: (text: string) => Promise<string | undefined>;
-  remainingFree: number | null; coins: number; onStore: () => void;
+  remainingFree: number | null; coins?: number; onStore: () => void;
   allowance?: QuestionAllowance;
 }
 const compactTime = (time: string) => time.replace(/^00:(?=\d\d:\d\d$)/, "");
 
 export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, onEditPosition, positionButton, messages,
-  historyError, loading, onAsk, remainingFree, coins, onStore, allowance }: ChatProps) {
+  historyError, loading, onAsk, remainingFree, onStore, allowance }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState("");
   const [replyId, setReplyId] = useState<string>();
@@ -60,7 +60,7 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
   const cost = remainingFree === 0;
   const monthly = allowance?.mode === 'monthly';
   const emptyWallet = monthly ? allowance.included + allowance.purchased === 0 :
-    (!allowance || allowance.mode === 'beta') && cost && coins < 150;
+    allowance?.mode==='unavailable' || (!allowance || allowance.mode === 'beta') && cost;
   const latest = messages[0]?.id;
   // Resolve from the same timestamp-filtered history as the full transcript.
   const inlineReply = messages.find(message => message.id === replyId);
@@ -145,7 +145,7 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
         {allowance && allowance.mode !== 'beta' ? <p className="room-allowance">{questionAllowanceLabel(allowance)}
           {monthly && emptyWallet && <span>Question packs and Pro will be available when purchases launch.</span>}
         </p> : remainingFree !== null && <p className="room-allowance">
-          {cost ? `150 coins per question · ${coins} available` : `${remainingFree} free question${remainingFree === 1 ? "" : "s"} left today`}
+          {cost ? "Private beta questions used for today" : `${remainingFree} private beta question${remainingFree === 1 ? "" : "s"} left today`}
           {cost && <button type="button" onClick={onStore}>View store</button>}</p>}
       </form>
     </div>

@@ -523,6 +523,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_cinegeek_access: { Args: Record<PropertyKey, never>; Returns: Json };
+      redeem_cinegeek_xp: { Args: {p_request:string;p_item:string}; Returns: Json };
+      start_cinegeek_game: { Args: {p_game:string;p_start:number;p_target:number}; Returns: Json };
+      end_cinegeek_game: { Args: {p_game:string}; Returns: undefined };
+      spin_cinegeek_reward: { Args: Record<PropertyKey, never>; Returns: Json };
+      decide_cinegeek_pack: { Args: {p_pack:string;p_keep:boolean;p_replace?:string|null}; Returns: Json };
       get_companion_allowance: {
         Args: Record<PropertyKey, never>
         Returns: Json

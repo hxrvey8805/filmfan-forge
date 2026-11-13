@@ -47,7 +47,7 @@ export async function interpretWithFreeModel(request: string, key: string, trans
   return parsed;
 }
 
-type Reservation = { status: "reserved" | "limited" | "busy" } | { status: "cached"; result: unknown };
+type Reservation = { status: "reserved" | "limited" | "busy" | "pro_required" } | { status: "cached"; result: unknown };
 export type ListServiceDependencies = {
   authenticate: (token: string) => Promise<string | null>;
   reserve: (userId: string, hash: string, callId: string) => Promise<Reservation>;
@@ -88,6 +88,7 @@ export function listInterpreterHandler(deps: ListServiceDependencies) {
       const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
       const callId = crypto.randomUUID();
       const reservation = await deps.reserve(userId, hash, callId);
+      if (reservation.status === "pro_required") return reply(403, {error:"pro_required"});
       if (reservation.status === "limited" || reservation.status === "busy") return reply(429, { error: reservation.status });
       if (reservation.status === "cached") {
         const cached = parseListInterpretation(reservation.result);

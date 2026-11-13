@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import {planFixture} from './pro-access-fixture';
+vi.mock('@/hooks/use-pro-access',()=>({useProAccess:()=>planFixture('annual')}));
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WatchingSpotlight } from '../src/components/WatchingSpotlight';

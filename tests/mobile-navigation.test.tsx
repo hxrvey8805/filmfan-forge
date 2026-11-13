@@ -38,7 +38,7 @@ describe('mobile destinations', () => {
     expect(screen.getByText('Pack store')).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Profile', exact: true })); });
     expect(screen.getByText('filmgeek@example.com')).toBeTruthy();
-    expect(screen.getByText('Free questions left today')).toBeTruthy();
+    expect(screen.getByRole('heading',{name:'Your Plan'})).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Profile', exact: true }).getAttribute('aria-current')).toBe('page');
   });
   it('keeps the game mounted and prevents destination changes until it finishes', async () => {

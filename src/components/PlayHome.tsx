@@ -1,4 +1,5 @@
-import { ArrowRight, ChevronRight, Clapperboard, Coins, Layers3, ShoppingBag, Timer } from "lucide-react";
+import { DailyReward } from "./DailyReward";
+import { ArrowRight, ChevronRight, Clapperboard, Zap, Layers3, ShoppingBag, Timer } from "lucide-react";
 import { GeekAvatar } from "./GeekAvatar";
 import { useGeekOutfit } from "@/hooks/use-geek-outfit";
 import "@/pages/play.css";
@@ -16,9 +17,10 @@ export function PlayHome({ onOpen }: { onOpen: (view: PlayView) => void }) {
           <p>Link two actors through the movies and shows they share.</p></div>
         <div className="ticket-art" aria-hidden="true"><div className="ticket-orbit" /><span className="ticket-spark spark-one">✦</span><span className="ticket-spark spark-two">✦</span><GeekAvatar look={look} /></div>
       </div>
-      <div className="ticket-stub"><div className="ticket-terms"><span><Timer />2 min</span><span><Coins />75 coin prize</span></div>
+      <div className="ticket-stub"><div className="ticket-terms"><span><Timer />2 min</span><span><Zap />Up to 75 XP</span></div>
         <button className="ticket-start" data-play-link="game" onClick={() => onOpen("game")} aria-label="Play Actor Connect">Play now <ArrowRight size={18} /></button></div>
     </section>
+    <DailyReward/>
     <section aria-labelledby="counter-title" className="arcade-counter"><h2 id="counter-title">Card counter</h2>
       <button className="arcade-row" data-play-link="packs" onClick={() => onOpen("packs")}><span className="counter-icon mint"><Layers3 /></span><span><strong>Your collection</strong><small>Open packs and see your cast.</small></span><ChevronRight /></button>
       <button className="arcade-row" data-play-link="store" onClick={() => onOpen("store")}><span className="counter-icon coral"><ShoppingBag /></span><span><strong>The store</strong><small>Find card packs and extras.</small></span><ChevronRight /></button>

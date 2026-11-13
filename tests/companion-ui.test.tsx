@@ -61,7 +61,7 @@ describe('timestamp-only controls and title changes', () => {
       answer_status: 'insufficient_evidence', evidence: [{ id: 'recent', label: '00:04:57–00:04:59', start: 297, end: 299 }] }} />);
     expect(view.container.querySelector('script')).toBeNull();
     expect(view.container.textContent).toContain('<script>Fictional dialogue</script>');
-    expect(screen.getByText('No question or coins used.')).toBeTruthy();
+    expect(screen.getByText('No question used.')).toBeTruthy();
     expect(screen.getByText('Sources')).toBeTruthy();
   });
   it('retains exact seconds, rewinds to zero, and prevents submitting malformed times', () => {

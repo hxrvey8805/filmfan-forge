@@ -1,3 +1,7 @@
+import {redeemXp} from "@/lib/xp-redemption";
+import { useProAccess } from "@/hooks/use-pro-access";
+import { canWear } from "@/lib/pro-access";
+import { toast } from "sonner";
 import { useId, useState } from "react";
 import { Shirt } from "lucide-react";
 import { DEFAULT_OUTFIT, outfits, useGeekOutfit, type Outfit } from "@/hooks/use-geek-outfit";
@@ -6,6 +10,16 @@ import "./geek-wardrobe.css";
 
 export function GeekWardrobe({ compact = false }: { compact?: boolean }) {
   const { look, ready, choose } = useGeekOutfit();
+  const access=useProAccess();
+  const [unlocking,setUnlocking]=useState(false);
+  async function select(key:Outfit){
+    if(canWear(access,key)){choose(key);return;}
+    if(access?.plan!=='monthly'){toast.info('Monthly unlocks skins with XP. Annual includes them all. See Your Plan below.');return;}
+    if(unlocking)return;
+    setUnlocking(true);
+    try{await redeemXp(access.userId,`skin:${key}`);toast.success('Skin unlocked. Select it to wear it.');
+    }catch(e){toast.error(e instanceof Error?e.message:'Could not confirm the unlock. Try again.');}finally{setUnlocking(false);}
+  }
   const [expanded, setExpanded] = useState(false);
   const id = useId();
   const optionsVisible = !compact || expanded;
@@ -23,15 +37,16 @@ export function GeekWardrobe({ compact = false }: { compact?: boolean }) {
       </div>
     </div>
     <div id={id} hidden={!optionsVisible} className="geek-options">
-      {optionsVisible && <fieldset disabled={!ready}>
+      {optionsVisible && <fieldset disabled={!ready||unlocking}>
         <legend>Your geek’s outfit</legend>
         <div className="geek-choices">
           {(Object.keys(outfits) as Outfit[]).map(key => <label className="geek-choice" key={key}>
             <input type="radio" name={id} aria-label={outfits[key].name}
               aria-describedby={key === DEFAULT_OUTFIT ? `${id}-default` : undefined}
-              checked={look === key} onChange={() => choose(key)} />
+              checked={look === key} onChange={() => void select(key)} />
             <span className="geek-swatch"><GeekAvatar look={key} still /></span>
             <span>{outfits[key].name}</span>
+            {!canWear(access,key) && <small>{access?.plan==='monthly'?'Unlock · 1,500 XP':'Pro skin'}</small>}
             {key === DEFAULT_OUTFIT && <small id={`${id}-default`} className="geek-default-badge">Default</small>}
           </label>)}
         </div>

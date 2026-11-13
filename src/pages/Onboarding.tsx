@@ -141,14 +141,15 @@ function OnboardingFlow({ owner, demo }: { owner: string; demo: boolean }) {
           <div className="onboarding-pro-art" aria-hidden="true"><div><GeekAvatar look="jedi" still /></div><div><GeekAvatar look="classic" /></div><div><GeekAvatar look="spider" still /></div><span className="onboarding-pro-pill">CINEGEEK <b>PRO</b></span></div>
           <h1 ref={heading} tabIndex={-1} id="onboarding-heading">Make every watch<br /><em>yours.</em></h1>
           <p className="onboarding-intro">More story. More personality. Your kind of Geek.</p>
-          <div className="onboarding-pro-benefits"><span><Check /> {PRO_PREVIEW.questionsPerMonth} Geek questions each month</span><span><Check /> Smart Lists & Geek in your Focus Room</span><span><Check /> Unlimited games. More ways to play.</span></div>
+          <div className="onboarding-pro-benefits"><span><Check /> {PRO_PREVIEW.questionsPerMonth} Geek questions each month</span><span><Check /> Smart Lists & more Geek styles</span><span><Check /> Unlimited games. More ways to play.</span></div>
           <fieldset className="onboarding-plans"><legend className="sr-only">Choose a Pro plan</legend>
             <label className="onboarding-plan annual-plan" data-selected={plan === 'annual'}>
               <input type="radio" name="pro-plan" value="annual" checked={plan === 'annual'} onChange={() => setDraft(d => ({ ...d, plan: 'annual' }))} />
               <div className="onboarding-plan-ribbon"><Sparkles size={12} /><span>YOUR GEEK, ALL YEAR</span><b>SAVE ≈{annualSavingPercent}%</b></div>
               <div className="onboarding-plan-body"><div className="onboarding-plan-name">Annual Pro <span className="onboarding-radio">{plan === 'annual' && <Check size={14} strokeWidth={3} />}</span></div>
-                <div className="onboarding-price"><strong>{pounds(PRO_PREVIEW.annualPence)}</strong><span> / year</span></div>
-                <p className="onboarding-equivalent">Just <b>{pounds(PRO_PREVIEW.annualPence / 12)}/month</b>, billed yearly</p>
+                <div className="onboarding-price"><strong>{pounds(PRO_PREVIEW.annualPence / 12)}</strong><span> / month</span></div>
+                <p className="onboarding-price-basis">Monthly equivalent</p>
+                <p className="onboarding-equivalent"><b>{pounds(PRO_PREVIEW.annualPence)} billed yearly</b></p>
                 <div className="onboarding-annual-extra"><span>All Geek skins included</span><span>Save {pounds(annualSavingPence)} a year*</span></div>
               </div>
             </label>
