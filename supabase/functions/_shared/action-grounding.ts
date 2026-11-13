@@ -23,6 +23,11 @@ function* unqualifiedCaptionActionTerms(text: string): Generator<string> {
   for (const match of text.matchAll(guardedActions)) {
     const before = text.slice(0, match.index);
     const after = text.slice(match.index! + match[0].length);
+    // A compound modifier describes instructions, not a completed discovery
+    // ("passage-finding instructions"). Still inspect every subsequent act,
+    // and let independent source review establish what the instructions say.
+    if (/^finding$/i.test(match[0]) && /\b[\p{L}]+[-\u2010\u2011]$/u.test(before) &&
+        /^\s+(?:instructions|guide|manual|tips|method)\b/i.test(after)) continue;
     if (/^find(?:s|ing)?$|^found$/i.test(match[0]) &&
       /^\s+(?:(?:a|an|the)\s+)?(?:(?:equivalent|appropriate|right|correct|literal)\s+)?(?:word|translation|meaning)\b/i.test(after)) continue;
     if (/^hid(?:e|es|ing)?$|^hidden$/i.test(match[0]) && languageSubject.test(before)) continue;

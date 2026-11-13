@@ -1,5 +1,6 @@
 import { readPaged } from '../_shared/paged-data.ts';
 import { answerWatchRequest, WATCH_RECAP_REVISION } from '../_shared/watch-service.ts';
+import { traceWatchGenerator, WATCH_CHECK_REVISION, type WatchObserver } from '../_shared/watch-diagnostics.ts';
 import { referenceRequest } from '../_shared/watch-answer.ts';
 import { episodeRevision, priorEpisodes, seriesRecap } from '../_shared/series-recap.ts';
 import type { CheckedResponse } from '../_shared/companion-response.ts';
@@ -193,8 +194,9 @@ serve(async req => {
     if (!memoryReply && release.answerOptions.captionDiscussion) {
       let activeGenerator: JsonGenerator | undefined;
       // Source preparation must not consume the model's response deadline.
-      const generate:JsonGenerator=(...args)=>(activeGenerator ??= companionGenerator(name => Deno.env.get(name), fetch,
-        databaseSolBudget((name, args) => db.rpc(name, args), user.id, id)))(...args);
+      const observe:WatchObserver=event=>console.info('Companion watch check',{requestId:id,revision:WATCH_CHECK_REVISION,...event});
+      const generate=traceWatchGenerator((...args)=>(activeGenerator ??= companionGenerator(name => Deno.env.get(name), fetch,
+        databaseSolBudget((name, args) => db.rpc(name, args), user.id, id)))(...args),observe);
       const readData = async (pos: ViewingPosition, earlier = false) => {
         if (!earlier && !cutGroup(pos) && pos.seconds > 0) await ensureCurrentSubtitles(db, pos);
         let query = earlier
@@ -236,7 +238,7 @@ serve(async req => {
           return cached.data?.chapter && (!cached.data.chapter.limited||Date.now()-Date.parse(cached.data.prepared_at)<3600000)?cached.data.chapter as CheckedResponse:null;},
         saveChapter:async(pos,answer)=>{const keys=chapterKeys(pos);const saved=await db.rpc('store_companion_episode_recap',{p_title:tmdbId,p_season:pos.seasonNumber,p_episode:pos.episodeNumber,p_revision:keys.revision,p_chapter:answer});if(saved.error)throw saved.error;},
         ...(body.recapProtocol===1?{prepareLater:()=>{throw new RecapPreparing();}}:{}),
-      });
+      },observe);
     } else {
     if (!memoryReply && !cutGroup(position) && seconds>0) {
       await ensureCurrentSubtitles(db, position);

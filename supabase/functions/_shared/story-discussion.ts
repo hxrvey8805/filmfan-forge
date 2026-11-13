@@ -8,6 +8,7 @@ import { draftGroundingIssues, namedSpeechSubjects, groundingContextHints } from
 import { unqualifiedCaptionActionTerm, unsupportedCaptionReaction } from './action-grounding.ts';
 import { futureHint } from './story-explanation.ts';
 import { geekVoice } from './geek-voice.ts';
+import { watchDiagnostic, type WatchObserver, type ProofFailure } from './watch-diagnostics.ts';
 
 type Source = { id: string; text: string; end: number; season: number; episode: number; historicalDialogue?: true; kind?:'dialogue'|'visual'|'story'; knowledge?:'established'|'unresolved' };
 export type StoryDiscussionContext = { question: string; boundary: { season: number; episode: number; seconds: number }; sources: Source[];
@@ -46,42 +47,47 @@ const repair: Record<Exclude<Issue, 'none'>, string> = {
   timing: 'Distinguish earlier goals and speech from current states and completed outcomes.',
   spoiler: 'Use only permitted source facts; remove predictions, unasked identities and hints about later revelations.',
   relevance: 'Re-anchor every part to the event or proposal named in this question. Explain its reason or contrast fully; remove a separate later situation answering a different hesitation, reaction or decision. Do not replace the explanation with quotations or narrow an explicitly requested recap, comparison or development.',
-  citation: 'Supply exact quotes from valid source IDs supporting every factual detail, including needed context.',
+  citation: 'Select valid source IDs and firstLine/lastLine ranges supporting every factual detail, including needed context. Do not retype quotes. Keep each range within the source and under 700 original characters. Keep each answer paragraph complete, on one line and at most 700 characters.',
 };
 
-export async function storyDiscussion(ctx: StoryDiscussionContext, generate: JsonGenerator) {
+export async function storyDiscussion(ctx: StoryDiscussionContext, generate: JsonGenerator, observe?:WatchObserver) {
+  const emit=(event:Parameters<WatchObserver>[0])=>watchDiagnostic(observe,event);
   const { season, episode, seconds } = ctx.boundary;
   const movie=ctx.mediaType==='movie', recap=ctx.request?.intent==='recap', maxPoints=recap?8:4;
   if (!(movie ? season===0 && episode===0 : [season, episode].every(n => Number.isInteger(n) && n > 0)) || !Number.isFinite(seconds) || seconds < 0 || seconds > 43200 ||
-      !ctx.sources.length || ctx.sources.length > (ctx.request?60:24) || JSON.stringify(ctx).length > (ctx.request?25000:18500)) return null;
+      !ctx.sources.length || ctx.sources.length > (ctx.request?60:24) || JSON.stringify(ctx).length > (ctx.request?25000:18500)) {emit({stage:'context_rejected',reason:'invalid_context'});return null;}
   // Defense in depth: no current unfinished source or later episode may even
   // reach the writer, including on retry. The caller checks title and edition.
   if (ctx.sources.some(s => !s.id || !s.text.trim() || !(movie?s.season===0 && s.episode===0:[s.season,s.episode].every(n => Number.isInteger(n) && n > 0)) ||
     !Number.isFinite(s.end) || s.end < 0 || s.end > 43200 || s.season > season || s.season === season &&
-      (s.episode > episode || s.episode === episode && s.end > seconds))) return null;
+      (s.episode > episode || s.episode === episode && s.end > seconds))) {emit({stage:'context_rejected',reason:'source_boundary'});return null;}
   const byId = new Map(ctx.sources.map(s => [s.id, s]));
-  if (byId.size !== ctx.sources.length) return null;
+  if (byId.size !== ctx.sources.length) {emit({stage:'context_rejected',reason:'duplicate_source'});return null;}
   const lineProof = object({id:{type:'string',enum:[...byId.keys()]},firstLine:{type:'integer',minimum:1},lastLine:{type:'integer',minimum:1}});
   // Both writer and reviewer select immutable source spans rather than retyping them.
   // In particular, an OCR typo must not turn a sound review into a new draft.
   const numberedSources=ctx.sources.map(s=>({...s,text:s.text.split('\n').map((line,i)=>`[${i+1}] ${line}`).join('\n')}));
+  let proofFailure:ProofFailure='receipt_count';
   const parseProof = (value: unknown): Receipt[] | null => {
-    if (!Array.isArray(value) || !value.length || value.length > 8) return null;
+    const fail=(reason:ProofFailure)=>{proofFailure=reason;return null;};
+    if (!Array.isArray(value) || !value.length || value.length > 8) return fail('receipt_count');
     const result: Receipt[] = [];
     for (const r of value) {
-      if (!record(r) || typeof r.id !== 'string' || !byId.has(r.id)) return null;
+      if (!record(r) || typeof r.id !== 'string' || !byId.has(r.id)) return fail('receipt_source');
       let quote: string;
       if ('firstLine' in r || 'lastLine' in r) {
         const lines=byId.get(r.id)!.text.split('\n');
-        if ('quote' in r || !Number.isInteger(r.firstLine) || !Number.isInteger(r.lastLine) ||
-          Number(r.firstLine)<1 || Number(r.lastLine)<Number(r.firstLine) || Number(r.lastLine)>lines.length) return null;
+        if ('quote' in r) return fail('receipt_mixed_format');
+        if (!Number.isInteger(r.firstLine) || !Number.isInteger(r.lastLine) ||
+          Number(r.firstLine)<1 || Number(r.lastLine)<Number(r.firstLine) || Number(r.lastLine)>lines.length) return fail('receipt_range');
         quote=lines.slice(Number(r.firstLine)-1,Number(r.lastLine)).join('\n');
       } else {
         // Exact legacy receipts remain valid for stored evaluations/callers.
-        if(typeof r.quote!=='string')return null;
+        if(typeof r.quote!=='string')return fail('receipt_missing_quote');
         quote=r.quote;
       }
-      if(normal(quote).length<4 || quote.length>700 || !normal(byId.get(r.id)!.text).includes(normal(quote)))return null;
+      if(normal(quote).length<4 || quote.length>700)return fail('receipt_length');
+      if(!normal(byId.get(r.id)!.text).includes(normal(quote)))return fail('receipt_mismatch');
       result.push({id:r.id,quote});
     }
     return result;
@@ -108,17 +114,18 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
       format('companion_story_discussion', {points:array(object({text:{type:'string'},support:array(lineProof,1,8)}),0,maxPoints)}));
     citationRetry = undefined;
     feedback = [];
-    if (!record(raw) || !Array.isArray(raw.points) || !raw.points.length || raw.points.length > maxPoints) return null;
+    if (!record(raw) || !Array.isArray(raw.points) || raw.points.length > maxPoints) {emit({stage:'writer_invalid',attempt:attempt+1,reason:'shape'});return null;}
+    if (!raw.points.length) {emit({stage:'writer_invalid',attempt:attempt+1,reason:'no_points'});return null;}
     const points: Point[] = [];
     for (const p of raw.points) {
-      if (!record(p) || typeof p.text !== 'string' || !p.text.trim() || p.text.length > 700 || /[\r\n]/.test(p.text) || !completeClaim(p.text)) { feedback.push('citation'); break; }
+      if (!record(p) || typeof p.text !== 'string' || !p.text.trim() || p.text.length > 700 || /[\r\n]/.test(p.text) || !completeClaim(p.text)) {emit({stage:'writer_invalid',attempt:attempt+1,reason:'paragraph'});feedback.push('citation'); break; }
       // "Eventually" can describe an already completed earlier episode. The
       // unified checker verifies its actual reveal boundary using receipts;
       // viewer-directed teases are never useful, even with valid citations.
       const tease=/\b(?:foreshadow\w*|keep (?:an eye|watching)|you(?:'ll| will) (?:see|find|learn)|this (?:will|is going to) matter)\b/i.test(p.text);
-      if (futureHint(p.text) && (!ctx.request || tease)) { feedback.push('spoiler'); break; }
+      if (futureHint(p.text) && (!ctx.request || tease)) {emit({stage:'writer_rejected',attempt:attempt+1,issue:'spoiler'});feedback.push('spoiler'); break; }
       const support = parseProof(p.support);
-      if (!support) { feedback.push('citation'); break; }
+      if (!support) {emit({stage:'writer_invalid',attempt:attempt+1,reason:proofFailure});feedback.push('citation'); break; }
       points.push({text:p.text.trim(),support});
     }
     if (feedback.length) continue;
@@ -128,7 +135,7 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     // verification call; the replacement still receives full review.
     if(ctx.sources.every(s=>s.historicalDialogue)) {
       const terms=points.flatMap(p=>{const term=unqualifiedCaptionActionTerm(p.text);return term?[term]:[];});
-      if(terms.length){actionWarnings=terms;feedback.push('action');continue;}
+      if(terms.length){emit({stage:'writer_rejected',attempt:attempt+1,issue:'action'});actionWarnings=terms;feedback.push('action');continue;}
     }
     const evidence=ctx.sources.map(s=>({id:s.id,text:s.text,start:0,end:s.end}));
     const warnings = points.map((p,index) => ({index,issues:grounding(p),
@@ -141,11 +148,11 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
         checks:array(object({index:{type:'integer'},supported:{type:'boolean'},issue:{type:'string',enum:[...issues]},
           attribution:{type:'string',enum:['none','explicit','contextual','uncertain']},support:array(lineProof,0,8)}),points.length,points.length)}));
     if (!record(check) || typeof check.boundarySafe !== 'boolean' || !['direct','partial','reject'].includes(String(check.fit)) ||
-      !Array.isArray(check.checks) || check.checks.length !== points.length) return null;
+      !Array.isArray(check.checks) || check.checks.length !== points.length) {emit({stage:'review_invalid',attempt:attempt+1,reason:'shape'});return null;}
     const verified: Point[] = [];
     for (const [index,c] of check.checks.entries()) {
       if (!record(c) || c.index !== index || typeof c.supported !== 'boolean' || !issues.includes(c.issue as Issue) ||
-        !['none','explicit','contextual','uncertain'].includes(String(c.attribution))) return null;
+        !['none','explicit','contextual','uncertain'].includes(String(c.attribution))) {emit({stage:'review_invalid',attempt:attempt+1,reason:'check_shape'});return null;}
       if (!c.supported || c.issue !== 'none') {
         feedback.push(c.issue === 'none' ? 'citation' : c.issue as Exclude<Issue,'none'>);
         // Only exact phrases already in the permitted packet can identify a
@@ -157,7 +164,7 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
         continue;
       }
       const support = parseProof(c.support);
-      if (!support) { feedback.push('citation'); continue; }
+      if (!support) {emit({stage:'review_invalid',attempt:attempt+1,reason:proofFailure});feedback.push('citation'); continue; }
       const point = {text:points[index].text,support};
       const local = grounding(point);
       const hints=groundingContextHints(point.text,support.map(r=>r.quote).join(' '),evidence);
@@ -182,10 +189,11 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     }
     if (!check.boundarySafe) feedback.push('spoiler');
     if (check.fit === 'reject') feedback.push('relevance');
-    if (!feedback.length && verified.length === points.length) return {
+    if (!feedback.length && verified.length === points.length) {emit({stage:'answer_accepted',attempt:attempt+1,paragraphs:points.length,partial:check.fit==='partial'});return {
       answer:verified.map(p => p.text).join('\n\n'),limited:check.fit === 'partial',points:verified,
       sourceIds:[...new Set(verified.flatMap(p => p.support.map(r => r.id)))],
-    };
+    };}
+    emit({stage:'review_rejected',attempt:attempt+1,issues:[...new Set(feedback)]});
     // An otherwise approved review can fail because its receipts autocorrect
     // a caption typo. Recheck the same draft and full permitted packet once;
     // never accept the malformed quote, copy the verdict, or weaken proof.
@@ -196,5 +204,5 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     }
     // Never salvage and show a fragment: the whole answer must pass review.
   }
-  return null;
+  emit({stage:'answer_exhausted'});return null;
 }
