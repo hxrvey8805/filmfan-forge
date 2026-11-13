@@ -7,6 +7,7 @@ import { formatTimestamp } from "../../supabase/functions/_shared/companion";
 import { CompanionTimestamp } from "./CompanionTimestamp";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { questionAllowanceLabel, type QuestionAllowance } from '@/lib/question-allowance';
 
 export function RoomPositionEditor({ seconds, maxMinutes, onSave, onClose, onReturnFocus }: {
   seconds: number; maxMinutes: number; onSave: (seconds: number) => void; onClose: () => void; onReturnFocus: () => void;
@@ -40,11 +41,12 @@ interface ChatProps {
   messages: CompanionMessage[]; historyError: string | null; loading: boolean;
   onAsk: (text: string) => Promise<string | undefined>;
   remainingFree: number | null; coins: number; onStore: () => void;
+  allowance?: QuestionAllowance;
 }
 const compactTime = (time: string) => time.replace(/^00:(?=\d\d:\d\d$)/, "");
 
 export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, onEditPosition, positionButton, messages,
-  historyError, loading, onAsk, remainingFree, coins, onStore }: ChatProps) {
+  historyError, loading, onAsk, remainingFree, coins, onStore, allowance }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState("");
   const [replyId, setReplyId] = useState<string>();
@@ -56,7 +58,9 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
   const collapseButton = useRef<HTMLButtonElement>(null);
   const startY = useRef<number>();
   const cost = remainingFree === 0;
-  const emptyWallet = cost && coins < 150;
+  const monthly = allowance?.mode === 'monthly';
+  const emptyWallet = monthly ? allowance.included + allowance.purchased === 0 :
+    (!allowance || allowance.mode === 'beta') && cost && coins < 150;
   const latest = messages[0]?.id;
   // Resolve from the same timestamp-filtered history as the full transcript.
   const inlineReply = messages.find(message => message.id === replyId);
@@ -138,7 +142,9 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
           }} />
           <button type="submit" aria-label="Send question" disabled={!draft.trim() || !valid || loading || !!pending || emptyWallet}><ArrowUp size={18}/></button>
         </div>
-        {remainingFree !== null && <p className="room-allowance">
+        {allowance && allowance.mode !== 'beta' ? <p className="room-allowance">{questionAllowanceLabel(allowance)}
+          {monthly && emptyWallet && <span>Question packs and Pro will be available when purchases launch.</span>}
+        </p> : remainingFree !== null && <p className="room-allowance">
           {cost ? `150 coins per question · ${coins} available` : `${remainingFree} free question${remainingFree === 1 ? "" : "s"} left today`}
           {cost && <button type="button" onClick={onStore}>View store</button>}</p>}
       </form>

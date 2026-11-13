@@ -1,16 +1,23 @@
 import { ChevronRight, Coins, ShieldCheck, Smartphone, LogOut, UserRound, Sparkles } from "lucide-react";
 import { GeekWardrobe } from "./GeekWardrobe";
 import { Button } from "@/components/ui/button";
+import { questionAllowanceLabel, type QuestionAllowance } from '@/lib/question-allowance';
 
-export function ProfileHome({ email, coins, remainingFree, onLogout, onInstall }: {
+export function ProfileHome({ email, coins, remainingFree, onLogout, onInstall, allowance }: {
   email: string; coins: number; remainingFree: number | null; onLogout: () => void; onInstall: () => void;
+  allowance?: QuestionAllowance;
 }) {
   return <div className="max-w-2xl mx-auto space-y-7 animate-fade-in">
     <div><p className="eyebrow">Your little corner of cinema</p><h1 className="screen-heading mt-2">Profile</h1></div>
     <GeekWardrobe />
     <div className="flex items-center gap-4 py-2"><span className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center"><UserRound className="w-7 h-7 text-primary" /></span><div className="min-w-0"><h2 className="text-lg font-semibold">A fellow film geek</h2><p className="text-sm text-muted-foreground break-all mt-1">{email}</p></div></div>
     <div className="grid grid-cols-2 gap-3">
-      <div className="destination-card"><Sparkles className="w-5 h-5 text-primary mb-3" /><p className="text-3xl font-semibold tabular-nums">{remainingFree ?? "—"}<span className="text-base text-muted-foreground font-normal"> / 5</span></p><p className="text-xs text-muted-foreground mt-2">Free questions left today</p></div>
+      <div className="destination-card"><Sparkles className="w-5 h-5 text-primary mb-3" />
+        {allowance && allowance.mode !== 'beta' ? <><p className="text-3xl font-semibold tabular-nums">{allowance.mode === 'monthly' ? allowance.included + allowance.purchased : '—'}</p>
+          <p className="text-xs text-muted-foreground mt-2">{questionAllowanceLabel(allowance)}</p>
+          {allowance.mode === 'monthly' && allowance.renewsAt && <p className="text-xs text-muted-foreground mt-2">Current allowance ends {new Date(allowance.renewsAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</p>}
+        </> : <><p className="text-3xl font-semibold tabular-nums">{remainingFree ?? "—"}<span className="text-base text-muted-foreground font-normal"> / 5</span></p><p className="text-xs text-muted-foreground mt-2">Free questions left today</p></>}
+      </div>
       <div className="destination-card"><Coins className="w-5 h-5 text-primary mb-3" /><p className="text-3xl font-semibold tabular-nums break-all">{coins.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-2">Coins in your collection</p></div>
     </div>
     <div className="rounded-2xl border border-white/10 overflow-hidden">

@@ -13,6 +13,7 @@ import { useViewerSession } from "@/hooks/use-viewer-session";
 import { ContentLoading } from "@/components/ContentLoading";
 import { PlayHome } from "@/components/PlayHome";
 import { ProfileHome } from "@/components/MobileDestinations";
+import { useQuestionAllowance } from '@/hooks/use-question-allowance';
 
 type Tab = "home" | "play" | "profile";
 
@@ -43,6 +44,7 @@ const Dashboard = () => {
     window.scrollTo({ top: 0, behavior: "instant" });
   };
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
+  const allowance = useQuestionAllowance();
   const [coins, setCoins] = useState<number>(0);
 
   // Refresh when window gains focus (user comes back to tab/window)
@@ -195,7 +197,7 @@ const Dashboard = () => {
           <button onClick={() => selectTab(activeTab === "play" ? "play" : "profile", activeTab === "play" ? "store" : undefined)} disabled={isGamePlaying}
             className="flex items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-muted-foreground" aria-label={activeTab === "play" ? "Open store" : "View profile and question allowance"}>
             {activeTab === "play" ? <><Coins className="w-4 h-4 text-primary" /><span className="text-foreground tabular-nums">{coins.toLocaleString()}</span></>
-              : <><span className="w-1.5 h-1.5 rounded-full bg-primary" /><span>{remainingFree ?? "…"} free questions</span></>}
+              : <><span className="w-1.5 h-1.5 rounded-full bg-primary" /><span>{allowance.mode === 'monthly' ? `${allowance.included + allowance.purchased} questions` : allowance.mode === 'beta' ? `${remainingFree ?? '…'} free questions` : 'Questions'}</span></>}
           </button>
         </div>
       </header>
@@ -211,7 +213,7 @@ const Dashboard = () => {
             <DailyPuzzle />
           </> : playView === "packs" ? <Packs onStore={() => selectTab("play", "store")} onBalance={setCoins} /> : <Store onBalance={setCoins} />}
         </div> : <PlayHome onOpen={view => selectTab("play", view)} />)}
-        {activeTab === "profile" && <ProfileHome email={email} coins={coins} remainingFree={remainingFree} onLogout={handleLogout} onInstall={() => navigate("/install")} />}
+        {activeTab === "profile" && <ProfileHome email={email} coins={coins} remainingFree={remainingFree} allowance={allowance} onLogout={handleLogout} onInstall={() => navigate("/install")} />}
       </main>
       </GeekViewer.Provider>
       <nav aria-label="Main navigation" className="app-bottom-nav fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-background/95 backdrop-blur-xl">

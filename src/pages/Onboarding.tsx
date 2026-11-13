@@ -155,6 +155,7 @@ function OnboardingFlow({ owner, demo }: { owner: string; demo: boolean }) {
             <label className="onboarding-plan monthly-plan" data-selected={plan === 'monthly'}><input type="radio" name="pro-plan" value="monthly" checked={plan === 'monthly'} onChange={() => setDraft(d => ({ ...d, plan: 'monthly' }))} /><div><b>Monthly Pro</b><span>Keep it month to month</span></div><div><strong>{pounds(PRO_PREVIEW.monthlyPence)}</strong><small> / month</small></div><span className="onboarding-radio">{plan === 'monthly' && <Check size={14} strokeWidth={3} />}</span></label>
           </fieldset>
           <p className="onboarding-plan-note">*Compared with 12 monthly payments ({pounds(PRO_PREVIEW.monthlyPence * 12)}).<br />Plan preview · prices and allowances are not yet on sale.</p>
+          <p className="onboarding-plan-note">Both Pro plans include 15 questions per month, with no rollover. Free has no included questions. Optional question packs will be available to everyone.</p>
         </>}
       </section>
 

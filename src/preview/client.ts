@@ -120,6 +120,8 @@ export const supabase = {
     signOut: async () => { setSignedIn(false); return { error: null }; },
   },
   from,
+  rpc: async (name: string) => name === 'get_companion_allowance'
+    ? { data: {mode:'beta'}, error:null } : unavailable(),
   functions: {
     invoke: async (name: string, options: { body?: Record<string, unknown> } = {}) => {
       const body = options.body ?? {};

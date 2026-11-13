@@ -1,4 +1,5 @@
 import { useCompanion } from "@/hooks/use-companion";
+import { useQuestionAllowance } from "@/hooks/use-question-allowance";
 import { CompanionTimestamp } from "@/components/CompanionTimestamp";
 import { RoomChat, RoomPositionEditor } from "./RoomChat";
 import "./screening-room.css";
@@ -86,6 +87,7 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
     };
   }, [inRoom]);
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
+  const allowance = useQuestionAllowance(open);
   const [coins, setCoins] = useState(0);
   
   const [point, setPoint] = useState(() => startingPosition(viewer, title));
@@ -367,7 +369,7 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
           {focusAction => <RoomChat focusAction={focusAction} key={`${episodeLabel}:${point.seconds}`} expanded={chatOpen} onExpand={setChatOpen}
             timestamp={timestamp} valid={timestampValid} messages={messages} loading={isLoading}
             historyError={historyError} onAsk={handleAskQuestion} positionButton={positionButton}
-            onEditPosition={() => setEditingTime(true)} remainingFree={remainingFree} coins={coins}
+            onEditPosition={() => setEditingTime(true)} remainingFree={remainingFree} coins={coins} allowance={allowance}
             onStore={() => { onOpenChange(false); navigate("/dashboard?tab=play&view=store"); }} />}
         </FocusRoom>
         {inRoom && editingTime && <RoomPositionEditor seconds={point.seconds} maxMinutes={maxRuntime}

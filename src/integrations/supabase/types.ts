@@ -523,6 +523,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_companion_allowance: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       companion_answer_revision: {
         Args: { episode: number; media: string; season: number; title: number }
         Returns: number

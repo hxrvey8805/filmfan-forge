@@ -10,7 +10,9 @@ import { GeekViewer } from '../src/hooks/use-geek-outfit';
 
 const mock = vi.hoisted(() => ({ invoke: vi.fn(), useCompanion: vi.fn(() => ({ ask: vi.fn(), messages: [], isLoading: false, historyError: null })) }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
-  auth: { getUser: async () => ({ data: { user: null } }) },
+  auth: { getUser: async () => ({ data: { user: null } }),
+    onAuthStateChange: () => ({data:{subscription:{unsubscribe(){}}}}) },
+  rpc: async () => ({data:{mode:'beta'},error:null}),
   functions: { invoke: mock.invoke },
 } }));
 vi.mock('@/hooks/use-companion', () => ({ useCompanion: mock.useCompanion }));

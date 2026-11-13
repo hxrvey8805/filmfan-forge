@@ -3,8 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { Sparkles, Clapperboard, Coins, MessageSquareQuote } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useQuestionAllowance } from '@/hooks/use-question-allowance';
 
 const Store = ({ onBalance }: { onBalance: (coins: number) => void }) => {
+  const allowance = useQuestionAllowance();
   const [section, setSection] = useState<"Packs" | "Extras" | "Coins">("Packs");
   const [coins, setCoins] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -211,6 +213,7 @@ const Store = ({ onBalance }: { onBalance: (coins: number) => void }) => {
   };
 
   const handlePurchaseQuestion = async () => {
+    if (allowance.mode !== 'beta') return;
     const cost = 150;
     if (coins < cost) {
       toast({
@@ -297,7 +300,8 @@ const Store = ({ onBalance }: { onBalance: (coins: number) => void }) => {
           </div>;
         })}
       </div>)}
-      {section === "Extras" && <><h2 className="play-section-title">Companion extras</h2><div className="play-panel shop-item"><MessageSquareQuote/><div><h3>Extra question</h3><p>One more spoiler-free question.</p>{coins < 150 && <p>Need {150 - coins} more coins</p>}</div>
+      {section === 'Extras' && allowance.mode !== 'beta' ? <div className="play-panel shop-item"><MessageSquareQuote/><div><h3>Question packs</h3>
+        <p>Extra questions for Free and Pro. Purchased questions stay in your balance.</p><p>Purchases aren’t available yet.</p></div></div> : section === "Extras" && <><h2 className="play-section-title">Companion extras</h2><div className="play-panel shop-item"><MessageSquareQuote/><div><h3>Extra question</h3><p>One more spoiler-free question.</p>{coins < 150 && <p>Need {150 - coins} more coins</p>}</div>
         <button className="play-action" disabled={busy || coins < 150} onClick={handlePurchaseQuestion} aria-label="Buy an extra question for 150 coins"><Coins/>{purchasing === "question" ? "Buying…" : "Buy · 150"}</button></div></>}
       {section === "Coins" && <><h2 className="play-section-title">Buy coins</h2><p className="play-muted">These bundles cost real money. Prices are in US dollars.</p>
         {([[150,"$1.49"],[750,"$6.99"],[2000,"$12.99"]] as const).map(([amount,price]) => <div className="play-panel shop-item" key={amount}><Coins/><div><h3>{amount.toLocaleString()} coins</h3></div>
