@@ -22,7 +22,8 @@ export async function beginQuestionAllowance(rpc: BudgetRpc, userId: string, req
   });
   if (result.error) throw new QuestionAllowanceError('allowance_unavailable', 503);
   const data = result.data as { mode?: string; error?: string } | null;
-  if (data?.error) throw new QuestionAllowanceError(data.error, data.error === 'questions_exhausted' ? 402 : 409);
+  if (data?.error) throw new QuestionAllowanceError(data.error,
+    data.error === 'questions_exhausted' ? 402 : data.error === 'question_budget_unavailable' ? 503 : 409);
   if (!data || !['monthly', 'beta'].includes(data.mode ?? '')) throw new QuestionAllowanceError('allowance_unavailable', 503);
   const active = data.mode === 'monthly';
   let done = false;
@@ -54,6 +55,7 @@ export async function beginQuestionAllowance(rpc: BudgetRpc, userId: string, req
   };
   return {
     active, budget, end,
+    get budgetBlocked() { return blocked; },
     async finish(conversation: Record<string, unknown>, charge: boolean) {
       if (blocked) throw new QuestionAllowanceError('question_budget_unavailable', 503);
       const saved = await rpc(active ? 'finish_companion_question' : 'record_companion_answer', {

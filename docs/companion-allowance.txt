@@ -13,6 +13,9 @@ Current rollout state
 - companion_usage_policy is inserted disabled with zero monetary limits. The existing beta flow remains in force until activation.
 - The existing $5 global production cap, model, prompts, context and spoiler checks are unchanged.
 - No live provider calls are required to test this accounting layer.
+- 14 November: spending hardening is also staged; see companion-spending-controls.txt.
+  Money now uses each provider call's UTC start day/month, request caps cannot
+  increase on continuation, and budget denials persist across workers.
 
 Before activation
 1. Connect verified StoreKit subscription transactions to companion_pro_entitlements. Keep the original billing anchor across renewals; do not reset it on replay/plan selection. Handle expiration, revocation/refunds, account ownership and out-of-order notifications.
@@ -28,7 +31,7 @@ Concurrency and failure behavior
 - Provider reservations atomically check whole-question, user-month and global budgets. No model downgrade, context trimming or skipped review is used to meet a limit.
 - Answer storage and successful-question debit are one transaction. Duplicate delivery returns the saved answer without charging twice.
 - Anonymous/authenticated roles cannot edit balances, entitlements or caps. Only a service-role verifier may grant purchases. Even service role cannot activate/fund the policy or call legacy bypasses.
-- Money uses UTC calendar-month buckets independent of subscription changes; question allowances use billing-month buckets.
+- Money uses each provider call's UTC calendar month independent of subscription changes; question allowances use billing-month buckets. The request's original budget_month is retained for audit only.
 
 Validation
 Real PostgreSQL/PGlite migration/RPC tests exercise quotas, packs, concurrent requests, month boundaries, retries, scope changes, budget holds, rollback and permissions. UI tests check Free/purchased access and monthly labels. Existing companion regressions retain timestamp, rewind, episode and history checks.

@@ -336,6 +336,10 @@ serve(async req => {
       if (cleanupError instanceof QuestionAllowanceError) return json({error:cleanupError.message,code:cleanupError.code},cleanupError.status);
       return json({error:'Your question could not be completed. Please try again shortly.'},503);
     }
+    if (allowance?.budgetBlocked) {
+      const stopped = new QuestionAllowanceError('question_budget_unavailable',503);
+      return json({error:stopped.message,code:stopped.code},stopped.status);
+    }
     if (error instanceof RecapPreparing) return json({status:'preparing_recap'}, 202);
     if (error instanceof QuestionAllowanceError) return json({error:error.message,code:error.code},error.status);
     console.error('Companion request failed', error instanceof Error ? error.message : 'database error');

@@ -70,6 +70,8 @@ Rollout prerequisites — nothing in this candidate has been deployed
 4. Coordinate the new native client: old clients can no longer directly mint
    balances or cards. Do not apply this migration alone to the existing live app.
 5. Monthly question accounting remains staged disabled by the prior migration.
+   Apply 20261114120000_companion_spending_safeguards afterward and deploy the
+   matching companion error handling; see companion-spending-controls.txt.
    Its monetary thresholds must be configured from the approved spending policy
    before enabling it. Until then the existing private-beta route remains labelled
    private beta. No changes here raise or activate a production spending limit;

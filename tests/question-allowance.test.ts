@@ -5,6 +5,9 @@ import { vector } from '@electric-sql/pglite-pgvector';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { beginQuestionAllowance } from '../supabase/functions/_shared/question-allowance';
 import type { BudgetRpc } from '../supabase/functions/_shared/sol-budget';
+import { solGenerator } from '../supabase/functions/_shared/openrouter-sol';
+import { SOL_RESOLVED_MODEL } from '../supabase/functions/_shared/sol-budget';
+import billing from './fixtures/companion-billing.json';
 
 const pg = new PGlite({extensions:{vector}});
 const migration=(name:string)=>readFileSync(new URL(`../supabase/migrations/${name}.sql`,import.meta.url),'utf8');
@@ -20,14 +23,223 @@ beforeAll(async()=>{
   await pg.exec(migration('20251122155759_92f1d8ce-3bf2-4992-ba51-366d73fa76f8').split('-- Migration 2:')[0]);
   for(const name of ['20261013120000_companion_evidence_and_memory','20261015153000_caption_context_revision',
     '20261015195500_companion_answer_revision','20261106093000_quarantine_subtitle_editions','20261106163000_shared_cut_revision',
-    '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance']) await pg.exec(migration(name));
+    '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance',
+    '20261114120000_companion_spending_safeguards']) await pg.exec(migration(name));
+});
+
+describe('spending safeguards',()=>{
+  const reason=async(id:string)=>(await pg.query<{budget_block_reason:string|null}>(
+    'SELECT budget_block_reason FROM companion_question_requests WHERE id=$1',[id])).rows[0].budget_block_reason;
+  const knownCall=async(gate:Awaited<ReturnType<typeof begin>>,amount:number)=>{
+    const call=randomUUID();expect(await gate.budget.reserve(call,amount)).toBe(true);
+    await gate.budget.settle(call,amount,call,null);return call;
+  };
+  it.each(billing.questions)('allows $case through a $0.35 example cap using saved bills, without calling AI',async sample=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=350000');
+    const id=randomUUID(),gate=await begin(id);
+    for(const call of sample.calls){
+      const callId=randomUUID();expect(await gate.budget.reserve(callId,call.reservedMicroUsd)).toBe(true);
+      await gate.budget.settle(callId,call.actualMicroUsd,callId,null);
+    }
+    expect((await gate.finish(answer(id),true)).error).toBeNull();
+    expect((await pg.query('SELECT committed_micro_usd FROM companion_question_requests WHERE id=$1',[id])).rows[0].committed_micro_usd).toBe(sample.totalMicroUsd);
+    expect(await allowance()).toMatchObject({included:14});
+  });
+  it('simulates all 15 included questions at the largest saved cost under a $3 example account cap',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=350000,user_month_limit_micro_usd=3000000');
+    const sample=[...billing.questions].sort((a,b)=>b.totalMicroUsd-a.totalMicroUsd)[0];
+    for(let i=0;i<15;i++){
+      const id=randomUUID(),gate=await begin(id);
+      for(const call of sample.calls){
+        const callId=randomUUID();expect(await gate.budget.reserve(callId,call.reservedMicroUsd)).toBe(true);
+        await gate.budget.settle(callId,call.actualMicroUsd,callId,null);
+      }
+      expect((await gate.finish(answer(id),true)).error).toBeNull();
+    }
+    expect(await allowance()).toMatchObject({included:0});
+    expect((await pg.query('SELECT committed_micro_usd FROM companion_sol_budget')).rows[0].committed_micro_usd).toBe(sample.totalMicroUsd*15);
+  });
+  it('does not reset the money allowance across a resumed recap or a policy increase',async()=>{
+    await pro();const id=randomUUID(),first=await begin(id);
+    await knownCall(first,300000);await first.end(true);
+    await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=1000000');
+    const next=await begin(id);
+    expect(await next.budget.reserve(randomUUID(),200001)).toBe(false);
+    expect(await reason(id)).toBe('question_limit');
+    await next.end(false);expect(await allowance()).toMatchObject({included:15});
+  });
+  it('honours a lowered limit as well as the original question limit',async()=>{
+    await pro();const id=randomUUID(),first=await begin(id);
+    await knownCall(first,200000);
+    await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=250000');
+    expect(await first.budget.reserve(randomUUID(),50001)).toBe(false);
+    expect(await reason(id)).toBe('question_limit');await first.end(false);
+  });
+  it('attributes new recap calls to the current month even when the question started earlier',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=1000000,user_month_limit_micro_usd=1000000');
+    const id=randomUUID(),first=await begin(id);
+    const old=await knownCall(first,100000);
+    await pg.query("UPDATE companion_sol_calls SET created_at=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'-interval '1 minute' WHERE id=$1",[old]);
+    await pg.query("UPDATE companion_question_requests SET budget_month=(date_trunc('month',now())-interval '1 month')::date WHERE id=$1",[id]);
+    await first.end(true);
+    // Another already-paid request in this month (e.g. a request before the
+    // staged monthly policy was enabled) must also count against this user.
+    await pg.query(`INSERT INTO companion_sol_calls(id,user_id,request_id,reserved_micro_usd,actual_micro_usd,status)
+      VALUES($1,$2,$3,600000,600000,'settled')`,[randomUUID(),user,randomUUID()]);
+    await pg.exec('UPDATE companion_sol_budget SET committed_micro_usd=committed_micro_usd+600000');
+    const next=await begin(id);await knownCall(next,350000);await next.end(true);
+    const last=await begin(id);
+    expect(await last.budget.reserve(randomUUID(),50001)).toBe(false);
+    expect(await reason(id)).toBe('user_month_limit');await last.end(false);
+    expect(await allowance()).toMatchObject({included:15});
+  });
+  it('releases previous-month costs from the monthly bucket but retains the whole-question total',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET user_month_limit_micro_usd=500000');
+    const id=randomUUID(),first=await begin(id),old=await knownCall(first,400000);
+    await pg.query("UPDATE companion_sol_calls SET created_at=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'-interval '1 minute' WHERE id=$1",[old]);
+    await first.end(true);
+    const next=await begin(id);await knownCall(next,100000);
+    expect(await next.budget.reserve(randomUUID(),1)).toBe(false);
+    expect(await reason(id)).toBe('question_limit');await next.end(false);
+    const fresh=await begin();expect(await fresh.budget.reserve(randomUUID(),400000)).toBe(true);
+    await fresh.end(false);
+  });
+  it('applies an optional daily cap to failed and uncharged attempts',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET user_day_limit_micro_usd=600000');
+    const first=await begin();await knownCall(first,400000);await first.end(false);
+    const next=await begin(),call=randomUUID();
+    expect(await next.budget.reserve(call,200000)).toBe(true);
+    await next.budget.settle(call,100000,'small-receipt',null);await next.end(false);
+    const id=randomUUID(),last=await begin(id);
+    expect(await last.budget.reserve(randomUUID(),100001)).toBe(false);
+    expect(await reason(id)).toBe('user_day_limit');await last.end(false);
+    expect(await allowance()).toMatchObject({included:15});
+  });
+  it('uses UTC boundaries even under a different database session time zone',async()=>{
+    await pro();await pg.exec("SET TIME ZONE 'Pacific/Honolulu'; UPDATE companion_usage_policy SET user_day_limit_micro_usd=500000");
+    try {
+      const first=await begin(),call=await knownCall(first,400000);await first.end(false);
+      await pg.query("UPDATE companion_sol_calls SET created_at=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'-interval '1 microsecond' WHERE id=$1",[call]);
+      const next=await begin();expect(await next.budget.reserve(randomUUID(),500000)).toBe(true);await next.end(false);
+    } finally {await pg.exec("SET TIME ZONE 'UTC'");}
+  });
+  it('does not reset account spending when a user buys packs or renews Pro',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET user_month_limit_micro_usd=500000');
+    const first=await begin();await knownCall(first,400000);await first.end(false);
+    await pack(50);await pg.query("UPDATE companion_pro_entitlements SET anchor=now()-interval '1 hour',plan='annual' WHERE user_id=$1",[user]);
+    const id=randomUUID(),next=await begin(id);
+    expect(await next.budget.reserve(randomUUID(),100001)).toBe(false);
+    expect(await reason(id)).toBe('user_month_limit');await next.end(false);
+    expect(await allowance()).toMatchObject({plan:'annual',included:15,purchased:50});
+  });
+  it('protects Free question packs with the same money checks and keeps unspent questions',async()=>{
+    await pack(2);const id=randomUUID(),gate=await begin(id);
+    expect(await gate.budget.reserve(randomUUID(),500001)).toBe(false);
+    await gate.end(false);expect(await allowance()).toMatchObject({plan:'free',purchased:2});
+    expect(await reason(id)).toBe('question_limit');
+  });
+  it('bounds all provider attempts including zero-cost calls and recap continuations',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_call_limit=2');
+    const id=randomUUID(),first=await begin(id),call=randomUUID();
+    expect(await first.budget.reserve(call,1000)).toBe(true);await first.budget.settle(call,0,'zero-receipt',null);await first.end(true);
+    await pg.exec('UPDATE companion_usage_policy SET question_call_limit=64');
+    const next=await begin(id);await knownCall(next,1);
+    expect(await next.budget.reserve(randomUUID(),1)).toBe(false);
+    expect(await reason(id)).toBe('call_limit');await next.end(false);
+  });
+  it('persists a refused reservation so another worker cannot spend or save a partial answer',async()=>{
+    await pro();const id=randomUUID();await begin(id);
+    const attempt=(await pg.query<{attempt:string}>('SELECT attempt FROM companion_question_requests WHERE id=$1',[id])).rows[0].attempt;
+    const args={p_call_id:randomUUID(),p_user_id:user,p_request_id:id,p_attempt:attempt,p_micro_usd:500001};
+    expect((await rpc('reserve_companion_question_call',args)).data).toBe(false);
+    expect((await rpc('reserve_companion_question_call',{...args,p_call_id:randomUUID(),p_micro_usd:1})).data).toBe(false);
+    expect((await rpc('finish_companion_question',{p_user_id:user,p_attempt:attempt,p_conversation:answer(id),p_charge:true})).error).toBeTruthy();
+    expect((await rpc('end_companion_question_attempt',{p_user_id:user,p_request_id:id,p_attempt:attempt,p_pause:true})).data).toBe(true);
+    await expect(begin(id)).rejects.toMatchObject({code:'question_request_closed'});
+    expect(await allowance()).toMatchObject({included:15});
+    expect((await pg.query('SELECT count(*)::int n FROM ai_conversations')).rows[0].n).toBe(0);
+  });
+  it('serializes simultaneous reservations against the whole-question ceiling',async()=>{
+    await pro();const gate=await begin();
+    const results=await Promise.all(Array.from({length:5},()=>gate.budget.reserve(randomUUID(),200000)));
+    expect(results.filter(Boolean)).toHaveLength(2);await gate.end(false);
+    expect((await pg.query('SELECT committed_micro_usd FROM companion_sol_budget')).rows[0].committed_micro_usd).toBe(400000);
+  });
+  it('does not reauthorize a provider call ID or charge its held money twice',async()=>{
+    await pro();const id=randomUUID(),gate=await begin(id),call=randomUUID();
+    expect(await gate.budget.reserve(call,1000)).toBe(true);
+    expect(await gate.budget.reserve(call,1000)).toBe(false);
+    expect(await reason(id)).toBe('duplicate_call');await gate.budget.settle(call,500,'one-call',null);await gate.end(false);
+    expect((await pg.query('SELECT committed_micro_usd FROM companion_sol_budget')).rows[0].committed_micro_usd).toBe(500);
+  });
+  it('keeps stored zero-call answers available when the inference pool is exhausted',async()=>{
+    await pro();await pg.exec('UPDATE companion_sol_budget SET committed_micro_usd=5000000');
+    const id=randomUUID(),gate=await begin(id);
+    expect((await gate.finish(answer(id),false)).error).toBeNull();
+    expect(await allowance()).toMatchObject({included:15});
+    expect((await pg.query('SELECT count(*)::int n FROM companion_sol_calls')).rows[0].n).toBe(0);
+  });
+  it('never sends a network request when its conservative reservation will exceed a limit',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=1');
+    const id=randomUUID(),gate=await begin(id);let calls=0;
+    const network:typeof fetch=async()=>{calls++;throw new Error('Must not reach provider');};
+    await expect(solGenerator('offline-placeholder',gate.budget,network)('Same system','Same context',900)).rejects.toThrow();
+    expect(calls).toBe(0);expect(gate.budgetBlocked).toBe(true);expect(await reason(id)).toBe('question_limit');
+    await gate.end(false);expect(await allowance()).toMatchObject({included:15});
+  });
+  it('passes the full writer and reviewer requests through unchanged when funded',async()=>{
+    await pro();const id=randomUUID(),gate=await begin(id),bodies:Record<string,unknown>[]=[];
+    const network:typeof fetch=async(_url,options)=>{
+      bodies.push(JSON.parse(String(options?.body)));
+      return new Response(JSON.stringify({id:randomUUID(),model:SOL_RESOLVED_MODEL,provider:'OpenAI',usage:{cost:0.01},
+        choices:[{finish_reason:'stop',message:{content:'{"checked":true}'}}]}));
+    };
+    const generate=solGenerator('offline-placeholder',gate.budget,network);
+    await generate('Unchanged writer','Every permitted caption',900,'writer');
+    await generate('Unchanged independent review','Every permitted caption and the draft',900,'verifier');
+    expect(bodies.map(b=>b.messages)).toEqual([
+      [{role:'system',content:'Unchanged writer\nReturn exactly one JSON object. No Markdown fences, commentary, or thinking text.'},{role:'user',content:'Every permitted caption'}],
+      [{role:'system',content:'Unchanged independent review\nReturn exactly one JSON object. No Markdown fences, commentary, or thinking text.'},{role:'user',content:'Every permitted caption and the draft'}],
+    ]);
+    expect(bodies.every(b=>b.model==='openai/gpt-6.1-sol')).toBe(true);
+    expect(gate.budgetBlocked).toBe(false);
+    expect((await gate.finish(answer(id),true)).error).toBeNull();expect(await allowance()).toMatchObject({included:14});
+  });
+  it('reports actual and unresolved cost separately without leaking story or credential data',async()=>{
+    await pro();const id=randomUUID(),gate=await begin(id);await knownCall(gate,200000);
+    const unknown=randomUUID();expect(await gate.budget.reserve(unknown,100000)).toBe(true);
+    await gate.budget.settle(unknown,null,null,'transport_error');await gate.end(false);
+    const report=await pg.transaction(async tx=>{await tx.exec('SET LOCAL ROLE service_role');
+      return {daily:(await tx.query('SELECT * FROM companion_spending_daily')).rows,questions:(await tx.query('SELECT * FROM companion_spending_questions')).rows};});
+    expect(report.daily[0]).toMatchObject({known_micro_usd:200000,unresolved_micro_usd:100000,committed_micro_usd:300000,unknown_calls:1});
+    expect(report.questions[0]).toMatchObject({request_id:id,status:'released',provider_calls:2,known_micro_usd:200000,unresolved_micro_usd:100000});
+    for(const row of [...report.daily,...report.questions])for(const key of ['scope','question','answer','generation_id','evidence','api_key'])expect(row).not.toHaveProperty(key);
+    for(const role of ['anon','authenticated'])for(const sql of ['SELECT * FROM companion_spending_daily','SELECT * FROM companion_spending_questions']){
+      await expect(pg.transaction(async tx=>{await tx.exec(`SET LOCAL ROLE ${role}`);await tx.exec(sql);})).rejects.toThrow(/permission denied/);
+    }
+  });
+  it('prevents service-role bypasses and invalid policy settings',async()=>{
+    for(const sql of [
+      `SELECT begin_companion_question_before_spending('${user}','${randomUUID()}','${randomUUID()}','{}')`,
+      `SELECT finish_companion_question_before_spending('${user}','${randomUUID()}','{}',true)`,
+      'UPDATE companion_usage_policy SET question_limit_micro_usd=5000000',
+      'UPDATE companion_sol_budget SET committed_micro_usd=0',
+    ])await expect(pg.transaction(async tx=>{await tx.exec('SET LOCAL ROLE service_role');await tx.exec(sql);})).rejects.toThrow(/permission denied/);
+    for(const sql of [
+      'UPDATE companion_usage_policy SET question_call_limit=0',
+      'UPDATE companion_usage_policy SET question_call_limit=257',
+      'UPDATE companion_usage_policy SET user_day_limit_micro_usd=499999',
+      'UPDATE companion_usage_policy SET user_day_limit_micro_usd=2000001',
+    ])await expect(pg.exec(sql)).rejects.toThrow();
+  });
 });
 afterAll(()=>pg.close());
 beforeEach(async()=>{
   user=randomUUID();
   await pg.exec(`TRUNCATE companion_question_calls,companion_question_requests,companion_usage_accounts,companion_question_packs,
     companion_pro_entitlements,companion_sol_calls,ai_conversations;
-    UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=500000,user_month_limit_micro_usd=2000000;
+    UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=500000,user_month_limit_micro_usd=2000000,
+      user_day_limit_micro_usd=null,question_call_limit=64;
     UPDATE companion_sol_budget SET enabled=true,limit_micro_usd=5000000,committed_micro_usd=0,halted_reason=null;`);
 });
 const rpc:BudgetRpc=async(name,args)=>{
