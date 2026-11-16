@@ -2,6 +2,7 @@ import {useEffect,useState} from 'react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from './ui/dialog';
 import {Button} from './ui/button';
 import {supabase} from '@/integrations/supabase/client';
+import {tierRpc} from '@/lib/tier-rpc';
 import type {Tables} from '@/integrations/supabase/types';
 import {accountChanged} from '@/lib/pro-access';
 import {Loader2,UserRound} from 'lucide-react';
@@ -29,7 +30,7 @@ export default function PackOpeningModal({isOpen,onClose,packId,onPackOpened}:{i
     if(busy||!person)return;const choice=uncertain??{keep,replace:keep&&full?replace:null};
     if(choice.keep&&full&&!choice.replace)return;
     setBusy(true);setError('');setUncertain(choice);
-    try{const {error}=await supabase.rpc('decide_cinegeek_pack',{p_pack:packId,p_keep:choice.keep,p_replace:choice.replace});
+    try{const {error}=await tierRpc('decide_cinegeek_pack',{p_pack:packId,p_keep:choice.keep,p_replace:choice.replace});
       if(error){setUncertain(null);throw new Error(error.message);}
       accountChanged();onPackOpened?.();onClose();
     }catch(e){setError(e instanceof Error?e.message:'Could not confirm your choice. Retry the same decision.');}

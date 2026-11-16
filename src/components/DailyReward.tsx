@@ -1,12 +1,12 @@
 import {useState} from 'react';
 import {useProAccess} from '@/hooks/use-pro-access';
 import {accountChanged} from '@/lib/pro-access';
-import {supabase} from '@/integrations/supabase/client';
+import {tierRpc} from '@/lib/tier-rpc';
 import {Button} from './ui/button';
 export function DailyReward(){
   const access=useProAccess(),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
   async function spin(){if(busy)return;setBusy(true);setMessage('');try{
-    const {data,error}=await supabase.rpc('spin_cinegeek_reward');if(error)throw error;
+    const {data,error}=await tierRpc('spin_cinegeek_reward');if(error)throw error;
     const prize=data as {kind:string;xp?:number;packType?:string;badge?:string};
     setMessage(prize.kind==='xp'?`${prize.xp} XP${prize.xp===0?' — your daily XP cap is reached':''}`:prize.kind==='pack'?`An ${prize.packType} pack is waiting in Your collection.`:`Badge: ${prize.badge?.replace(/_/g,' ')}. Duplicate badges stay in your collection.`);accountChanged();
   }catch{setMessage('Could not confirm your spin. Retry to retrieve the same daily reward.');}finally{setBusy(false);}}

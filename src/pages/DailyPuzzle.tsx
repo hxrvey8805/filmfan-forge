@@ -2,6 +2,7 @@ import { useProAccess } from "@/hooks/use-pro-access";
 import { accountChanged } from "@/lib/pro-access";
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { tierRpc } from '@/lib/tier-rpc';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -152,7 +153,7 @@ const DailyPuzzle = () => {
     setStarting(true);
     const id=gameId.current??crypto.randomUUID();gameId.current=id;
     try{
-      const {data,error}=await supabase.rpc('start_cinegeek_game',{p_game:id,p_start:startActor.id,p_target:targetActor.id});
+      const {data,error}=await tierRpc('start_cinegeek_game',{p_game:id,p_start:startActor.id,p_target:targetActor.id});
       if(error)throw new Error(error.message);
       const game=data as {expires_at:string;status:string};
       if(game.status!=='playing'||Date.parse(game.expires_at)<=Date.now()){gameId.current=null;throw new Error('That round has ended. Start a new game.');}
@@ -278,7 +279,7 @@ const DailyPuzzle = () => {
   };
 
   const resetGame = () => {
-    if(gameId.current)void supabase.rpc('end_cinegeek_game',{p_game:gameId.current});
+    if(gameId.current)void tierRpc('end_cinegeek_game',{p_game:gameId.current});
     gameId.current=null;frozenPath.current=null;setResultError('');
     setGameState('ready');
     // Dispatch game state change event
