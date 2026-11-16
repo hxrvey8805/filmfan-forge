@@ -71,6 +71,30 @@ export type Database = {
         }
         Relationships: []
       }
+      cinegeek_private_monthly_grants: {
+        Row: {
+          expires_at: string
+          reason: string
+          revoked: boolean
+          starts_at: string
+          user_id: string
+        }
+        Insert: {
+          expires_at: string
+          reason: string
+          revoked?: boolean
+          starts_at: string
+          user_id: string
+        }
+        Update: {
+          expires_at?: string
+          reason?: string
+          revoked?: boolean
+          starts_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       companion_episode_recaps: {
         Row: {
           chapter: Json
@@ -523,20 +547,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_cinegeek_access: { Args: Record<PropertyKey, never>; Returns: Json };
-      redeem_cinegeek_xp: { Args: {p_request:string;p_item:string}; Returns: Json };
-      start_cinegeek_game: { Args: {p_game:string;p_start:number;p_target:number}; Returns: Json };
-      end_cinegeek_game: { Args: {p_game:string}; Returns: undefined };
-      spin_cinegeek_reward: { Args: Record<PropertyKey, never>; Returns: Json };
-      decide_cinegeek_pack: { Args: {p_pack:string;p_keep:boolean;p_replace?:string|null}; Returns: Json };
-      get_companion_allowance: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
       companion_answer_revision: {
         Args: { episode: number; media: string; season: number; title: number }
         Returns: number
       }
+      get_cinegeek_access: { Args: never; Returns: Json }
+      get_companion_allowance: { Args: never; Returns: Json }
       match_companion_chunks: {
         Args: {
           p_current_episode: number
