@@ -41,8 +41,8 @@ it('keeps three picks on back navigation and explains the sample without any AI 
 it('shows the featured annual price, lets the user compare, and never charges from the preview', () => {
   writeOnboardingDraft('owner', { step: 3, titles: [], plan: 'annual' }); open();
   expect((screen.getByRole('radio', { name: /Annual Pro/ }) as HTMLInputElement).checked).toBe(true);
-  expect(screen.getByText('£79.99')).toBeTruthy();
-  expect(screen.getByText('£6.67/month')).toBeTruthy();
+  expect(screen.getByText('£79.99 billed yearly')).toBeTruthy();
+  expect(screen.getByText('£6.67')).toBeTruthy();
   fireEvent.click(screen.getByRole('radio', { name: /Monthly Pro/ }));
   fireEvent.click(screen.getByRole('button', { name: /Choose Monthly Pro/ }));
   expect(screen.getByRole('dialog').textContent).toMatch(/No payment will be taken/);

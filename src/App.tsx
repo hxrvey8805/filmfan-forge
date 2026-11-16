@@ -12,13 +12,15 @@ import { AppSession } from "./components/AppSession";
 import Onboarding from "./pages/Onboarding";
 import { NewAccountGate } from "./components/NewAccountGate";
 
+import { ProAccessProvider } from "./hooks/use-pro-access";
+
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <AppSession><BrowserRouter>
+      <AppSession><ProAccessProvider><BrowserRouter>
         <NewAccountGate><Routes>
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={<Dashboard />} />
@@ -30,7 +32,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes></NewAccountGate>
-      </BrowserRouter></AppSession>
+      </BrowserRouter></ProAccessProvider></AppSession>
     </TooltipProvider>
   </QueryClientProvider>
 );

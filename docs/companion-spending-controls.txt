@@ -1,0 +1,122 @@
+CineGeek spending safeguards — local candidate, 14 November 2026
+
+Status
+Implemented and tested locally. Not deployed, enabled or funded. No credit
+purchases, live model requests, changes to credentials or extra AI spending.
+Purchases remain disabled. The existing $5 lifetime private-beta ceiling is
+unchanged. The staged monthly policy still defaults to disabled and zero money.
+
+What is enforced when the monthly policy is activated
+- A conservative money reservation BEFORE each provider request. It covers the
+  entire input and the existing maximum completion/reasoning allowance.
+- Whole-request USD limit across selection, drafting, review, repair, gateway
+  retries and recap continuations. Limits captured for a request cannot grow
+  when it resumes; a later policy reduction is also honoured.
+- Account-wide UTC calendar-month cost limit, plus an optional UTC daily limit.
+  Calls count in the month/day they start, even if the recap started earlier.
+  Failed answers, abandoned requests, old beta calls and pack-funded questions
+  all count. Renewing/changing a subscription does not erase spending.
+- A configurable provider-call ceiling per request (staged default: 64). Even
+  zero-cost provider attempts count. This is a loop guard, not a token reduction.
+- The existing atomic $5 global ceiling still applies to every paid call.
+- Denials persist in the database. A worker cannot catch a budget failure and
+  save a partial answer or resume the same request with fresh limits.
+- Failed/blocked requests do not use an included or purchased question. Their
+  real provider costs remain on the money ledger. A new manual question/retry
+  uses a new request ID but cannot evade the account or global money ceiling.
+- A previously checked, safe stored answer requiring no new provider call can
+  still be returned when the inference pool is exhausted.
+
+Quality and safety
+The model, provider pins, prices, reasoning, max_tokens, prompts, complete context,
+source retrieval, writer/reviewer pipeline and spoiler/history checks are unchanged.
+Budget exhaustion stops work; it never selects a cheaper model, truncates source
+context, skips verification or returns an unreviewed draft. Availability may be
+lower under tight limits. These controls cannot promise both an arbitrarily low
+cost and completion of every possible recap/question.
+
+Unknown bills and provider anomalies
+Pending and uncertain requests retain their conservative reservation. The
+existing transport halts further paid work after unknown costs, failed settlement,
+unexpected routing or a bill larger than its reservation. No automatic refund,
+clock reset, clearing of the halt or top-up is added. A provider billing above
+the quoted/reserved bound is recorded truthfully and halted; the application
+cannot guarantee an external provider will never overbill.
+Reference: https://openrouter.ai/docs/api-reference/limits
+
+Saved-bill calibration (OFFLINE; not new answer-quality tests)
+The numeric-only tests/fixtures/companion-billing.json contains 47 provider bills
+from six completed historical question paths. It contains no prompts, answers,
+captions, credentials or account IDs. Old actual bills are retained, including
+paid retries and the previous cache-write costs; no estimated savings are needed
+to make these accounting tests pass.
+
+An illustrative $0.35 whole-request ceiling accepts all six paths. Their peak
+conservative reservation plus already-spent money ranges from $0.209169 to
+$0.321302; their actual total costs range from $0.072175 to $0.179912, rounded
+up per call to integer micro-USD. Repeating the most expensive saved path 15
+times costs $2.698680 and fits an illustrative $3 account-month ceiling.
+
+Those example limits exist ONLY in tests. They are not approved/live launch
+settings, a maximum cost for all titles, a representative average, or proof of
+profitability. Fresh model outputs, long recaps, extra repairs, failed attempts,
+funding fees, taxes, exchange rates, hosting and other services can change costs.
+Do not promise all 15 questions AND paid top-ups under an unvalidated shared
+per-account ceiling. Pack purchases must not merely bypass safeguards. Configure
+adequate, priced funding and customer-facing limits before enabling pack sales.
+
+Operator reporting
+Service role has read-only access to two new reporting views:
+  companion_spending_daily — known, unresolved and committed USD micro-units,
+    provider call count and unknown bill count per user/UTC day.
+  companion_spending_questions — the same costs per request, request status,
+    original limits and any budget denial reason.
+These views contain no conversation/source text. They are denied to PUBLIC,
+anon and authenticated roles. No service-role budget funding privileges exist.
+Include failed/released requests when measuring effective cost per delivered
+answer; looking only at successful answers understates real business costs.
+
+Read-only operator queries (database owner / existing SQL console)
+  SELECT enabled,limit_micro_usd,committed_micro_usd,halted_reason
+    FROM public.companion_sol_budget WHERE id='sol-beta';
+  SELECT * FROM public.companion_usage_policy;
+  SELECT day,sum(known_micro_usd) AS known_micro_usd,
+    sum(unresolved_micro_usd) AS unresolved_micro_usd,
+    sum(committed_micro_usd) AS committed_micro_usd,
+    sum(provider_calls) AS provider_calls
+    FROM public.companion_spending_daily GROUP BY day ORDER BY day DESC;
+  SELECT status,budget_block_reason,count(*) AS requests,
+    sum(committed_micro_usd) AS committed_micro_usd
+    FROM public.companion_spending_questions GROUP BY status,budget_block_reason;
+
+Release sequence
+1. Keep the coordinated XP/tier release prerequisites in pro-xp-access.txt.
+2. Apply 20261114120000_companion_spending_safeguards AFTER the staged monthly
+   allowance and XP migrations. The migration does not enable the monthly policy.
+3. Deploy the matching spoiler-free-companion error handling. Existing requests
+   receive their original/current minimum cap on next begin/reserve. The original
+   beta behaviour remains in effect while the monthly policy is disabled.
+4. Keep purchases disabled until verified Apple entitlements and pack/refund
+   handling are wired in. Validate candidate caps against the full supported
+   question/recap workload before approving production values. A low monetary
+   ceiling can stop work before all advertised questions are delivered.
+5. Activate only with explicitly approved launch values. Do not raise the $5
+   beta limit or the OpenRouter key limit as part of this migration. Any future
+   public capacity/funding change is separate. For a temporary emergency stop,
+   disable the global budget; do not disable the monthly policy and fall back
+   to legacy beta accounting. If editing multiple policy/budget rows together,
+   acquire the global budget row lock before the policy row, matching reservation.
+6. Check known/unresolved spending and denial reasons after activation. Reconcile
+   any unknown provider bill before clearing an existing global halt.
+
+Validation
+71 files / 1,094 tests passed, including real PostgreSQL/PGlite migrations/RPCs,
+all three plans, packs, concurrency/idempotency, exact daily/month boundaries,
+policy changes, recap continuation, denied writes/bypasses, zero-network budget
+denials, unchanged writer/reviewer payloads, rewinds and episode switches.
+PGlite serializes connections; its concurrent-request tests verify accounting
+results, not real multi-connection PostgreSQL lock scheduling. Production SQL
+uses the same global-then-user lock order as settlement.
+Frontend TypeScript, companion Deno check, native build and diff check passed.
+The native build retains the existing chunk-size advisory. No new live answers
+were generated or represented as passing content tests.

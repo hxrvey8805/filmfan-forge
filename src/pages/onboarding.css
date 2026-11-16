@@ -146,3 +146,6 @@
   .onboarding-page, .onboarding-conversation { animation: none; }
   .onboarding *, .onboarding *::before, .onboarding *::after { transition-duration: 0s !important; }
 }
+
+.onboarding-price-basis { margin: 4px 0 0; font-size: 11px; color: hsl(40 25% 78%); }
+.annual-plan .onboarding-equivalent { font-size: 13px; margin: 5px 0 13px; }

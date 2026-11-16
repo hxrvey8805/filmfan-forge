@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowUp, ChevronDown, Clock3, MessagesSquare, Pencil, X } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowUp, ChevronDown, Clock3, LockKeyhole, MessagesSquare, Pencil, X } from "lucide-react";
 import type { CompanionMessage } from "@/hooks/use-companion";
 import { CompanionAnswer } from "./CompanionAnswer";
 import { CineGeekFrames } from "./GlassesWithLenses";
@@ -7,6 +7,8 @@ import { formatTimestamp } from "../../supabase/functions/_shared/companion";
 import { CompanionTimestamp } from "./CompanionTimestamp";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { questionAllowanceLabel, type QuestionAllowance } from '@/lib/question-allowance';
+import { useProAccess } from '@/hooks/use-pro-access';
 
 export function RoomPositionEditor({ seconds, maxMinutes, onSave, onClose, onReturnFocus }: {
   seconds: number; maxMinutes: number; onSave: (seconds: number) => void; onClose: () => void; onReturnFocus: () => void;
@@ -39,12 +41,16 @@ interface ChatProps {
   timestamp: string; valid: boolean; onEditPosition: () => void; positionButton: RefObject<HTMLButtonElement>;
   messages: CompanionMessage[]; historyError: string | null; loading: boolean;
   onAsk: (text: string) => Promise<string | undefined>;
-  remainingFree: number | null; coins: number; onStore: () => void;
+  remainingFree: number | null; coins?: number; onStore: () => void;
+  onViewPlan?: () => void;
+  allowance?: QuestionAllowance;
 }
 const compactTime = (time: string) => time.replace(/^00:(?=\d\d:\d\d$)/, "");
 
 export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, onEditPosition, positionButton, messages,
-  historyError, loading, onAsk, remainingFree, coins, onStore }: ChatProps) {
+  historyError, loading, onAsk, remainingFree, onStore, onViewPlan, allowance }: ChatProps) {
+  const access = useProAccess();
+  const accessNoteId = useId();
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState("");
   const [replyId, setReplyId] = useState<string>();
@@ -56,7 +62,16 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
   const collapseButton = useRef<HTMLButtonElement>(null);
   const startY = useRef<number>();
   const cost = remainingFree === 0;
-  const emptyWallet = cost && coins < 150;
+  const monthly = allowance?.mode === 'monthly';
+  const emptyWallet = monthly ? allowance.included + allowance.purchased === 0 :
+    allowance?.mode==='unavailable' || (!allowance || allowance.mode === 'beta') && cost;
+  // Purchased questions work on Free. A known Free account must not inherit
+  // the legacy daily beta label as an included subscription entitlement.
+  const freeLocked = monthly ? allowance.plan === 'free' && allowance.purchased === 0 : access?.plan === 'free';
+  const chatLocked = freeLocked || emptyWallet;
+  const accessNote = freeLocked ? 'Free includes no AI questions.' :
+    allowance?.mode === 'unavailable' ? 'Your question balance is temporarily unavailable.' :
+    monthly ? 'You’ve used your available questions.' : 'Private beta questions used for today.';
   const latest = messages[0]?.id;
   // Resolve from the same timestamp-filtered history as the full transcript.
   const inlineReply = messages.find(message => message.id === replyId);
@@ -81,7 +96,7 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
   }
   async function send() {
     const text = draft.trim();
-    if (!text || !valid || sending.current || loading || emptyWallet) return;
+    if (!text || !valid || sending.current || loading || chatLocked) return;
     sending.current = true;
     if (!expanded) input.current?.blur();
     setReplyId(undefined);
@@ -101,9 +116,9 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
     </button>}
     {expanded && <div className="room-transcript" ref={transcript}>
       {!messages.length && !pending && !historyError && <div className="room-conversation-start">
-        <CineGeekFrames aria-hidden="true" /><p>What caught your eye?</p>
+        <CineGeekFrames aria-hidden="true" /><p>{freeLocked ? 'Your Focus room is ready.' : 'What caught your eye?'}</p>
         <div className="room-prompts">{prompts.map(([label, text]) => <button key={label}
-          aria-label={`Use prompt: ${text}`} onClick={() => { setDraft(text); input.current?.focus(); }}>{label}</button>)}</div>
+          disabled={chatLocked || !!pending} aria-label={`Use prompt: ${text}`} onClick={() => { setDraft(text); input.current?.focus(); }}>{label}</button>)}</div>
       </div>}
       {historyError && <p role="status" className="room-chat-error">{historyError}</p>}
       {[...messages].reverse().map(message => <article className="room-exchange" key={message.id}>
@@ -129,17 +144,25 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
           onClick={openChat}><MessagesSquare size={15} aria-hidden="true"/>History</button>}
         {focusAction}
       </div>
-      <form onSubmit={e => { e.preventDefault(); void send(); }}>
+      <form aria-label="Ask Geek" onSubmit={e => { e.preventDefault(); void send(); }}>
         {error && <p role="alert" className="room-chat-error">{error}</p>}
-        <div className="room-compose"><textarea ref={input} rows={1} maxLength={2000} aria-label="Your question" enterKeyHint="send"
-          placeholder="Ask Geek about this moment…" value={draft} disabled={Boolean(pending)}
-          onChange={e => setDraft(e.target.value)} onKeyDown={e => {
+        <div className="room-compose" data-locked={chatLocked}><textarea ref={input} rows={1} maxLength={2000} aria-label="Your question" enterKeyHint="send"
+          aria-describedby={chatLocked ? accessNoteId : undefined}
+          placeholder={chatLocked ? 'Geek chat is locked' : 'Ask Geek about this moment…'} value={draft} disabled={Boolean(pending) || chatLocked}
+          onChange={e => { if (!chatLocked) setDraft(e.target.value); }} onKeyDown={e => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
           }} />
-          <button type="submit" aria-label="Send question" disabled={!draft.trim() || !valid || loading || !!pending || emptyWallet}><ArrowUp size={18}/></button>
+          <button type="submit" aria-label="Send question" disabled={!draft.trim() || !valid || loading || !!pending || chatLocked}>
+            {chatLocked ? <LockKeyhole size={17} aria-hidden="true"/> : <ArrowUp size={18}/>}</button>
         </div>
-        {remainingFree !== null && <p className="room-allowance">
-          {cost ? `150 coins per question · ${coins} available` : `${remainingFree} free question${remainingFree === 1 ? "" : "s"} left today`}
+        {chatLocked && <div className="room-chat-access"><p id={accessNoteId} role="status">{accessNote}</p>
+          {freeLocked && onViewPlan && <button type="button" onClick={onViewPlan}>View plans</button>}
+        </div>}
+        {freeLocked ? <p className="room-allowance">Question packs and Pro will be available when purchases launch.</p> :
+        allowance && allowance.mode !== 'beta' ? <p className="room-allowance">{questionAllowanceLabel(allowance)}
+          {monthly && emptyWallet && <span>Question packs and Pro will be available when purchases launch.</span>}
+        </p> : remainingFree !== null && <p className="room-allowance">
+          {cost ? "Private beta questions used for today" : `${remainingFree} private beta question${remainingFree === 1 ? "" : "s"} left today`}
           {cost && <button type="button" onClick={onStore}>View store</button>}</p>}
       </form>
     </div>

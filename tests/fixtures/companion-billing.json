@@ -1,0 +1,235 @@
+{
+  "provenance": "Six saved completed question paths from the private 13 November cost audit. Only numeric billing receipts; no prompts or answers. Historical bills, not new inference or a representative production average. Each reservation uses the previously recorded conservative preflight bound.",
+  "questions": [
+    {
+      "case": "saved-path-1",
+      "calls": [
+        {
+          "reservedMicroUsd": 53031,
+          "actualMicroUsd": 1116
+        },
+        {
+          "reservedMicroUsd": 108634,
+          "actualMicroUsd": 15826
+        },
+        {
+          "reservedMicroUsd": 107846,
+          "actualMicroUsd": 16706
+        },
+        {
+          "reservedMicroUsd": 109673,
+          "actualMicroUsd": 16679
+        },
+        {
+          "reservedMicroUsd": 105835,
+          "actualMicroUsd": 15656
+        },
+        {
+          "reservedMicroUsd": 69757,
+          "actualMicroUsd": 5896
+        },
+        {
+          "reservedMicroUsd": 113597,
+          "actualMicroUsd": 18346
+        },
+        {
+          "reservedMicroUsd": 117433,
+          "actualMicroUsd": 9261
+        },
+        {
+          "reservedMicroUsd": 117889,
+          "actualMicroUsd": 8123
+        },
+        {
+          "reservedMicroUsd": 157994,
+          "actualMicroUsd": 22968
+        }
+      ],
+      "peakMicroUsd": 265603,
+      "totalMicroUsd": 130577
+    },
+    {
+      "case": "saved-path-2",
+      "calls": [
+        {
+          "reservedMicroUsd": 53188,
+          "actualMicroUsd": 1836
+        },
+        {
+          "reservedMicroUsd": 109174,
+          "actualMicroUsd": 16094
+        },
+        {
+          "reservedMicroUsd": 109127,
+          "actualMicroUsd": 17039
+        },
+        {
+          "reservedMicroUsd": 109592,
+          "actualMicroUsd": 16826
+        },
+        {
+          "reservedMicroUsd": 108626,
+          "actualMicroUsd": 17474
+        },
+        {
+          "reservedMicroUsd": 81095,
+          "actualMicroUsd": 9334
+        },
+        {
+          "reservedMicroUsd": 111167,
+          "actualMicroUsd": 19341
+        },
+        {
+          "reservedMicroUsd": 150518,
+          "actualMicroUsd": 21106
+        }
+      ],
+      "peakMicroUsd": 248462,
+      "totalMicroUsd": 119050
+    },
+    {
+      "case": "saved-path-3",
+      "calls": [
+        {
+          "reservedMicroUsd": 53112,
+          "actualMicroUsd": 1594
+        },
+        {
+          "reservedMicroUsd": 107174,
+          "actualMicroUsd": 15586
+        },
+        {
+          "reservedMicroUsd": 107962,
+          "actualMicroUsd": 16824
+        },
+        {
+          "reservedMicroUsd": 108164,
+          "actualMicroUsd": 16364
+        },
+        {
+          "reservedMicroUsd": 97577,
+          "actualMicroUsd": 13346
+        },
+        {
+          "reservedMicroUsd": 96117,
+          "actualMicroUsd": 12149
+        },
+        {
+          "reservedMicroUsd": 133311,
+          "actualMicroUsd": 15996
+        }
+      ],
+      "peakMicroUsd": 209174,
+      "totalMicroUsd": 91859
+    },
+    {
+      "case": "saved-path-4",
+      "calls": [
+        {
+          "reservedMicroUsd": 53091,
+          "actualMicroUsd": 1656
+        },
+        {
+          "reservedMicroUsd": 108641,
+          "actualMicroUsd": 17636
+        },
+        {
+          "reservedMicroUsd": 107872,
+          "actualMicroUsd": 15794
+        },
+        {
+          "reservedMicroUsd": 109980,
+          "actualMicroUsd": 18954
+        },
+        {
+          "reservedMicroUsd": 108739,
+          "actualMicroUsd": 17984
+        },
+        {
+          "reservedMicroUsd": 99155,
+          "actualMicroUsd": 15627
+        },
+        {
+          "reservedMicroUsd": 211486,
+          "actualMicroUsd": 46396
+        },
+        {
+          "reservedMicroUsd": 89366,
+          "actualMicroUsd": 13116
+        },
+        {
+          "reservedMicroUsd": 128786,
+          "actualMicroUsd": 15639
+        }
+      ],
+      "peakMicroUsd": 299137,
+      "totalMicroUsd": 162802
+    },
+    {
+      "case": "saved-path-5",
+      "calls": [
+        {
+          "reservedMicroUsd": 53262,
+          "actualMicroUsd": 1850
+        },
+        {
+          "reservedMicroUsd": 108865,
+          "actualMicroUsd": 18199
+        },
+        {
+          "reservedMicroUsd": 108095,
+          "actualMicroUsd": 17866
+        },
+        {
+          "reservedMicroUsd": 110203,
+          "actualMicroUsd": 17826
+        },
+        {
+          "reservedMicroUsd": 108962,
+          "actualMicroUsd": 17426
+        },
+        {
+          "reservedMicroUsd": 99378,
+          "actualMicroUsd": 15839
+        },
+        {
+          "reservedMicroUsd": 190812,
+          "actualMicroUsd": 46189
+        },
+        {
+          "reservedMicroUsd": 119404,
+          "actualMicroUsd": 13473
+        },
+        {
+          "reservedMicroUsd": 172634,
+          "actualMicroUsd": 31244
+        }
+      ],
+      "peakMicroUsd": 321302,
+      "totalMicroUsd": 179912
+    },
+    {
+      "case": "saved-path-6",
+      "calls": [
+        {
+          "reservedMicroUsd": 108198,
+          "actualMicroUsd": 15734
+        },
+        {
+          "reservedMicroUsd": 84292,
+          "actualMicroUsd": 10226
+        },
+        {
+          "reservedMicroUsd": 118837,
+          "actualMicroUsd": 21356
+        },
+        {
+          "reservedMicroUsd": 161853,
+          "actualMicroUsd": 24859
+        }
+      ],
+      "peakMicroUsd": 209169,
+      "totalMicroUsd": 72175
+    }
+  ]
+}

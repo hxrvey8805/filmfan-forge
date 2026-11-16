@@ -46,6 +46,8 @@ const tap = (name: string | RegExp) => fireEvent.click(screen.getByRole('button'
 const chat = () => tap('Open chat history');
 const enterChat = () => { tap('Enter room'); chat(); };
 it('keeps Focus watching and sends the chosen cutoff after ten minutes and a question in Ask', async () => {
+  // A purchased question makes this Free fixture eligible to ask. XP never does.
+  vi.spyOn(preview,'rpc').mockResolvedValue({data:{mode:'monthly',plan:'free',included:0,limit:0,purchased:1,renewsAt:null},error:null} as any);
   const { data: { user } } = await preview.auth.getUser();
   const title = 60574;
   const saved = { id: 'focus-replay', user_id: user!.id, title_id: title, media_type: 'tv', season_number: 1,

@@ -10,7 +10,9 @@ import { GeekViewer } from '../src/hooks/use-geek-outfit';
 
 const mock = vi.hoisted(() => ({ invoke: vi.fn(), useCompanion: vi.fn(() => ({ ask: vi.fn(), messages: [], isLoading: false, historyError: null })) }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
-  auth: { getUser: async () => ({ data: { user: null } }) },
+  auth: { getUser: async () => ({ data: { user: null } }),
+    onAuthStateChange: () => ({data:{subscription:{unsubscribe(){}}}}) },
+  rpc: async () => ({data:{mode:'beta'},error:null}),
   functions: { invoke: mock.invoke },
 } }));
 vi.mock('@/hooks/use-companion', () => ({ useCompanion: mock.useCompanion }));
@@ -59,7 +61,7 @@ describe('timestamp-only controls and title changes', () => {
       answer_status: 'insufficient_evidence', evidence: [{ id: 'recent', label: '00:04:57–00:04:59', start: 297, end: 299 }] }} />);
     expect(view.container.querySelector('script')).toBeNull();
     expect(view.container.textContent).toContain('<script>Fictional dialogue</script>');
-    expect(screen.getByText('No question or coins used.')).toBeTruthy();
+    expect(screen.getByText('No question used.')).toBeTruthy();
     expect(screen.getByText('Sources')).toBeTruthy();
   });
   it('retains exact seconds, rewinds to zero, and prevents submitting malformed times', () => {

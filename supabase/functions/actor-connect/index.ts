@@ -1,3 +1,4 @@
+import {economyUser,reply} from "../_shared/economy-http.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 import { titleCast } from "../_shared/actor-cast.ts";
@@ -13,7 +14,12 @@ serve(async (req) => {
   }
 
   try {
-    const { action, actorId, movieId, tvId } = await req.json();
+    const {db,user}=await economyUser(req);
+    const { action, actorId, movieId, tvId, gameId } = await req.json();
+    if(action!=='getRandomActors'){
+      const access=await db.rpc('cinegeek_game_access',{p_user:user.id,p_game:gameId});
+      if(access.error||access.data!==true)return reply(403,{error:'Start an available game first'});
+    }
     
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
     if (!TMDB_API_KEY) {

@@ -69,6 +69,12 @@
 .room-compose textarea { width:100%; min-width:0; resize:none; background:transparent; padding:.4rem 0; outline:0; font-size:1rem; }
 .room-compose button { display:grid; place-items:center; min-width:44px; height:44px; border-radius:50%; background:#ffcc4b; color:#262023; }
 .room-compose button:disabled { background:#48444d; color:#b4acb8; }
+.room-compose[data-locked=true] { border-color:#48444d; background:#27262b; }
+.room-compose textarea:disabled { cursor:not-allowed; color:#b4acb8; -webkit-text-fill-color:#b4acb8; opacity:1; }
+.room-prompts button:disabled { color:#928b98; text-decoration:none; cursor:not-allowed; }
+.room-chat-access { display:flex; align-items:center; justify-content:space-between; gap:.6rem; font-size:.74rem; color:#c9c0ce; }
+.room-chat-access p { padding-block:.4rem; }
+.room-chat-access button { min-height:44px; flex-shrink:0; padding-inline:.25rem; color:#f1d58b; font-weight:600; text-decoration:underline; text-underline-offset:3px; }
 .room-allowance,.room-typing { font-size:.72rem; color:#beb5c1; margin-top:.35rem; }
 .room-allowance button { padding:0 .5rem; color:#f1d58b; text-decoration:underline; }
 .room-chat-error { color:#ffbbb6; font-size:.8rem; margin-bottom:.5rem; }

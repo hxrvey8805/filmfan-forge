@@ -17,7 +17,7 @@ import {
 import { companionAnswer, type JsonGenerator } from "../_shared/answer.ts";
 import { companionResponse, exactRepeatRequest, immediateMemoryResponse } from "../_shared/companion-response.ts";
 import { companionReleaseFor, companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
-import { databaseSolBudget } from "../_shared/sol-budget.ts";
+import { beginQuestionAllowance, QuestionAllowanceError } from "../_shared/question-allowance.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 import { permittedSceneNotes, type ReviewedSceneNote, type PreparedSceneNote } from "../_shared/reviewed-scenes.ts";
 
@@ -131,6 +131,7 @@ async function earlierStoryNotes(db: SupabaseClient, position: ViewingPosition, 
 serve(async req => {
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  let allowance: Awaited<ReturnType<typeof beginQuestionAllowance>> | undefined;
   try {
     const authorization = req.headers.get('Authorization');
     if (!authorization) return json({ error: 'Please log in.' }, 401);
@@ -185,6 +186,11 @@ serve(async req => {
       memory = safeHistory((result.data ?? []) as Conversation[], position);
     }
     const memoryReply = immediateMemoryResponse(question.trim(), position, memory);
+    allowance = await beginQuestionAllowance((name,args)=>db.rpc(name,args), user.id, id, {
+      title_id:tmdbId, media_type:mediaType, season_number:position.seasonNumber??null,
+      episode_number:position.episodeNumber??null, position_seconds:seconds,
+      question:question.trim(), companion_version:answerVersion,
+    }, Deno.env.get('COMPANION_AI_PROVIDER'));
     let evidence: Evidence[] = [];
     let coverage: EvidenceCoverage | undefined;
     let notes: PreparedSceneNote[] = [];
@@ -196,7 +202,7 @@ serve(async req => {
       // Source preparation must not consume the model's response deadline.
       const observe:WatchObserver=event=>console.info('Companion watch check',{requestId:id,revision:WATCH_CHECK_REVISION,...event});
       const generate=traceWatchGenerator((...args)=>(activeGenerator ??= companionGenerator(name => Deno.env.get(name), fetch,
-        databaseSolBudget((name, args) => db.rpc(name, args), user.id, id)))(...args),observe);
+        allowance!.budget))(...args),observe);
       const readData = async (pos: ViewingPosition, earlier = false) => {
         if (!earlier && !cutGroup(pos) && pos.seconds > 0) await ensureCurrentSubtitles(db, pos);
         let query = earlier
@@ -247,7 +253,7 @@ serve(async req => {
     if (!memoryReply && recall) earlierNotes = await earlierStoryNotes(db,position,question.trim(),release.noteTables);
     if (!memoryReply) {
       const generate = companionGenerator(name => Deno.env.get(name), fetch,
-        databaseSolBudget((name, args) => db.rpc(name, args), user.id, id));
+        allowance.budget);
       const readCurrent = async () => {
         if (recall) {
           const remembered = await storyRecallAnswer(question.trim(),position,[...earlierNotes,...notes],generate);
@@ -310,23 +316,34 @@ serve(async req => {
     }
     const response = companionResponse(question.trim(), position, evidence, memory, checked);
     const context = `${mediaType === 'tv' ? `S${seasonNumber}E${episodeNumber} ` : ''}@ ${formatTimestamp(seconds)}`;
-    const saved = await db.rpc('record_companion_answer', { p_user_id: user.id, p_charge: response.charge,
-      p_conversation: { id, title_id: tmdbId, media_type: mediaType, season_number: position.seasonNumber ?? null,
+    const saved = await allowance.finish({ id, title_id: tmdbId, media_type: mediaType, season_number: position.seasonNumber ?? null,
         episode_number: position.episodeNumber ?? null, position_seconds: seconds, timestamp: formatTimestamp(seconds), companion_version: answerVersion,
         question: question.trim(), answer: response.answer, context, evidence: response.evidence,
-        answer_status: response.answer_status } });
+        answer_status: response.answer_status }, response.charge);
     if (saved.error) {
-      if (saved.error.message.includes('Insufficient coins')) return json({ error: 'You need 150 coins for another question.' }, 402);
+      if (typeof saved.error === 'object' && 'message' in saved.error && String(saved.error.message).includes('Insufficient coins')) return json({ error: 'You need 150 coins for another question.' }, 402);
       throw saved.error;
     }
-    if (!safeHistory([saved.data.conversation as Conversation], position).length) {
+    const savedData = saved.data as {conversation: Conversation & {answer_status:string; evidence:unknown}; [key:string]:unknown};
+    if (!safeHistory([savedData.conversation], position).length) {
       return json({ error: 'This saved answer uses captions outside your viewing point. Please ask again.', code: 'answer_version_changed' }, 409);
     }
-    return json({ ...saved.data, answer: saved.data.conversation.answer,
-      status: saved.data.conversation.answer_status, evidence: saved.data.conversation.evidence, boundary: position });
+    return json({ ...savedData, answer: savedData.conversation.answer,
+      status: savedData.conversation.answer_status, evidence: savedData.conversation.evidence, boundary: position });
   } catch (error) {
+    try { await allowance?.end(error instanceof RecapPreparing); }
+    catch (cleanupError) {
+      if (cleanupError instanceof QuestionAllowanceError) return json({error:cleanupError.message,code:cleanupError.code},cleanupError.status);
+      return json({error:'Your question could not be completed. Please try again shortly.'},503);
+    }
+    if (allowance?.budgetBlocked) {
+      const stopped = new QuestionAllowanceError('question_budget_unavailable',503);
+      return json({error:stopped.message,code:stopped.code},stopped.status);
+    }
     if (error instanceof RecapPreparing) return json({status:'preparing_recap'}, 202);
+    if (error instanceof QuestionAllowanceError) return json({error:error.message,code:error.code},error.status);
     console.error('Companion request failed', error instanceof Error ? error.message : 'database error');
-    return json({ error: error instanceof Error ? error.message : 'Unable to answer right now. Please try again.' }, 503);
+    return json({ error: error instanceof Error ? error.message : 'Unable to answer right now. Please try again.',
+      ...(allowance?.active ? {code:'question_request_closed'} : {}) }, 503);
   }
 });

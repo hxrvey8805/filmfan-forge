@@ -1,0 +1,71 @@
+CineGeek coordinated tier and spending release — 16 November 2026
+
+State: prepared and tested; not deployed. Purchases remain disabled.
+Free has no included AI, manual lists, Arcade animated Focus, one game/day.
+Monthly and Annual each have 15 successful questions per subscription month.
+Annual includes all skins; Monthly uses owned/XP skins. XP and questions stay separate.
+
+Preflight already observed
+User confirmed all historic Stripe purchases were tests. No paid balance is being
+written off. 287 source records exported privately: 8 wallets, 245 packs, 27 cards,
+5 old usage rows, one private owner Monthly grant and one global budget row.
+No collection exceeds 5 of either type. No unopened premium packs. No unresolved
+provider bills. Global cap $5, committed $1.193650; no halt. Legacy balances remain
+in place and convert once into XP; packs and collections are preserved.
+
+Private owner access
+The first allowance migration now retires only the exact known temporary bridge
+inside its transaction. Do not run a separate DROP. The fourth migration preserves
+existing private grant dates and lets the real tier/allowance functions read them.
+It inserts no subscriber or verified Apple receipt. Expired/revoked paid access
+cannot reactivate an old private grant. Paused monthly requests recheck entitlement
+and their original billing window. Existing owner grant still expires 16 December.
+
+Proposed private beta limits, requiring owner confirmation before activation
+$0.35 whole question, $3 per account per UTC calendar month, 64 provider calls per
+question, no additional daily money cap. The existing global lifetime $5 stays.
+Historical and failed calls count. These are private beta safeguards, not final
+commercial allowances or proof of profit. They may stop a long/repair-heavy answer
+before all 15 included questions have been used. No answer-quality shortcut is used.
+
+Coordinated release
+1. Recheck main and exact tested source. Run live-tiers-preflight.sql, confirm the
+   private backup is complete, and stop if data/migrations/grants have changed.
+2. Briefly disable the existing global budget (enabled=false only). Wait for no
+   in-flight or unsettled provider calls. Keep its $5 limit, committed amount and
+   halt reason intact. Do not delete rows, fund it, or clear a provider halt.
+3. Apply ONLY these four migrations in order, once, preserving their contents:
+   20261113190000_companion_monthly_allowance.sql
+   20261113200000_pro_xp_collections.sql
+   20261114120000_companion_spending_safeguards.sql
+   20261116100000_private_grant_tier_rollout.sql
+   Verify actual schema and migration records before retrying any interrupted step.
+4. Deploy matching spoiler-free-companion, actor-connect, game-result, open-pack,
+   interpret-smart-list and the six retired endpoints: sell-card,
+   calculate-person-value, sort-by-custom-filter, create-payment-intent,
+   verify-payment, stripe-webhook. Use repository config. Authenticated operations
+   still verify the bearer token with auth.getUser; gateway settings do not grant
+   anonymous purchases, minting or account access. No external credential changes.
+5. Verify active revisions and submitted hashes. Run rollback-only checks for
+   all three plans, money/quantity denial and request scope before activation.
+   These must not call a model, create a real entitlement or consume real quota.
+6. Only after approved values and all checks: run activate-live-tiers.sql, then
+   live-tiers-postflight.sql and authenticated owner access/allowance reads.
+   Check on the installed matching native client; do not publish the public site.
+7. If any step fails, leave the global budget disabled and correct forward. Do
+   not re-enable the old policy path or reverse XP data after new user writes.
+
+Preservation
+Companion model/provider pins, prompts, context selection, reasoning, source
+coverage, evidence validation and spoiler/history logic are unchanged. Only
+accounting surrounds the existing pipeline. Apple Sandbox and Focus native work
+are deliberately outside this release. No live purchases or AI test spending.
+
+Validation
+Working app: 84 files / 1,300 local tests passed. Isolated release: 71 files /
+1,108 tests passed, including actual migration/RPC execution with PostgreSQL/PGlite,
+existing owner bridge transition, Free/Monthly/Annual, paused expiry, XP/collections,
+recaps, rewinds and episode switches. TypeScript and production web build passed
+(existing chunk-size advisory). Deno checked all five active edge entry points.
+The exact rollback-only live smoke and activation scripts also passed database tests.
+No new model answers are claimed; these are accounting/UI/boundary regressions.

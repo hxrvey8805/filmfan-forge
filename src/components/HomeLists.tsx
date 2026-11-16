@@ -1,3 +1,4 @@
+import { useProAccess } from "@/hooks/use-pro-access";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Clapperboard, Clock3, ListVideo, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -66,6 +67,7 @@ function SmartShelf({ list, sources, allTitles, onOpen }: {
 }
 
 export function HomeLists({ viewer, shelves, onOpen }: Props) {
+  const pro=useProAccess()?.smartLists===true;
   const key = homeListKey(viewer);
   const [lists, setLists] = useState<HomeList[]>(() => { try { return readLists(key); } catch { return []; } });
   const [legacy, setLegacy] = useState(() => { try { return Boolean(localStorage.getItem("personalLists")); } catch { return false; } });
@@ -87,8 +89,8 @@ export function HomeLists({ viewer, shelves, onOpen }: Props) {
   const selected = lists.find(l => l.id === active);
   const criteria = request ?? name;
   const rule = confirmedRule?.request === criteria ? confirmedRule.rule : ruleFromName(criteria);
-  const mode = choice ?? (rule ? "smart" : "manual");
-  const sourceList = useMemo(() => [...shelves, ...lists], [shelves, lists]);
+  const mode = pro ? choice ?? (rule ? "smart" : "manual") : "manual";
+  const sourceList = useMemo(() => [...shelves, ...lists.filter(l=>pro || l.mode!=="smart")], [shelves, lists, pro]);
   const sources = useMemo(() => new Map(sourceList.map(s => [s.id, s])), [sourceList]);
   const allTitles = useMemo(() => savedTitles(sourceList), [sourceList]);
   const sourceOptions = sourceList.filter(s => editor !== "edit" || !active || !dependsOn(s, active, sources));
@@ -158,7 +160,7 @@ export function HomeLists({ viewer, shelves, onOpen }: Props) {
     {legacy && <button onClick={importLegacy} className="lists-more">Import older lists from this device</button>}
     {!lists.length && <div className="lists-empty">
       <span className="list-tile" aria-hidden="true"><ListVideo size={21} /></span>
-      <p>Pick your own Friday lineup, or let a smart list collect horror movies as you save them.</p>
+      <p>Pick your own Friday lineup, or let a Pro Smart List collect horror movies as you save them.</p>
     </div>}
     <div className="lists-stack">{visibleLists.map(list => {
       const smart = list.mode === "smart";
@@ -175,12 +177,12 @@ export function HomeLists({ viewer, shelves, onOpen }: Props) {
           <ChevronDown size={16} aria-hidden="true" className="list-chevron" />
         </button></h3>
         <div id={`list-body-${list.id}`} hidden={!open}>{open && <div className="list-folder-body">
-          {smart ? <SmartShelf list={list} sources={sources} allTitles={allTitles} onOpen={onOpen}/> :
+          {smart && !pro ? <p className="text-sm text-muted-foreground">Smart Lists are included in Pro. Your saved rule is kept. <a className="text-primary underline" href="/dashboard?tab=profile#your-plan">View plans</a></p> : smart ? <SmartShelf list={list} sources={sources} allTitles={allTitles} onOpen={onOpen}/> :
             list.titles.length ? <PosterRow title={list.name} items={list.titles} onPosterClick={onOpen} /> :
             <p className="text-sm text-muted-foreground">Add your first title from search, or pick one from your library in Edit list.</p>}
           <div className="list-folder-actions">
             {!smart && <Button size="sm" variant="secondary" onClick={() => setSearching(true)}><Search />Find a title</Button>}
-            <Button size="sm" variant="ghost" onClick={() => edit(true)}><Pencil/>{smart ? "Edit rule" : "Edit list"}</Button>
+            <Button disabled={smart && !pro} size="sm" variant="ghost" onClick={() => edit(true)}><Pencil/>{smart ? "Edit rule" : "Edit list"}</Button>
           </div>
         </div>}</div>
       </article>;
@@ -197,7 +199,7 @@ export function HomeLists({ viewer, shelves, onOpen }: Props) {
       <DialogHeader><DialogTitle ref={editorHeading} tabIndex={-1}>{editor === "edit" ? "Edit list" : "New list"}</DialogTitle><DialogDescription>Saved for your profile on this device.</DialogDescription></DialogHeader>
       <div className="list-editor-fields"><div><label htmlFor="home-list-name" className="text-sm font-medium">List name</label><Input id="home-list-name" className="mt-1 text-base" maxLength={80} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Friday options"/>
         {editor === "new" && !name.trim() && <div className="mt-2 flex flex-wrap gap-1.5">{examples.map(s => <button key={s} className="rounded-full bg-muted px-2.5 py-1.5 text-xs" onClick={() => {setName(s);setRequest(null);setConfirmedRule(null);setChoice(null);}}>{s}</button>)}</div>}</div>
-      <div className="grid grid-cols-2 gap-2" aria-label="List type">{(["manual","smart"] as const).map(m => <Button key={m} aria-pressed={mode === m} variant={mode === m ? "secondary" : "outline"} onClick={() => setChoice(m)}>{m === "smart" ? <Sparkles size={15}/> : <ListVideo size={15}/>} {m === "smart" ? "Smart match" : "Pick titles"}</Button>)}</div>
+      <div className="grid grid-cols-2 gap-2" aria-label="List type">{(["manual","smart"] as const).map(m => <Button key={m} aria-pressed={mode === m} variant={mode === m ? "secondary" : "outline"} onClick={() => {if(m==="smart"&&!pro){toast.info("Smart Lists are a Pro feature. View Your Plan in Profile.");return;}setChoice(m);}}>{m === "smart" ? <Sparkles size={15}/> : <ListVideo size={15}/>} {m === "smart" ? pro ? "Smart match" : "Smart match · Pro" : "Pick titles"}</Button>)}</div>
       {mode === "smart" ? <>{showRequest && <div><label htmlFor="smart-list-request" className="text-sm font-medium">What belongs in this list?</label><Input id="smart-list-request" className="mt-1 text-base" maxLength={160} value={criteria} onChange={event => {setRequest(event.target.value);setConfirmedRule(null);}} placeholder="e.g. action, comedy movies, films starring Tom Hanks"/><p className="mt-1 text-xs text-muted-foreground">Use the name, or give your list a nickname and describe it here.</p></div>}
         <SmartListInterpretation key={viewer + ":" + criteria} viewer={viewer} request={criteria} rule={rule} onResolve={value => setConfirmedRule({request:criteria,rule:value})} onRefine={() => {
           setShowRequest(true);setRequest(criteria);setConfirmedRule(null);

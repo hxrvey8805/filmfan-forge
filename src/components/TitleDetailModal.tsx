@@ -1,4 +1,5 @@
 import { useCompanion } from "@/hooks/use-companion";
+import { useQuestionAllowance } from "@/hooks/use-question-allowance";
 import { CompanionTimestamp } from "@/components/CompanionTimestamp";
 import { RoomChat, RoomPositionEditor } from "./RoomChat";
 import "./screening-room.css";
@@ -86,7 +87,7 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
     };
   }, [inRoom]);
   const [remainingFree, setRemainingFree] = useState<number | null>(null);
-  const [coins, setCoins] = useState(0);
+  const allowance = useQuestionAllowance(open);
   
   const [point, setPoint] = useState(() => startingPosition(viewer, title));
   const selectedSeason = String(point.seasonNumber ?? "");
@@ -190,11 +191,10 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
     return () => { active = false; };
   }, [title.id, title.type, selectedSeason, selectedEpisode]);
 
-  // Load AI usage, coins, and conversation history when modal opens
+  // Load AI usage and conversation history when modal opens
   useEffect(() => {
     if (open) {
       loadAIUsage();
-      loadUserStats();
     }
   }, [open, title.id, title.type]);
 
@@ -202,7 +202,6 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
   useEffect(() => {
     const handleQuestionAsked = () => {
       loadAIUsage();
-      loadUserStats();
     };
 
     window.addEventListener('questionAsked', handleQuestionAsked);
@@ -237,32 +236,12 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
     }
   };
 
-  const loadUserStats = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: stats } = await supabase
-        .from('user_stats')
-        .select('coins')
-        .eq('user_id', user.id)
-        .single();
-
-      if (stats) {
-        setCoins(stats.coins);
-      }
-    } catch (error) {
-      console.error('Error loading user stats:', error);
-    }
-  };
-
   const timestamp = formatPosition(point.seconds);
 
   const episodeLabel = title.type === "tv" ? `S${selectedSeason} · E${selectedEpisode}` : "Movie";
   const handleAskQuestion = async (question: string) => {
     const data = await ask(question, timestamp);
     if (data.remainingFreeQuestions !== undefined) setRemainingFree(data.remainingFreeQuestions);
-    if (data.usedCoins) setCoins(previous => Math.max(0, previous - data.usedCoins));
     return data.stale ? undefined : data.conversation?.id;
   };
 
@@ -367,7 +346,8 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
           {focusAction => <RoomChat focusAction={focusAction} key={`${episodeLabel}:${point.seconds}`} expanded={chatOpen} onExpand={setChatOpen}
             timestamp={timestamp} valid={timestampValid} messages={messages} loading={isLoading}
             historyError={historyError} onAsk={handleAskQuestion} positionButton={positionButton}
-            onEditPosition={() => setEditingTime(true)} remainingFree={remainingFree} coins={coins}
+            onEditPosition={() => setEditingTime(true)} remainingFree={remainingFree} allowance={allowance}
+            onViewPlan={() => { onOpenChange(false); navigate("/dashboard?tab=profile#your-plan"); }}
             onStore={() => { onOpenChange(false); navigate("/dashboard?tab=play&view=store"); }} />}
         </FocusRoom>
         {inRoom && editingTime && <RoomPositionEditor seconds={point.seconds} maxMinutes={maxRuntime}

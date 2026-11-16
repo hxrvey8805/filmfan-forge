@@ -1,0 +1,37 @@
+CineGeek question allowance — staged implementation, 13 November 2026
+
+Product rules
+- Free: zero included AI questions; purchased question packs can be used without Pro.
+- Monthly and Annual Pro: 15 successful questions per subscription month, no rollover.
+- Annual refreshes monthly using the original subscription anniversary, including month-end clamping.
+- Consume included questions before purchased ones. Purchased balances do not expire.
+- Failure/insufficient evidence releases the question hold, but never erases AI spending.
+- Packs only grant questions, never Smart Lists, skins or other Pro features.
+
+Current rollout state
+- NOT deployed or activated. Purchases remain disabled; no StoreKit products or receipt verifier are added here.
+- companion_usage_policy is inserted disabled with zero monetary limits. The existing beta flow remains in force until activation.
+- The existing $5 global production cap, model, prompts, context and spoiler checks are unchanged.
+- No live provider calls are required to test this accounting layer.
+- 14 November: spending hardening is also staged; see companion-spending-controls.txt.
+  Money now uses each provider call's UTC start day/month, request caps cannot
+  increase on continuation, and budget denials persist across workers.
+
+Before activation
+1. Connect verified StoreKit subscription transactions to companion_pro_entitlements. Keep the original billing anchor across renewals; do not reset it on replay/plan selection. Handle expiration, revocation/refunds, account ownership and out-of-order notifications.
+2. Verify each pack transaction on Apple's server, including product, environment and account binding, before calling grant_companion_question_pack. Its transaction ledger prevents duplicate credits, but is NOT a receipt verifier. Implement refund/revocation handling before selling packs.
+3. Set approved whole-question and per-user calendar-month monetary limits. Neither value has been chosen or funded by this change. Conservative reservations must leave room for the existing answer pipeline. Limits apply to failed attempts and recap continuations as well as successful answers. Pack pricing and limits must support the access promised at purchase.
+4. Deploy migration first, then the companion function and updated client, with policy still disabled. Verify beta compatibility. Keep question purchases disabled until StoreKit sandbox/end-to-end tests pass.
+5. Separately approve activation and any increase to the existing $5 beta ceiling. This migration cannot increase that ceiling. Do not advertise unrestricted paid availability under a shared $5 private-beta pool.
+
+Concurrency and failure behavior
+- A server-side reservation precedes source/model work. At most one active question per account; requests bind to the exact title, episode, timestamp, question and answer revision.
+- Preparing recaps pause/resume one reservation and accumulate costs across HTTP requests. Switching to a new question may replace paused work; it cannot reuse its scope or request ID.
+- Ten-minute expired workers lose authority to spend or save; unknown costs remain reserved. Later settlement still records actual cost.
+- Provider reservations atomically check whole-question, user-month and global budgets. No model downgrade, context trimming or skipped review is used to meet a limit.
+- Answer storage and successful-question debit are one transaction. Duplicate delivery returns the saved answer without charging twice.
+- Anonymous/authenticated roles cannot edit balances, entitlements or caps. Only a service-role verifier may grant purchases. Even service role cannot activate/fund the policy or call legacy bypasses.
+- Money uses each provider call's UTC calendar month independent of subscription changes; question allowances use billing-month buckets. The request's original budget_month is retained for audit only.
+
+Validation
+Real PostgreSQL/PGlite migration/RPC tests exercise quotas, packs, concurrent requests, month boundaries, retries, scope changes, budget holds, rollback and permissions. UI tests check Free/purchased access and monthly labels. Existing companion regressions retain timestamp, rewind, episode and history checks.

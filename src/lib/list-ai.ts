@@ -2,6 +2,7 @@ import { listRequest, parseListInterpretation, type ListInterpretation } from ".
 export type { ListInterpretation } from "../../supabase/functions/_shared/list-interpretation";
 
 const messages: Record<string, string> = {
+  pro_required: "Smart Lists are included in Pro. You can still create manual lists.",
   sign_in: "Sign in to let Geek interpret your list.",
   limited: "The free list helper has reached its limit for today. You can still use a clear matching rule or pick titles.",
   busy: "Give Geek a moment before trying another description.",

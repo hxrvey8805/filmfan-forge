@@ -84,7 +84,7 @@ function from(table: string) {
 }
 
 const unavailable = () => ({ data: null, error: { message: "This design preview does not call live services.",
-  context: { json: async () => ({ error: "This is a design preview. Live AI and purchases are turned off; no questions or coins were used." }) } } });
+  context: { json: async () => ({ error: "This is a design preview. Live AI and purchases are turned off; no questions or XP were used." }) } } });
 
 export const supabase = {
   auth: {
@@ -120,6 +120,18 @@ export const supabase = {
     signOut: async () => { setSignedIn(false); return { error: null }; },
   },
   from,
+  rpc: async (name: string,args:Record<string,unknown>={}) => {
+    // Local design samples only. Never sets a live entitlement or calls a provider.
+    const selected=new URLSearchParams(window.location.search).get('samplePlan');
+    const plan=selected==='monthly'||selected==='annual'?selected:'free';
+    if(name==='get_cinegeek_access')return {data:{userId:user.id,plan,purchasesEnabled:false,smartLists:plan!=='free',focusGeek:true,
+      allSkins:plan==='annual',unlockedSkins:plan==='monthly'?['jedi']:[],badges:[],gamesRemaining:plan==='free'?1:null,
+      xp:750,lifetimeXp:1250,xpToday:75,xpDailyCap:225,spinAvailable:false,expiresAt:plan==='free'?null:'2027-01-01T00:00:00Z'},error:null};
+    if(name==='get_companion_allowance')return {data:{mode:'monthly',plan,included:plan==='free'?0:15,limit:plan==='free'?0:15,purchased:0,renewsAt:plan==='free'?null:'2026-12-13T00:00:00Z'},error:null};
+    if(name==='start_cinegeek_game')return {data:{id:args.p_game,status:'playing',expires_at:new Date(Date.now()+120000).toISOString()},error:null};
+    if(name==='end_cinegeek_game')return {data:null,error:null};
+    return unavailable();
+  },
   functions: {
     invoke: async (name: string, options: { body?: Record<string, unknown> } = {}) => {
       const body = options.body ?? {};

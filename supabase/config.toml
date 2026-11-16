@@ -13,7 +13,10 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.open-pack]
-verify_jwt = true
+verify_jwt = false
+
+[functions.game-result]
+verify_jwt = false
 
 [functions.create-payment-intent]
 verify_jwt = true
