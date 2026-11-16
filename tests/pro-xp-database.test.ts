@@ -6,6 +6,7 @@ import {beforeAll,afterAll,beforeEach,it,expect} from 'vitest';
 const pg=new PGlite({extensions:{vector}});
 const migration=(name:string)=>readFileSync(new URL(`../supabase/migrations/${name}.sql`,import.meta.url),'utf8');
 let user:string;
+const migratedOwner='00000000-0000-4000-8000-000000000023';
 beforeAll(async()=>{
   await pg.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
     CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS
@@ -15,12 +16,19 @@ beforeAll(async()=>{
     '20251213142548_7e9c4478-2109-4f16-87b1-4f6a23b79ec3','20251220225804_a0e95db5-205f-42ba-afb7-2dd5f16412a4',
     '20251212113943_64b727ba-fc83-47eb-9a6c-12ef18c454a4','20251115180934_afff8406-1d21-440e-ba6b-35c0cc4852f5']) await pg.exec(migration(name));
   await pg.exec(migration('20251122155759_92f1d8ce-3bf2-4992-ba51-366d73fa76f8').split('-- Migration 2:')[0]);
+  // Exercise the actual live bridge -> full tier transition, preserving the
+  // original private grant and wallet; no fake Apple receipt is inserted.
+  await pg.query('INSERT INTO auth.users VALUES($1)',[migratedOwner]);
+  await pg.query('INSERT INTO user_stats(user_id,coins) VALUES($1,147)',[migratedOwner]);
+  await pg.exec(readFileSync(new URL('../docs/operations/private-monthly-beta.sql',import.meta.url),'utf8'));
+  await pg.query("INSERT INTO cinegeek_private_monthly_grants VALUES($1,now()-interval '1 day',now()+interval '29 days',false,'Existing owner test grant')",[migratedOwner]);
+
   for(const name of ['20261013120000_companion_evidence_and_memory','20261015153000_caption_context_revision',
     '20261015195500_companion_answer_revision','20261106093000_quarantine_subtitle_editions','20261106163000_shared_cut_revision',
     '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance']) await pg.exec(migration(name));
   for(const name of ['20251114214139_cac7e901-0afa-4a2d-9233-df3d7be49a29','20251114215942_67f42c53-f7a7-40eb-9c4c-76f082338a1b',
     '20251126204536_add_pack_tier','20261112160000_smart_list_interpreter','20261113200000_pro_xp_collections',
-    '20261114120000_companion_spending_safeguards'])await pg.exec(migration(name));
+    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout'])await pg.exec(migration(name));
 });
 
 afterAll(()=>pg.close());
@@ -118,4 +126,83 @@ it('Smart Lists refuse Free even when a cached interpretation exists; both paid 
  await pg.query(`UPDATE smart_list_interpretations SET result='{"kind":"clarify","reason":"vague"}' WHERE user_id=$1`,[user]);
  await pg.query('UPDATE companion_pro_entitlements SET revoked=true WHERE user_id=$1',[user]);expect(await call('reserve_smart_list_interpretation',[user,hash,randomUUID()],'service_role')).toEqual({status:'pro_required'});
  await pg.query("UPDATE companion_pro_entitlements SET revoked=false,plan='annual' WHERE user_id=$1",[user]);expect((await call('reserve_smart_list_interpretation',[user,hash,randomUUID()],'service_role')).status).toBe('cached');
+});
+
+
+it('keeps explicit private Monthly access separate from verified Apple purchases',async()=>{
+ await pg.query("INSERT INTO cinegeek_private_monthly_grants VALUES($1,now()-interval '1 day',now()+interval '1 month',false,'Owner test')",[user]);
+ expect(await access()).toMatchObject({plan:'monthly',purchasesEnabled:false,smartLists:true,allSkins:false});
+ expect((await pg.query('SELECT * FROM companion_pro_entitlements WHERE user_id=$1',[user])).rows).toHaveLength(0);
+ await pg.exec('UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=350000,user_month_limit_micro_usd=3000000');
+ try {
+  expect(await call('get_companion_allowance')).toMatchObject({plan:'monthly',limit:15,included:15,purchased:0});
+  const request=randomUUID(),attempt=randomUUID();
+  expect(await call('begin_companion_question',[user,request,attempt,{}],'service_role')).toMatchObject({mode:'monthly',source:'monthly'});
+  expect(await call('get_companion_allowance')).toMatchObject({included:14});
+  await call('end_companion_question_attempt',[user,request,attempt,false],'service_role');
+  expect(await call('get_companion_allowance')).toMatchObject({included:15});
+ } finally {await pg.exec('UPDATE companion_usage_policy SET enabled=false');}
+});
+it('private grants expire and revoke without giving public Free accounts access',async()=>{
+ await pg.query("INSERT INTO cinegeek_private_monthly_grants VALUES($1,now()-interval '2 days',now()-interval '1 day',false,'Expired test')",[user]);
+ expect((await access()).plan).toBe('free');
+ await pg.query("UPDATE cinegeek_private_monthly_grants SET expires_at=now()+interval '1 month',revoked=true WHERE user_id=$1",[user]);
+ expect((await access()).plan).toBe('free');
+ await expect(call('active_companion_entitlement',[user])).rejects.toThrow('permission');
+ await expect(pg.transaction(async tx=>{await tx.exec('SET LOCAL ROLE authenticated');await tx.exec("UPDATE cinegeek_private_monthly_grants SET revoked=false");})).rejects.toThrow('permission');
+});
+it('a paid Annual grant takes priority and its revocation does not restore a private test grant',async()=>{
+ await pg.query("INSERT INTO cinegeek_private_monthly_grants VALUES($1,now()-interval '1 day',now()+interval '1 month',false,'Owner test')",[user]);
+ await pro('annual');expect((await access()).plan).toBe('annual');
+ await pg.query('UPDATE companion_pro_entitlements SET revoked=true WHERE user_id=$1',[user]);
+ expect((await access()).plan).toBe('free');
+});
+
+it('migrates the existing owner bridge without resetting its dates, funds or identity',async()=>{
+ const a=await call('get_cinegeek_access',[],'authenticated',migratedOwner);
+ expect(a).toMatchObject({userId:migratedOwner,plan:'monthly',purchasesEnabled:false,xp:147,lifetimeXp:147});
+ const grant=(await pg.query('SELECT * FROM cinegeek_private_monthly_grants WHERE user_id=$1',[migratedOwner])).rows[0];
+ expect(new Date(a.expiresAt).getTime()).toBe(new Date(grant.expires_at as string).getTime());
+ expect((await pg.query('SELECT coins FROM user_stats WHERE user_id=$1',[migratedOwner])).rows[0].coins).toBe(147);
+ expect((await pg.query('SELECT * FROM companion_pro_entitlements WHERE user_id=$1',[migratedOwner])).rows).toHaveLength(0);
+ await expect(pg.exec(readFileSync(new URL('../docs/operations/retire-private-monthly-beta.sql',import.meta.url),'utf8'))).rejects.toThrow('Full or unexpected access RPCs');
+});
+
+it('cannot resume a private recap after the grant was revoked',async()=>{
+ await pg.query("INSERT INTO cinegeek_private_monthly_grants VALUES($1,now()-interval '1 day',now()+interval '1 month',false,'Owner test')",[user]);
+ await pg.exec('UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=350000,user_month_limit_micro_usd=3000000');
+ try {
+  const request=randomUUID(),attempt=randomUUID();
+  await call('begin_companion_question',[user,request,attempt,{}],'service_role');
+  await call('end_companion_question_attempt',[user,request,attempt,true],'service_role');
+  await pg.query('UPDATE cinegeek_private_monthly_grants SET revoked=true WHERE user_id=$1',[user]);
+  expect(await call('begin_companion_question',[user,request,randomUUID(),{}],'service_role')).toMatchObject({error:'questions_exhausted'});
+  expect((await pg.query('SELECT status FROM companion_question_requests WHERE id=$1',[request])).rows[0].status).toBe('released');
+ } finally {await pg.exec('UPDATE companion_usage_policy SET enabled=false');}
+});
+
+it('an unrelated Free account has no question allowance after activation',async()=>{
+ await pg.exec('UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=350000,user_month_limit_micro_usd=3000000');
+ try {expect(await call('get_companion_allowance')).toMatchObject({plan:'free',included:0,purchased:0,limit:0});}
+ finally {await pg.exec('UPDATE companion_usage_policy SET enabled=false');}
+});
+
+it('runs the exact rollback-only production smoke script without changing data or money',async()=>{
+ const before=JSON.stringify((await pg.query('SELECT to_jsonb(b) budget FROM companion_sol_budget b')).rows);
+ const grants=JSON.stringify((await pg.query('SELECT * FROM cinegeek_private_monthly_grants ORDER BY user_id')).rows);
+ await pg.query("SELECT set_config('cinegeek.rollout_user',$1,false)",[migratedOwner]);
+ await pg.exec(readFileSync(new URL('../docs/operations/check-live-tiers-rollback.sql',import.meta.url),'utf8'));
+ expect(JSON.stringify((await pg.query('SELECT to_jsonb(b) budget FROM companion_sol_budget b')).rows)).toBe(before);
+ expect(JSON.stringify((await pg.query('SELECT * FROM cinegeek_private_monthly_grants ORDER BY user_id')).rows)).toBe(grants);
+ expect((await pg.query("SELECT count(*)::integer n FROM companion_pro_entitlements WHERE verified_transaction_id LIKE 'ROLLBACK_ONLY_%'")).rows[0].n).toBe(0);
+});
+
+it('activates the proposed private policy without funding or raising the global budget',async()=>{
+ // Match the existing funded live beta; the base migration deliberately starts at zero.
+ await pg.exec("UPDATE companion_sol_budget SET limit_micro_usd=5000000,enabled=false WHERE id='sol-beta'");
+ const budget=(await pg.query('SELECT limit_micro_usd,committed_micro_usd FROM companion_sol_budget')).rows;
+ await pg.exec(readFileSync(new URL('../docs/operations/activate-live-tiers.sql',import.meta.url),'utf8'));
+ expect((await pg.query('SELECT limit_micro_usd,committed_micro_usd FROM companion_sol_budget')).rows).toEqual(budget);
+ expect((await pg.query('SELECT enabled,question_limit_micro_usd,user_month_limit_micro_usd,question_call_limit,user_day_limit_micro_usd FROM companion_usage_policy')).rows[0])
+  .toMatchObject({enabled:true,question_limit_micro_usd:350000,user_month_limit_micro_usd:3000000,question_call_limit:64,user_day_limit_micro_usd:null});
 });

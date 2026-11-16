@@ -347,6 +347,7 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
             timestamp={timestamp} valid={timestampValid} messages={messages} loading={isLoading}
             historyError={historyError} onAsk={handleAskQuestion} positionButton={positionButton}
             onEditPosition={() => setEditingTime(true)} remainingFree={remainingFree} allowance={allowance}
+            onViewPlan={() => { onOpenChange(false); navigate("/dashboard?tab=profile#your-plan"); }}
             onStore={() => { onOpenChange(false); navigate("/dashboard?tab=play&view=store"); }} />}
         </FocusRoom>
         {inRoom && editingTime && <RoomPositionEditor seconds={point.seconds} maxMinutes={maxRuntime}

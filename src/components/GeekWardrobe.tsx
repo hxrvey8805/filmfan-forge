@@ -11,6 +11,10 @@ import "./geek-wardrobe.css";
 export function GeekWardrobe({ compact = false }: { compact?: boolean }) {
   const { look, ready, choose } = useGeekOutfit();
   const access=useProAccess();
+  const proWardrobe = access?.plan === 'monthly' || access?.plan === 'annual';
+  // Both Profile and the title/Focus setup use this picker. Until Pro is
+  // confirmed, show only Arcade instead of offering unusable paid choices.
+  const visibleOutfits: Outfit[] = proWardrobe ? Object.keys(outfits) as Outfit[] : [DEFAULT_OUTFIT];
   const [unlocking,setUnlocking]=useState(false);
   async function select(key:Outfit){
     if(canWear(access,key)){choose(key);return;}
@@ -31,7 +35,7 @@ export function GeekWardrobe({ compact = false }: { compact?: boolean }) {
         <h2>{compact ? "Saved you a seat." : "Dress your geek."}</h2>
         {compact
           ? <p className="geek-caption">Set your timestamp. I’m all ears.</p>
-          : <p className="geek-caption">Pick the outfit your geek wears whenever you watch together.</p>}
+          : <p className="geek-caption">{proWardrobe ? 'Pick the outfit your geek wears whenever you watch together.' : 'Arcade is your default Geek, ready to watch with you.'}</p>}
         {compact && <button type="button" className="geek-action" aria-expanded={expanded} aria-controls={id}
               onClick={() => setExpanded(previous => !previous)}><Shirt size={15} />Outfit</button>}
       </div>
@@ -40,7 +44,7 @@ export function GeekWardrobe({ compact = false }: { compact?: boolean }) {
       {optionsVisible && <fieldset disabled={!ready||unlocking}>
         <legend>Your geek’s outfit</legend>
         <div className="geek-choices">
-          {(Object.keys(outfits) as Outfit[]).map(key => <label className="geek-choice" key={key}>
+          {visibleOutfits.map(key => <label className="geek-choice" key={key}>
             <input type="radio" name={id} aria-label={outfits[key].name}
               aria-describedby={key === DEFAULT_OUTFIT ? `${id}-default` : undefined}
               checked={look === key} onChange={() => void select(key)} />
