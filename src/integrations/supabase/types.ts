@@ -71,6 +71,51 @@ export type Database = {
         }
         Relationships: []
       }
+      cinegeek_games: {
+        Row: {
+          awarded: number
+          expires_at: string
+          id: string
+          proof: Json | null
+          start_actor: number
+          started_at: string
+          status: string
+          submitted_at: string | null
+          target_actor: number
+          user_id: string
+          verification_token: string | null
+          verification_until: string | null
+        }
+        Insert: {
+          awarded?: number
+          expires_at?: string
+          id: string
+          proof?: Json | null
+          start_actor: number
+          started_at?: string
+          status?: string
+          submitted_at?: string | null
+          target_actor: number
+          user_id: string
+          verification_token?: string | null
+          verification_until?: string | null
+        }
+        Update: {
+          awarded?: number
+          expires_at?: string
+          id?: string
+          proof?: Json | null
+          start_actor?: number
+          started_at?: string
+          status?: string
+          submitted_at?: string | null
+          target_actor?: number
+          user_id?: string
+          verification_token?: string | null
+          verification_until?: string | null
+        }
+        Relationships: []
+      }
       cinegeek_private_monthly_grants: {
         Row: {
           expires_at: string
@@ -91,6 +136,84 @@ export type Database = {
           reason?: string
           revoked?: boolean
           starts_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      cinegeek_unlocks: {
+        Row: {
+          earned_at: string
+          item: string
+          kind: string
+          user_id: string
+        }
+        Insert: {
+          earned_at?: string
+          item: string
+          kind: string
+          user_id: string
+        }
+        Update: {
+          earned_at?: string
+          item?: string
+          kind?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      cinegeek_xp: {
+        Row: {
+          available: number
+          daily_earned: number
+          lifetime: number
+          reward_day: string
+          spin_earned_day: string | null
+          spin_used_day: string | null
+          user_id: string
+        }
+        Insert: {
+          available?: number
+          daily_earned?: number
+          lifetime?: number
+          reward_day?: string
+          spin_earned_day?: string | null
+          spin_used_day?: string | null
+          user_id: string
+        }
+        Update: {
+          available?: number
+          daily_earned?: number
+          lifetime?: number
+          reward_day?: string
+          spin_earned_day?: string | null
+          spin_used_day?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      cinegeek_xp_events: {
+        Row: {
+          amount: number
+          created_at: string
+          details: Json
+          id: string
+          kind: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          details?: Json
+          id: string
+          kind: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          details?: Json
+          id?: string
+          kind?: string
           user_id?: string
         }
         Relationships: []
@@ -121,6 +244,153 @@ export type Database = {
           tmdb_id?: number
         }
         Relationships: []
+      }
+      companion_pro_entitlements: {
+        Row: {
+          anchor: string
+          plan: string
+          revoked: boolean
+          user_id: string
+          valid_until: string
+          verified_transaction_id: string
+        }
+        Insert: {
+          anchor: string
+          plan: string
+          revoked?: boolean
+          user_id: string
+          valid_until: string
+          verified_transaction_id: string
+        }
+        Update: {
+          anchor?: string
+          plan?: string
+          revoked?: boolean
+          user_id?: string
+          valid_until?: string
+          verified_transaction_id?: string
+        }
+        Relationships: []
+      }
+      companion_question_calls: {
+        Row: {
+          call_id: string
+          request_id: string
+        }
+        Insert: {
+          call_id: string
+          request_id: string
+        }
+        Update: {
+          call_id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companion_question_calls_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: true
+            referencedRelation: "companion_sol_calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companion_question_calls_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "companion_question_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companion_question_calls_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "companion_spending_questions"
+            referencedColumns: ["request_id"]
+          },
+        ]
+      }
+      companion_question_packs: {
+        Row: {
+          created_at: string
+          questions: number
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          questions: number
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          questions?: number
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      companion_question_requests: {
+        Row: {
+          attempt: string
+          budget_block_reason: string | null
+          budget_month: string
+          committed_micro_usd: number
+          created_at: string
+          id: string
+          lease_until: string
+          period_end: string | null
+          period_start: string | null
+          provider_call_limit: number | null
+          scope: Json
+          source: string
+          spend_limit_micro_usd: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          attempt: string
+          budget_block_reason?: string | null
+          budget_month: string
+          committed_micro_usd?: number
+          created_at?: string
+          id: string
+          lease_until: string
+          period_end?: string | null
+          period_start?: string | null
+          provider_call_limit?: number | null
+          scope: Json
+          source: string
+          spend_limit_micro_usd?: number | null
+          status: string
+          user_id: string
+        }
+        Update: {
+          attempt?: string
+          budget_block_reason?: string | null
+          budget_month?: string
+          committed_micro_usd?: number
+          created_at?: string
+          id?: string
+          lease_until?: string
+          period_end?: string | null
+          period_start?: string | null
+          provider_call_limit?: number | null
+          scope?: Json
+          source?: string
+          spend_limit_micro_usd?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companion_question_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "companion_usage_accounts"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       companion_scene_notes: {
         Row: {
@@ -236,6 +506,48 @@ export type Database = {
           retry_after?: string
           season_number?: number
           tmdb_id?: number
+        }
+        Relationships: []
+      }
+      companion_usage_accounts: {
+        Row: {
+          pack_questions: number
+          user_id: string
+        }
+        Insert: {
+          pack_questions?: number
+          user_id: string
+        }
+        Update: {
+          pack_questions?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      companion_usage_policy: {
+        Row: {
+          enabled: boolean
+          id: boolean
+          question_call_limit: number
+          question_limit_micro_usd: number
+          user_day_limit_micro_usd: number | null
+          user_month_limit_micro_usd: number
+        }
+        Insert: {
+          enabled?: boolean
+          id?: boolean
+          question_call_limit?: number
+          question_limit_micro_usd?: number
+          user_day_limit_micro_usd?: number | null
+          user_month_limit_micro_usd?: number
+        }
+        Update: {
+          enabled?: boolean
+          id?: boolean
+          question_call_limit?: number
+          question_limit_micro_usd?: number
+          user_day_limit_micro_usd?: number | null
+          user_month_limit_micro_usd?: number
         }
         Relationships: []
       }
@@ -442,30 +754,45 @@ export type Database = {
       }
       user_packs: {
         Row: {
+          decision: string | null
           earned_at: string
           id: string
           is_opened: boolean
           opened_at: string | null
           pack_tier: string
           pack_type: string
+          replaced_card_id: string | null
+          reveal_token: string | null
+          reveal_until: string | null
+          revealed_person: Json | null
           user_id: string
         }
         Insert: {
+          decision?: string | null
           earned_at?: string
           id?: string
           is_opened?: boolean
           opened_at?: string | null
           pack_tier?: string
           pack_type: string
+          replaced_card_id?: string | null
+          reveal_token?: string | null
+          reveal_until?: string | null
+          revealed_person?: Json | null
           user_id: string
         }
         Update: {
+          decision?: string | null
           earned_at?: string
           id?: string
           is_opened?: boolean
           opened_at?: string | null
           pack_tier?: string
           pack_type?: string
+          replaced_card_id?: string | null
+          reveal_token?: string | null
+          reveal_until?: string | null
+          revealed_person?: Json | null
           user_id?: string
         }
         Relationships: []
@@ -544,15 +871,151 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      companion_spending_daily: {
+        Row: {
+          committed_micro_usd: number | null
+          day: string | null
+          known_micro_usd: number | null
+          provider_calls: number | null
+          unknown_calls: number | null
+          unresolved_micro_usd: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      companion_spending_questions: {
+        Row: {
+          budget_block_reason: string | null
+          committed_micro_usd: number | null
+          created_at: string | null
+          known_micro_usd: number | null
+          provider_call_limit: number | null
+          provider_calls: number | null
+          request_id: string | null
+          source: string | null
+          spend_limit_micro_usd: number | null
+          status: string | null
+          unresolved_micro_usd: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companion_question_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "companion_usage_accounts"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
     }
     Functions: {
+      active_companion_entitlement: {
+        Args: { p_user_id: string }
+        Returns: {
+          anchor: string
+          grant_source: string
+          plan: string
+          user_id: string
+          valid_until: string
+        }[]
+      }
+      begin_companion_question: {
+        Args: {
+          p_attempt: string
+          p_request_id: string
+          p_scope: Json
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      begin_companion_question_before_spending: {
+        Args: {
+          p_attempt: string
+          p_request_id: string
+          p_scope: Json
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      cinegeek_game_access: {
+        Args: { p_game: string; p_user: string }
+        Returns: boolean
+      }
+      cinegeek_lock_wallet: { Args: { p_user: string }; Returns: undefined }
+      cinegeek_plan: { Args: { p_user: string }; Returns: string }
+      claim_cinegeek_pack: {
+        Args: { p_pack: string; p_token: string; p_user: string }
+        Returns: Json
+      }
+      claim_cinegeek_win: {
+        Args: { p_game: string; p_proof: Json; p_token: string; p_user: string }
+        Returns: Json
+      }
+      companion_allowance_for: { Args: { p_user_id: string }; Returns: Json }
       companion_answer_revision: {
         Args: { episode: number; media: string; season: number; title: number }
         Returns: number
       }
+      companion_month_window: {
+        Args: { p_anchor: string; p_now: string }
+        Returns: {
+          period_end: string
+          period_start: string
+        }[]
+      }
+      companion_usage_enabled: { Args: never; Returns: boolean }
+      decide_cinegeek_pack: {
+        Args: { p_keep: boolean; p_pack: string; p_replace?: string }
+        Returns: Json
+      }
+      end_cinegeek_game: { Args: { p_game: string }; Returns: undefined }
+      end_companion_question_attempt: {
+        Args: {
+          p_attempt: string
+          p_pause: boolean
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      finish_cinegeek_win: {
+        Args: {
+          p_game: string
+          p_token: string
+          p_user: string
+          p_valid: boolean
+        }
+        Returns: Json
+      }
+      finish_companion_question: {
+        Args: {
+          p_attempt: string
+          p_charge: boolean
+          p_conversation: Json
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      finish_companion_question_before_spending: {
+        Args: {
+          p_attempt: string
+          p_charge: boolean
+          p_conversation: Json
+          p_user_id: string
+        }
+        Returns: Json
+      }
       get_cinegeek_access: { Args: never; Returns: Json }
       get_companion_allowance: { Args: never; Returns: Json }
+      grant_companion_question_pack: {
+        Args: {
+          p_questions: number
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       match_companion_chunks: {
         Args: {
           p_current_episode: number
@@ -631,7 +1094,34 @@ export type Database = {
         Args: { p_charge: boolean; p_conversation: Json; p_user_id: string }
         Returns: Json
       }
+      record_companion_answer_legacy: {
+        Args: { p_charge: boolean; p_conversation: Json; p_user_id: string }
+        Returns: Json
+      }
+      redeem_cinegeek_xp: {
+        Args: { p_item: string; p_request: string }
+        Returns: Json
+      }
+      reserve_companion_question_call: {
+        Args: {
+          p_attempt: string
+          p_call_id: string
+          p_micro_usd: number
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       reserve_companion_sol_call: {
+        Args: {
+          p_call_id: string
+          p_micro_usd: number
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      reserve_companion_sol_call_legacy: {
         Args: {
           p_call_id: string
           p_micro_usd: number
@@ -644,6 +1134,10 @@ export type Database = {
         Args: { p_call: string; p_hash: string; p_user: string }
         Returns: Json
       }
+      reserve_smart_list_interpretation_legacy: {
+        Args: { p_call: string; p_hash: string; p_user: string }
+        Returns: Json
+      }
       settle_companion_sol_call: {
         Args: {
           p_call_id: string
@@ -652,6 +1146,29 @@ export type Database = {
           p_micro_usd: number
         }
         Returns: boolean
+      }
+      settle_companion_sol_call_legacy: {
+        Args: {
+          p_call_id: string
+          p_generation_id: string
+          p_halt_reason: string
+          p_micro_usd: number
+        }
+        Returns: boolean
+      }
+      spin_cinegeek_reward: { Args: never; Returns: Json }
+      start_cinegeek_game: {
+        Args: { p_game: string; p_start: number; p_target: number }
+        Returns: Json
+      }
+      store_cinegeek_reveal: {
+        Args: {
+          p_pack: string
+          p_person: Json
+          p_token: string
+          p_user: string
+        }
+        Returns: Json
       }
       store_companion_episode_recap: {
         Args: {
