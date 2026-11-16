@@ -1,0 +1,111 @@
+CineGeek Apple purchase rollout — prepared locally, 16 November 2026
+
+Purpose
+Connect Apple's verified Monthly/Annual subscriptions to the same live plan
+and allowance rules already used by CineGeek. Sales stay OFF during this phase.
+The existing isolated Apple Sandbox service and test accounts remain separate.
+
+Completed locally
+- Production-only signature/API verification, authenticated app-account binding,
+  duplicate-safe delivery, restores, refunds/expiry and missed-renewal recovery.
+- Monthly and Annual retain 15 included questions per subscription month. Restore
+  or switching plans does not reset spent questions. The owner's existing private
+  Monthly grant is preserved until an actual subscription is verified.
+- Your Plan has disabled-by-default purchase/restore controls, localized Apple
+  prices, pending/cancelled outcomes and receipts finished only after durable ack.
+- A scoped server-to-server ledger bridge avoids giving Render the live database
+  service-role key. Only five named billing operations are exposed. The live
+  service-role credential stays in its existing Supabase environment.
+- Native, relay, ledger, database-verification and sales gates all default OFF.
+- Packaging includes a pinned npm lockfile and public Apple root certificates.
+  No private keys, sessions or customer data are included.
+
+Evidence
+Full web/server suite: 1,370 tests in 89 files passed before the final ledger
+bridge; the final bridge/service/database suite passed another targeted run of
+51 tests, including 14 new ledger boundary tests. Client/UI rerun: 20 passed.
+Native Xcode result: Passed, 32 tests, zero failures/skips, exit code 0. Diagnostic
+collection timed out after tests finished; this did not fail the test result.
+Frontend TypeScript, scoped ESLint, both Deno entrypoints and Vite build passed.
+The production receipt tests use controlled Apple API/signature doubles and a
+disposable PGlite database; these are NOT evidence of live Production purchases.
+No new AI requests were made. Companion answers, model, context, spoiler checks
+and budgets are unchanged: $0.35/question, $3/account/calendar month, $5 overall.
+
+Deployment proposed — not performed
+A single Render web service: cinegeek-apple-production, Node 22,
+0.5c-512mb (legacy Starter), no autoscaling, no new Render database/disk.
+Official advertised compute price: $7/month, plus applicable tax and metered
+usage. Hobby currently includes 5 GB bandwidth; public-internet overage is
+$0.15/GB. Build usage can also be billed. This is NOT a hard $7 total bill cap.
+Keep the existing free Hobby workspace; do not upgrade its workspace plan.
+Confirm the dashboard's price and available spending controls before creating.
+Free Render sleeps after 15 idle minutes and is not recommended by Render for
+production applications; it cannot run this recovery worker reliably.
+
+Source package: .apple-production-build/node-service
+Build: npm ci --omit=dev --ignore-scripts
+Start: npm start
+Health: /healthz
+Apple notifications: /apple-purchases/notifications
+Disable automatic deployments and deploy only the reviewed package revision.
+Use a dedicated PRIVATE repository; give Render access only to that repository.
+
+Approval needed for the next hosted step
+- The recurring paid Render instance, tax and metered-use terms.
+- Storing the existing Apple purchase-verification signing key and a newly
+  generated, dedicated ledger secret in this separate service. Do not export
+  SUPABASE_SERVICE_ROLE_KEY; the host uses the public anon key for getUser.
+- One existing-credit Lovable deployment of the scoped ledger/relay and the
+  reviewed purchase schema. Prior PR #23 credit approval is already used.
+No activation of customer charges, public frontend, paid questions, trial,
+question pack, Apple product availability, or larger AI cap is included.
+
+Controlled rollout order
+1. Review changes against current origin/main and take a private schema/policy
+   backup. Do not merge the unrelated dirty native/UI work wholesale.
+2. Apply supabase/release/apple-production.sql ONCE, transactionally. Both flags
+   remain false. Confirm owner plan, XP, questions and all AI caps are unchanged.
+3. Generate a new 32-byte ledger secret after approval. Store it only as server
+   secrets in the billing host and existing CineGeek Supabase. Never in the app.
+4. Deploy apple-billing-ledger and apple-purchases with legacy JWT gateway checks
+   disabled: ledger authenticates its dedicated server secret; purchase handler
+   validates the signed-in account, Apple signatures and account-token binding.
+   Keep APPLE_BILLING_LEDGER_ENABLED and APPLE_PRODUCTION_RELAY_ENABLED false.
+5. Create the approved host using the private reviewed package, Apple signing
+   key/issuer/key ID, public Supabase anon key and dedicated ledger secret.
+   Verification environment/project are pinned; request bodies cannot change them.
+6. Enable ledger/verification only after checking source revision and health.
+   Set DB enabled=true but sales_enabled=false. Verify unauthorized/invalid/
+   wrong-environment submissions cannot write plans or balances; inspect private
+   permissions and confirm both limits and owner enrollment remain unchanged.
+7. Send Apple's signed notification TEST, check durable worker progress/restart
+   and run multi-connection PostgreSQL contention checks before enabling sales.
+8. Keep the native production opt-in absent and all customer purchase controls OFF.
+   No paid transaction is authorized by this hosting phase.
+
+Remaining before App Store sales
+- Normal paywall/onboarding and TestFlight/App Review Sandbox flow still need
+  integration/verification. Production rejects Sandbox intentionally; the old
+  Debug-only Sandbox lab alone is NOT a release-compatible review experience.
+- Recheck consent/privacy/account deletion, product metadata/availability and
+  restore/manage-subscription paths, then final TestFlight walkthrough.
+- Apple Focus distribution request BFF98HZGPL is submitted, approval pending.
+  Physical iPhone blocking/restoration passed by owner report on 16 November.
+- Public operating budget must be agreed before taking customer subscriptions:
+  the $5 global AI cap remains a private-beta limit.
+- DSA, bank currency and deferred legal-name corrections remain separate Apple
+  account items; no declaration or identity change was made in this task.
+
+Rollback
+Before any real sale, leave/return sales_enabled=false and native purchase
+opt-in absent. Disable the relay to stop new app requests while retaining the
+ledger, receipts and recovery evidence. Never drop entitlement/transaction
+history to undo a rollout. After real subscriptions exist, verification and
+restore must remain available even if new sales are paused.
+
+References checked 16 November 2026
+https://render.com/articles/set-up-self-hosted-github-actions-runners-on-render
+https://render.com/docs/compute-plans
+https://render.com/docs/free
+https://render.com/docs/outbound-bandwidth
