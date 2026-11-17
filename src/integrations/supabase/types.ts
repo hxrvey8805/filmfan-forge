@@ -213,6 +213,193 @@ export type Database = {
           },
         ]
       }
+      apple_review_entitlements: {
+        Row: {
+          anchor: string
+          plan: string
+          revoked: boolean
+          user_id: string
+          valid_until: string
+          verified_transaction_id: string
+        }
+        Insert: {
+          anchor: string
+          plan: string
+          revoked?: boolean
+          user_id: string
+          valid_until: string
+          verified_transaction_id: string
+        }
+        Update: {
+          anchor?: string
+          plan?: string
+          revoked?: boolean
+          user_id?: string
+          valid_until?: string
+          verified_transaction_id?: string
+        }
+        Relationships: []
+      }
+      apple_review_notifications: {
+        Row: {
+          notification_id: string
+          original_id: string
+          received_at: string
+        }
+        Insert: {
+          notification_id: string
+          original_id: string
+          received_at?: string
+        }
+        Update: {
+          notification_id?: string
+          original_id?: string
+          received_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apple_review_notifications_original_id_fkey"
+            columns: ["original_id"]
+            isOneToOne: false
+            referencedRelation: "apple_review_owners"
+            referencedColumns: ["original_id"]
+          },
+        ]
+      }
+      apple_review_owners: {
+        Row: {
+          account_token: string
+          kind: string
+          original_id: string
+          user_id: string | null
+        }
+        Insert: {
+          account_token: string
+          kind: string
+          original_id: string
+          user_id?: string | null
+        }
+        Update: {
+          account_token?: string
+          kind?: string
+          original_id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      apple_review_policy: {
+        Row: {
+          enabled: boolean
+          id: boolean
+          sales_enabled: boolean
+        }
+        Insert: {
+          enabled?: boolean
+          id?: boolean
+          sales_enabled?: boolean
+        }
+        Update: {
+          enabled?: boolean
+          id?: boolean
+          sales_enabled?: boolean
+        }
+        Relationships: []
+      }
+      apple_review_recovery: {
+        Row: {
+          cursor: string
+          id: boolean
+          last_attempt: string | null
+          last_success: string | null
+          lease: string | null
+          lease_until: string | null
+        }
+        Insert: {
+          cursor?: string
+          id?: boolean
+          last_attempt?: string | null
+          last_success?: string | null
+          lease?: string | null
+          lease_until?: string | null
+        }
+        Update: {
+          cursor?: string
+          id?: boolean
+          last_attempt?: string | null
+          last_success?: string | null
+          lease?: string | null
+          lease_until?: string | null
+        }
+        Relationships: []
+      }
+      apple_review_testers: {
+        Row: {
+          expires_at: string
+          starts_at: string
+          user_id: string
+        }
+        Insert: {
+          expires_at: string
+          starts_at?: string
+          user_id: string
+        }
+        Update: {
+          expires_at?: string
+          starts_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      apple_review_transactions: {
+        Row: {
+          expires_at: string | null
+          original_id: string
+          original_purchased_at: string
+          product_id: string
+          purchased_at: string
+          reconciled_at: string
+          revoked_at: string | null
+          signed_at: string
+          subscription_status: number | null
+          transaction_id: string
+          upgraded: boolean
+        }
+        Insert: {
+          expires_at?: string | null
+          original_id: string
+          original_purchased_at: string
+          product_id: string
+          purchased_at: string
+          reconciled_at: string
+          revoked_at?: string | null
+          signed_at: string
+          subscription_status?: number | null
+          transaction_id: string
+          upgraded: boolean
+        }
+        Update: {
+          expires_at?: string | null
+          original_id?: string
+          original_purchased_at?: string
+          product_id?: string
+          purchased_at?: string
+          reconciled_at?: string
+          revoked_at?: string | null
+          signed_at?: string
+          subscription_status?: number | null
+          transaction_id?: string
+          upgraded?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apple_review_transactions_original_id_fkey"
+            columns: ["original_id"]
+            isOneToOne: false
+            referencedRelation: "apple_review_owners"
+            referencedColumns: ["original_id"]
+          },
+        ]
+      }
       cinegeek_games: {
         Row: {
           awarded: number
@@ -1088,6 +1275,29 @@ export type Database = {
           user_id: string
         }[]
       }
+      apple_review_can_deliver: { Args: { p_user: string }; Returns: boolean }
+      apple_review_claim_recovery: { Args: never; Returns: Json }
+      apple_review_deliver: {
+        Args: { p_notification?: string; p_user: string; p_verified: Json }
+        Returns: Json
+      }
+      apple_review_finish_recovery: {
+        Args: {
+          p_complete: boolean
+          p_cursor: string
+          p_lease: string
+          p_previous: string
+          p_successful: boolean
+        }
+        Returns: boolean
+      }
+      apple_review_reconcile_batch: {
+        Args: { p_after?: string; p_limit?: number }
+        Returns: {
+          transaction_id: string
+          user_id: string
+        }[]
+      }
       begin_companion_question: {
         Args: {
           p_attempt: string
@@ -1175,6 +1385,7 @@ export type Database = {
         Returns: Json
       }
       get_apple_purchase_configuration: { Args: never; Returns: Json }
+      get_apple_review_configuration: { Args: never; Returns: Json }
       get_cinegeek_access: { Args: never; Returns: Json }
       get_companion_allowance: { Args: never; Returns: Json }
       grant_companion_question_pack: {
