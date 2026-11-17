@@ -19,7 +19,7 @@ type TierFunctions = {
 
 type TierDatabase = Omit<Database, 'public'> & {
   public: Omit<Database['public'], 'Functions'> & {
-    Functions: Database['public']['Functions'] & TierFunctions;
+    Functions: TierFunctions;
   };
 };
 
@@ -27,7 +27,8 @@ export function tierRpc<Name extends keyof TierFunctions>(
   name: Name,
   args?: TierFunctions[Name]['Args'],
 ) {
-  // Same authenticated client and transport; this only extends static typing.
+  // Same authenticated client and transport; scoped contracts avoid collisions
+  // when live-generated schema types gain the staged RPC names.
   const client = supabase as unknown as SupabaseClient<TierDatabase>;
   return client.rpc(name, args);
 }
