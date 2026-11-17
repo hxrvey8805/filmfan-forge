@@ -8,7 +8,7 @@ export function listProviderBody(request: string) {
   return {
     model: LIST_MODEL, stream: false, temperature: 0, max_tokens: 4096,
     reasoning: { enabled: true, exclude: true },
-    provider: { allow_fallbacks: false, require_parameters: true, max_price: { prompt: 0, completion: 0, request: 0 } },
+    provider: { only: ["baidu"], allow_fallbacks: false, require_parameters: true, max_price: { prompt: 0, completion: 0, request: 0 } },
     // Disable workspace plugin defaults; no paid model fallbacks, tools or searches.
     plugins: ["web", "response-healing", "context-compression", "file-parser", "pareto-router", "fusion"].map(id => ({ id, enabled: false })),
     // Recursive provider schemas distorted numeric rules in saved evaluations.
@@ -50,6 +50,7 @@ export async function interpretWithFreeModel(request: string, key: string, trans
 type Reservation = { status: "reserved" | "limited" | "busy" | "pro_required" } | { status: "cached"; result: unknown };
 export type ListServiceDependencies = {
   authenticate: (token: string) => Promise<string | null>;
+  allowed: (userId: string) => Promise<boolean>;
   reserve: (userId: string, hash: string, callId: string) => Promise<Reservation>;
   complete: (userId: string, callId: string, result: ListInterpretation) => Promise<void>;
   interpret: (request: string) => Promise<ListInterpretation>;
@@ -66,6 +67,7 @@ export function listInterpreterHandler(deps: ListServiceDependencies) {
       if (!token) return reply(401, { error: "sign_in" });
       const userId = await deps.authenticate(token);
       if (!userId) return reply(401, { error: "sign_in" });
+      if (!await deps.allowed(userId)) return reply(403, {error:"ai_consent_required"});
       // Bounded body even without Content-Length. No watch history or title list accepted.
       const reader = req.body?.getReader();
       if (!reader) return reply(400, { error: "invalid_request" });

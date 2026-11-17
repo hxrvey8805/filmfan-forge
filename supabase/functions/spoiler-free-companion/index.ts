@@ -17,6 +17,7 @@ import {
 import { companionAnswer, type JsonGenerator } from "../_shared/answer.ts";
 import { companionResponse, exactRepeatRequest, immediateMemoryResponse } from "../_shared/companion-response.ts";
 import { companionReleaseFor, companionEvidenceBudget, companionGenerator } from "../_shared/companion-provider.ts";
+import { aiPermission } from "../_shared/ai-privacy.ts";
 import { beginQuestionAllowance, QuestionAllowanceError } from "../_shared/question-allowance.ts";
 import { selectSceneContext, subtitleSearchText } from "../_shared/scene-evidence.ts";
 import { permittedSceneNotes, type ReviewedSceneNote, type PreparedSceneNote } from "../_shared/reviewed-scenes.ts";
@@ -139,6 +140,13 @@ serve(async req => {
       { global: { headers: { Authorization: authorization } } });
     const { data: { user }, error: authError } = await userDb.auth.getUser();
     if (authError || !user) return json({ error: 'Please log in.' }, 401);
+    // This notice covers the production OpenAI route. A configuration change
+    // must never send personal prompts to an undisclosed alternative provider.
+    if (Deno.env.get('COMPANION_AI_PROVIDER')?.trim() !== 'openrouter-sol') return json({error:'Geek is temporarily unavailable.'},503);
+    const privacyDb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    if (!await aiPermission((name,args)=>privacyDb.rpc(name,args),user.id,'companion')) {
+      return json({error:'Please review and allow AI sharing in Profile → Account & privacy before asking Geek.',code:'ai_consent_required'},403);
+    }
     const release = companionReleaseFor(user, name => Deno.env.get(name));
     let body;
     try { body = await req.json(); } catch { return json({ error: 'Invalid request' }, 400); }
@@ -342,7 +350,7 @@ serve(async req => {
     }
     if (error instanceof RecapPreparing) return json({status:'preparing_recap'}, 202);
     if (error instanceof QuestionAllowanceError) return json({error:error.message,code:error.code},error.status);
-    console.error('Companion request failed', error instanceof Error ? error.message : 'database error');
+    console.error('Companion request failed');
     return json({ error: error instanceof Error ? error.message : 'Unable to answer right now. Please try again.',
       ...(allowance?.active ? {code:'question_request_closed'} : {}) }, 503);
   }

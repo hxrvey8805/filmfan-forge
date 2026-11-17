@@ -36,6 +36,7 @@ it('bounds request and rule tree size',()=>{
 it('requests only the pinned free model with zero prices, no paid fallback and only the description',()=>{
   const body=listProviderBody('something funny and short');
   expect(body.model).toBe('baidu/ernie-5.5-flash-preview:free');expect(body).not.toHaveProperty('models');
+  expect(body.provider.only).toEqual(["baidu"]);
   expect(body.provider.allow_fallbacks).toBe(false);
   expect(body.response_format.type).toBe('json_object');
   expect(body.provider.max_price).toEqual({prompt:0,completion:0,request:0});
@@ -63,7 +64,7 @@ it.each([
 });
 const request = (body:unknown={request:'something funny and short'}, auth=true) => new Request('https://app.test/interpreter',{method:'POST',headers:auth?{Authorization:'Bearer fixture'}:{},body:JSON.stringify(body)});
 function service() {
-  const deps={authenticate:vi.fn().mockResolvedValue('owner'),reserve:vi.fn().mockResolvedValue({status:'reserved'}),complete:vi.fn().mockResolvedValue(undefined),interpret:vi.fn().mockResolvedValue(suggestion)};
+  const deps={allowed:vi.fn().mockResolvedValue(true),authenticate:vi.fn().mockResolvedValue('owner'),reserve:vi.fn().mockResolvedValue({status:'reserved'}),complete:vi.fn().mockResolvedValue(undefined),interpret:vi.fn().mockResolvedValue(suggestion)};
   return {deps,handle:listInterpreterHandler(deps)};
 }
 it('requires an authenticated user before touching cache, quotas or AI',async()=>{
@@ -93,4 +94,11 @@ it('reuses a validated cache and fails closed on quota or database errors',async
 it('rejects contradictory AND conditions rather than offering an empty rule',()=>{
   const positive={kind:'genre',value:'Comedy',scope:'movie'};
   expect(parseListInterpretation({kind:'suggestion',rule:{kind:'all',scope:'movie',rules:[positive,{kind:'not',scope:'movie',rule:positive}]}})).toBeNull();
+});
+
+it('permission denial or database failure never touches AI, cached results or quotas',async()=>{
+ const {deps,handle}=service();deps.allowed.mockResolvedValue(false);
+ expect((await handle(request())).status).toBe(403);
+ deps.allowed.mockRejectedValue(Error('private failure'));expect((await handle(request())).status).toBe(503);
+ expect(deps.reserve).not.toHaveBeenCalled();expect(deps.interpret).not.toHaveBeenCalled();
 });

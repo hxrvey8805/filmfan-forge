@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Home from "../src/pages/Home";
 import Auth from "../src/pages/Auth";
 import { AppSession } from "../src/components/AppSession";
@@ -11,6 +11,7 @@ const auth = vi.hoisted(() => ({
   signInWithPassword: vi.fn(), resetPasswordForEmail: vi.fn(),
 }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { auth } }));
+beforeEach(() => { vi.clearAllMocks(); });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 function open(path: string) {

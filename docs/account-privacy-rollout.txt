@@ -1,0 +1,105 @@
+CineGeek account and privacy release — 17 November 2026
+
+Result
+Users can delete their own account after confirming their password, recover a
+password from a verified email link, and review or withdraw permission separately
+for companion AI and the AI list helper. Privacy and support pages are public.
+The server rejects AI requests without the current permission before spending or
+source retrieval. No existing account is opted in by migration.
+
+Public contact: cinegeek.support@gmail.com
+Operator: Harveer Sandhu (known as Harvey Sandhu), trading as CineGeek.
+Public page destinations:
+https://cinegeek.lovable.app/privacy
+https://cinegeek.lovable.app/support
+https://cinegeek.lovable.app/reset-password
+
+Scope and validation
+This branch starts from origin/main 451bb03 and contains only the account/privacy
+release. It preserves the reviewed tier RPC contracts and generated schema types.
+The isolated web/server branch passes 1,204 tests in 80 files, TypeScript and the
+production web build. The current native development checkout passes 1,465 web
+tests and 36 native tests. Mobile screens were inspected at 393 x 852.
+Tests cover expired and ordinary sessions, recovery authentication, failed and
+successful deletion, permission withdrawal, account changes while a dialog is
+open, rewinding during permission, and account-specific local cleanup. Disposable
+database tests prove deletion cascades, other-account isolation, purchase reuse
+prevention, and preservation of already-spent aggregate AI budget.
+These are local results. Hosted reset-email delivery, deletion and public page
+availability have NOT yet passed live.
+
+Native release coordination
+The matching private iPhone candidate is built from the existing native checkout
+cinegeek-release-code-2026-11-13, not from this web/server release branch. It includes
+the already-reviewed native purchase and Focus work plus WatchFocus.forgetViewer.
+The latter clears active shields and removes only the deleting viewer's protected
+selection file. Keep the current native source snapshot with the build receipts.
+Do not overwrite that native project with this branch's older tracked iOS files.
+Do not install the new account UI until the backend and public recovery route are
+ready. Older installed clients cannot opt in until updated; fail-closed AI refusal
+during this coordinated rollout is expected, not an answer-engine change.
+
+Deployment order — one existing-credit Lovable request needs separate approval
+1. Verify origin/main still contains this tested release, with no intervening
+   changes to the same files. Back up current schema and affected data privately.
+   Record existing production-sales=false, the overall $5 AI cap, $0.35/question
+   and $3/account/calendar-month caps. Keep balances, enrollments and caps intact.
+2. Verify the live companion route is already openrouter-sol. Confirm current
+   smart-list model remains baidu/ernie-5.5-flash-preview:free and zero-price-only.
+   The added Baidu provider pin makes the existing disclosure explicit; never
+   substitute a paid provider or fallback model to make this release pass.
+3. Apply 20261117160000_account_privacy.sql ONCE. Verify migration history first;
+   if present, verify its objects rather than reapplying. All work is transactional.
+   Stop if the live schema differs from the tested table/constraint contracts.
+4. Run docs/operations/account-privacy-postflight.sql. Require the expected ready
+   version, enabled RLS, intended RPC permissions and deletion trigger. No direct
+   app-role access to the permission table. Do not grant clients the service RPCs.
+5. Deploy delete-account with verify_jwt=false; its own handler verifies the bearer
+   with Auth and requires password authentication within five minutes. Deploy
+   spoiler-free-companion, interpret-smart-list and search-content from this head.
+   The two AI functions enforce permission; search-content removes query logging.
+6. Add exactly https://cinegeek.lovable.app/reset-password to Auth's redirect
+   allowlist, preserving required existing redirects. Keep production site URL.
+7. Publish this frontend to make support/privacy/recovery URLs public, then verify
+   each without a session and from an email recovery redirect. Do not publish
+   App Store purchases, submit an App Store build, or change AI budgets.
+8. Install matching build 28 and confirm Profile -> Account & privacy is visible.
+   Save the App Store Privacy Policy and Support URLs only after public verification.
+
+Live acceptance checks
+- Unsigned /privacy and /support load; the exact support contact is clickable.
+- An ordinary signed-in session or an expired recovery link cannot set a password.
+- A disposable test account receives a real recovery email; its newest link sets
+  a new password and returns to sign-in. A used link cannot reset again. The user
+  enters any new password or verification code directly; none belongs in logs.
+- With permission unset/declined/withdrawn, companion and list-helper requests
+  fail before source or provider work and before quota/reservation changes.
+  Verify independently using two disposable accounts; do not opt in the owner.
+- Save each permission, reload and check it persists for only its account.
+- Wrong password and an old bearer cannot delete. Delete ONLY an explicitly
+  disposable account seeded for this check. Confirm associated active records,
+  local items and Focus tokens disappear; control account and aggregate spend stay.
+- Deletion explains Apple renewal and remains possible with active subscription.
+  Never delete the owner's everyday or existing purchase-test accounts.
+- Purchases remain disabled, Sandbox behavior and caps unchanged. No paid AI call
+  is needed to check the new gate; the answer engine and spoiler logic are unchanged.
+
+App Store privacy worksheet
+Prepare labels from actual stored data, not from the fact that AI permission exists.
+Declare Email Address, User ID, Purchase History, Other User Content, Gameplay
+Content, Customer Support, Product Interaction and Other Diagnostic Data for App
+Functionality, linked to the account where retained that way. Confirm any extra
+provider diagnostics before final submission. No advertising/tracking is used by
+the inspected app code; do not classify Apple card details or on-device Focus
+tokens as data collected by CineGeek. Do not claim that no data is collected.
+Provider retention/transfer settings and exact hosting backup/log periods need a
+final live configuration review. The policy uses retention criteria and does not
+promise immediate removal from backups, provider logs or Apple purchase records.
+
+Rollback
+Do not restore deleted user records or silently opt users in. Keep permission and
+deletion schema if a frontend issue requires repair. If deployment is incomplete,
+keep the new AI gates fail-closed until the permission UI is available. Disable the
+delete endpoint if readiness/postflight fails; do not bypass the migration marker.
+Use a forward repair for account/privacy defects; never remove consent to restore
+AI availability. No budget reset, purchase enablement or account reassignment.

@@ -104,7 +104,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('Searching TMDB for:', query);
+    // Do not retain the viewer’s catalogue query in service logs.
 
     // Search both movies and TV shows
     const [moviesResponse, tvResponse] = await Promise.all([
@@ -152,7 +152,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in search-content:', error);
+    console.error('search-content request failed');
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Search failed',

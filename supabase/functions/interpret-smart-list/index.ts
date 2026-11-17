@@ -1,9 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { interpretWithFreeModel, listInterpreterHandler } from "../_shared/list-interpreter-service.ts";
+import {aiPermission} from '../_shared/ai-privacy.ts';
 
 const url = Deno.env.get("SUPABASE_URL")!;
 const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
 Deno.serve(listInterpreterHandler({
+  allowed: userId=>aiPermission((name,args)=>admin.rpc(name,args),userId,'smart_lists'),
   authenticate: async token => {
     const { data, error } = await admin.auth.getUser(token);
     return error ? null : data.user?.id ?? null;

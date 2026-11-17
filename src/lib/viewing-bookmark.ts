@@ -49,3 +49,5 @@ export function saveBookmark(viewer: string | null, position: ViewingPosition) {
     tabBookmarks.delete(storageKey);
   } catch { tabBookmarks.set(storageKey, saved); }
 }
+
+export function forgetBookmarks(owner:string){for(const key of tabBookmarks.keys())if(key.startsWith(`cinegeek.position.v1.${owner}.`))tabBookmarks.delete(key);}

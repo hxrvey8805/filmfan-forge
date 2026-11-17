@@ -1,3 +1,4 @@
+import {useAIPrivacy} from '@/components/AIPrivacy';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { companionVersionFor, safeHistory, type Conversation, type ViewingPosition } from '../../supabase/functions/_shared/companion';
@@ -9,6 +10,7 @@ export interface CompanionMessage extends Conversation {
 
 // Both entry points use the same server-owned, title/episode-scoped history.
 export function useCompanion(position: ViewingPosition | null, enabled = true) {
+  const privacy = useAIPrivacy();
   const [userId, setUserId] = useState<string | null>(null);
   const [history, setHistory] = useState<{ scope: string; rows: CompanionMessage[] }>({ scope: '', rows: [] });
   const [isLoading, setLoading] = useState(false);
@@ -68,6 +70,8 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
     asking.current = true;
     setLoading(true);
     try {
+      if (!await privacy.ensure('companion')) return { cancelled: true };
+      if (currentView.current !== requestView) return { stale: true };
       const body = { ...position, recapProtocol: 1, timestamp, question: question.trim(), requestId: pendingRequest.current.id };
       const invoke = () => supabase.functions.invoke('spoiler-free-companion', { body });
       let { data, error } = await invoke();
@@ -82,6 +86,7 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
         try {
           const failure = await error.context.json();
           message = failure.error || message;
+          if (failure.code === "ai_consent_required") privacy.reload();
           // Retrying a retired cached answer needs a fresh request ID. Other
           // failures keep their ID so a successful save cannot charge twice.
           if (['answer_version_changed', 'question_request_closed', 'question_budget_unavailable'].includes(failure.code)) pendingRequest.current = null;

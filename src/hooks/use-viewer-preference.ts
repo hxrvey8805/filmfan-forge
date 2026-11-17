@@ -34,3 +34,5 @@ export function useViewerPreference<T extends string>(
   }
   return { value, choose, ready: Boolean(key) };
 }
+
+export function forgetViewerPreferences(owner:string){for(const key of temporary.keys())if(key.endsWith(`.${owner}`))temporary.delete(key);}

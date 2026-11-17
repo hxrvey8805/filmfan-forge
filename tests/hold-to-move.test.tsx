@@ -96,3 +96,6 @@ it("keeps the source title if the personal list cannot be saved", async () => {
   expect(fail).toHaveBeenCalled();
   expect((await rows())[0]?.list_type).toBe("watchlist");
 });
+
+// These tests exercise library interactions; explicit AI consent is covered in ai-privacy-ui.
+vi.mock("@/components/AIPrivacy",()=>({useAIPrivacy:()=>({ensure:async()=>true,reload:()=>{}})}));

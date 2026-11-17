@@ -13,6 +13,7 @@ interface NativeWatchFocus {
   startWithApps(options: { session: string; viewer: string; editOnly: boolean }): Promise<{ started: boolean; paused?: number; saved?: number }>;
   finish(options: { session: string }): Promise<void>;
   reset(): Promise<void>;
+  forgetViewer(options: { viewer: string }): Promise<void>;
   addListener(event: "statusChanged", listener: (status: FocusStatus) => void): Promise<PluginListenerHandle>;
 }
 
