@@ -49,3 +49,15 @@ it('bounds the streamed body even without a content-length header', async () => 
   const call = vi.fn(); const response = await billingLedgerHandler(config, call)(request('x'.repeat(16001)));
   expect(response.status).toBe(413); expect(call).not.toHaveBeenCalled();
 });
+
+it('allows only the exact review delivery methods, never enrollment or policy changes',async()=>{
+  const call=vi.fn(async()=>true),handle=billingLedgerHandler(config,call);
+  expect((await handle(request({name:'apple_review_can_deliver',args:{p_user:account}}))).status).toBe(200);
+  expect(call).toHaveBeenCalledWith('apple_review_can_deliver',{p_user:account});call.mockClear();
+  for(const body of [
+    {name:'apple_review_enroll',args:{p_user:account}},
+    {name:'apple_review_can_deliver',args:{p_user:account,sales_enabled:true}},
+    {name:'apple_review_reconcile_batch',args:{p_after:'',p_limit:6}},
+  ])expect((await handle(request(body))).status).toBe(400);
+  expect(call).not.toHaveBeenCalled();
+});
