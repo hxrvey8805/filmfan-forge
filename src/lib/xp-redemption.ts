@@ -14,3 +14,5 @@ export async function redeemXp(userId:string,item:string){
   pending.delete(key);try{localStorage.removeItem(key);}catch{/* optional persistence */}
   accountChanged();return data;
 }
+
+export function forgetPendingXp(owner:string){for(const key of pending.keys())if(key.startsWith(`cinegeek.xp.pending.${owner}.`))pending.delete(key);}

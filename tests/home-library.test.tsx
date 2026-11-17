@@ -71,7 +71,7 @@ it('keeps Focus watching and sends the chosen cutoff after ten minutes and a que
       return { data: { conversation: saved }, error: null };
     });
     fireEvent.change(screen.getByLabelText('Your question'), { target: { value: saved.question } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send question' }));
+    await act(async()=>{fireEvent.click(screen.getByRole('button', { name: 'Send question' }));});
     expect(endpoint).toHaveBeenCalledWith('spoiler-free-companion', { body: expect.objectContaining({
       tmdbId: title, mediaType: 'tv', seasonNumber: 1, episodeNumber: 1, seconds: 907,
       timestamp: '00:15:07', question: saved.question,
@@ -179,3 +179,6 @@ it('opens the selected media type even if a show and a movie share an ID', () =>
   fireEvent.click(screen.getByRole('button', { name: 'Find your first title' }));
   expect(onFindTitle).toHaveBeenCalledOnce();
 });
+
+// These tests exercise library interactions; explicit AI consent is covered in ai-privacy-ui.
+vi.mock("@/components/AIPrivacy",()=>({useAIPrivacy:()=>({ensure:async()=>true,reload:()=>{}})}));

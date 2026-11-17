@@ -10,6 +10,7 @@ import { ContentLoading } from "@/components/ContentLoading";
 import { useViewerSession } from "@/hooks/use-viewer-session";
 import { needsOnboarding, ONBOARDING_KEY } from "@/lib/onboarding";
 import "./auth.css";
+import {passwordResetURL} from "@/lib/password-recovery";
 
 const isPreview = import.meta.env.MODE === "mobile-preview";
 // Email links open in a browser outside the native app.
@@ -101,7 +102,7 @@ function AuthForm({ isLogin, email, setEmail }: {
     setFeedback(null);
     setBusy("reset");
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(address, { redirectTo: `${authOrigin}/auth` });
+      const { error } = await supabase.auth.resetPasswordForEmail(address, { redirectTo: passwordResetURL() });
       if (error) throw error;
       setFeedback({ kind: "info", place: "form", text: `If there’s an account for ${address}, check your inbox for a password reset link.` });
     } catch (error) {
@@ -109,6 +110,7 @@ function AuthForm({ isLogin, email, setEmail }: {
     } finally { setBusy(null); }
   }
 
+  const [params] = useSearchParams();
   const heading = isLogin ? "Sign in" : "Create an account";
   return <main className="auth-screen">
     <Card className="auth-card">
@@ -119,6 +121,7 @@ function AuthForm({ isLogin, email, setEmail }: {
           : isPreview ? "This preview uses the sample account below." : "Your CineGeek account"}</CardDescription>
       </CardHeader>
       <CardContent>
+        {params.get("deleted") === "1" && <p role="status" className="auth-notice">Your CineGeek account has been deleted.</p>}
         {confirmation ? <Link className="auth-link" to="/auth">Back to sign in</Link> : <>
           <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             <div className="space-y-2">
@@ -150,6 +153,7 @@ function AuthForm({ isLogin, email, setEmail }: {
             </Link>
           </div>
         </>}
+        <p className="text-center text-xs text-muted-foreground mt-6"><Link to="/privacy" className="underline">Privacy</Link> · <Link to="/support" className="underline">Support</Link></p>
       </CardContent>
     </Card>
   </main>;

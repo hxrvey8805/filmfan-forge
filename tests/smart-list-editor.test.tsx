@@ -118,6 +118,7 @@ it('discards a late AI interpretation after editing the request',async()=>{
   vi.mocked(interpretListWithAI).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
   render(<HomeLists viewer="test" shelves={shelves} onOpen={()=>{}}/>);
   tap('New list');type('List name','Something funny and short');tap('Smart match');tap('Ask Geek to interpret');
+  await act(async()=>{});
   tap('Edit matching rule');type('What belongs in this list?','Horror');
   await act(async()=>finish(aiComedy));
   expect(screen.queryByRole('button',{name:'Use this rule'})).toBeNull();tap('Create list');
@@ -133,3 +134,6 @@ it('keeps manual selection available on provider failure and does not retry auto
   expect(readLists(homeListKey('test'))[0]).toMatchObject({mode:'manual'});
   expect(interpretListWithAI).toHaveBeenCalledTimes(1);
 });
+
+// These tests exercise library interactions; explicit AI consent is covered in ai-privacy-ui.
+vi.mock("@/components/AIPrivacy",()=>({useAIPrivacy:()=>({ensure:async()=>true,reload:()=>{}})}));

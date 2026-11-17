@@ -42,3 +42,7 @@ verify_jwt = false
 # The fixed billing relay validates the signed-in account on the Node service.
 [functions.apple-review-purchases]
 verify_jwt = false
+
+# The handler verifies the bearer token with Auth and requires recent password authentication.
+[functions.delete-account]
+verify_jwt = false

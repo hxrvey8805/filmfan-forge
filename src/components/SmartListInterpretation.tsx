@@ -1,3 +1,4 @@
+import {useAIPrivacy} from "./AIPrivacy";
 import { useEffect, useRef, useState } from "react";
 import { Search, Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
@@ -8,6 +9,7 @@ import { interpretListWithAI, type ListInterpretation } from "@/lib/list-ai";
 
 const roleNames: Record<FactField,string> = { director:"Directed by",actor:"Starring",genre:"Genre or format",country:"Country of origin",language:"Original language",studio:"Produced by",topic:"Topic" };
 export function SmartListInterpretation({request, rule, viewer, onResolve, onRefine}: {request:string;rule:ListRule|null;viewer:string;onResolve:(rule:ListRule)=>void;onRefine:()=>void}) {
+  const privacy = useAIPrivacy();
   const interpretation = interpretListName(request);
   const lookup = interpretation.lookup;
   const [results, setResults] = useState<CatalogueChoice[] | null>(null);
@@ -25,6 +27,7 @@ export function SmartListInterpretation({request, rule, viewer, onResolve, onRef
     const next = new AbortController(); controller.current = next;
     setAiBusy(true); setError(""); setResults(null); setProposal(null);
     try {
+      if (!await privacy.ensure('smart_lists') || next.signal.aborted) return;
       const suggestion = await interpretListWithAI(request, viewer, next.signal);
       if (!next.signal.aborted) setProposal(suggestion);
     } catch (error) {

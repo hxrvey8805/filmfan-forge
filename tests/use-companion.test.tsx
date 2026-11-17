@@ -5,8 +5,9 @@ import { useCompanion, type CompanionMessage } from '../src/hooks/use-companion'
 import type { ViewingPosition } from '../supabase/functions/_shared/companion';
 
 const mock = vi.hoisted(() => ({
-  invoke: vi.fn(), load: vi.fn(), authChange: null as null | ((event: string, session: unknown) => void),
+  permission: vi.fn().mockResolvedValue(true), invoke: vi.fn(), load: vi.fn(), authChange: null as null | ((event: string, session: unknown) => void),
 }));
+vi.mock('@/components/AIPrivacy',()=>({useAIPrivacy:()=>({ensure:mock.permission})}));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {
   auth: {
     getSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }),
@@ -49,6 +50,7 @@ const mount = async (initial = position) => {
 };
 beforeEach(() => {
   vi.useFakeTimers();
+  mock.permission.mockReset().mockResolvedValue(true);
   mock.invoke.mockReset();
   mock.load.mockReset().mockResolvedValue({ data: [], error: null });
 });
@@ -184,4 +186,16 @@ describe('companion history and in-flight responses', () => {
     expect(modal.result.current.messages).toEqual(page.result.current.messages);
     expect(modal.result.current.messages).toHaveLength(1);
   });
+});
+
+it('declining AI permission sends no question and leaves history intact',async()=>{
+ const hook=await mount();mock.permission.mockResolvedValue(false);
+ await act(async()=>{expect(await hook.result.current.ask('Why?','00:01:00')).toMatchObject({cancelled:true});});
+ expect(mock.invoke).not.toHaveBeenCalled();
+});
+it('does not send an old question when a rewind happens during consent',async()=>{
+ const choice=deferred<boolean>(),hook=await mount();mock.permission.mockReturnValue(choice.promise);
+ let reply:Promise<unknown>;act(()=>{reply=hook.result.current.ask('Why?','00:01:00');});
+ hook.rerender({position:{...position,seconds:10},enabled:true});
+ await act(async()=>{choice.resolve(true);await reply!;});expect(mock.invoke).not.toHaveBeenCalled();
 });
