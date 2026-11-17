@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {productionPurchaseRelay} from '../supabase/functions/_shared/apple-production-relay';
+import {productionPurchaseRelay,reviewPurchaseRelay} from '../supabase/functions/_shared/apple-production-relay';
 const config={enabled:true,supabaseUrl:'https://pginaazhujdtcjonxjrh.supabase.co',nodeUrl:'https://cinegeek-apple-production.onrender.com/'};
 const request=(body='{"signedTransactionInfo":"fixture-signed"}',headers:Record<string,string>={})=>new Request('https://pginaazhujdtcjonxjrh.supabase.co/functions/v1/apple-purchases',{
   method:'POST',headers:{Origin:'capacitor://localhost',Authorization:'Bearer fixture','Content-Type':'application/json',...headers},body});
@@ -29,4 +29,11 @@ it('bounds a streamed request before forwarding',async()=>{
 it('hides upstream internals on failure',async()=>{
   const send=vi.fn(async()=>new Response('private stack',{status:503}));const r=await productionPurchaseRelay(config,send)(request());
   expect(await r.json()).toEqual({error:'purchase_verification_pending'});
+});
+
+it('keeps review requests on their separate fixed route and defaults them off',async()=>{
+  const send=vi.fn(async()=>Response.json({acknowledged:true}));
+  expect((await reviewPurchaseRelay({...config,enabled:false},send)(request())).status).toBe(503);expect(send).not.toHaveBeenCalled();
+  expect((await reviewPurchaseRelay(config,send)(request())).status).toBe(200);
+  expect(String(send.mock.calls[0][0])).toBe('https://cinegeek-apple-production.onrender.com/apple-review-purchases/purchase');
 });

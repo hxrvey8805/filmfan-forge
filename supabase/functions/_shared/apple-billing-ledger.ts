@@ -6,6 +6,11 @@ const contracts: Record<string, string[]> = {
   apple_production_reconcile_batch: ['p_after', 'p_limit'],
   apple_production_claim_recovery: [],
   apple_production_finish_recovery: ['p_lease', 'p_previous', 'p_cursor', 'p_complete', 'p_successful'],
+  apple_review_can_deliver: ['p_user'],
+  apple_review_deliver: ['p_user', 'p_verified', 'p_notification'],
+  apple_review_reconcile_batch: ['p_after', 'p_limit'],
+  apple_review_claim_recovery: [],
+  apple_review_finish_recovery: ['p_lease', 'p_previous', 'p_cursor', 'p_complete', 'p_successful'],
 };
 type LedgerCall = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 export function billingLedgerHandler(config: {enabled: boolean; projectUrl: string; secret: string}, call: LedgerCall) {
@@ -53,7 +58,7 @@ export function billingLedgerHandler(config: {enabled: boolean; projectUrl: stri
         return reply(400, {error: 'invalid_operation'});
       }
       const args = body.args as Record<string, unknown>;
-      if (body.name === 'apple_production_reconcile_batch' &&
+      if (['apple_production_reconcile_batch', 'apple_review_reconcile_batch'].includes(body.name) &&
         (!Number.isInteger(args.p_limit) || Number(args.p_limit) < 1 || Number(args.p_limit) > 5)) {
         return reply(400, {error: 'invalid_operation'});
       }

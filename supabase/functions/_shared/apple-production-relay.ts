@@ -1,6 +1,12 @@
 // Default-off native-app relay. The dedicated Node service verifies the session,
 // Apple signature, environment and current subscription state before delivery.
 export function productionPurchaseRelay(config: {enabled: boolean; supabaseUrl: string; nodeUrl: string}, send: typeof fetch = fetch) {
+  return purchaseRelay(config, '/apple-purchases/purchase', send);
+}
+export function reviewPurchaseRelay(config: {enabled: boolean; supabaseUrl: string; nodeUrl: string}, send: typeof fetch = fetch) {
+  return purchaseRelay(config, '/apple-review-purchases/purchase', send);
+}
+function purchaseRelay(config: {enabled: boolean; supabaseUrl: string; nodeUrl: string}, route: string, send: typeof fetch) {
   const origin = 'capacitor://localhost';
   const headers = {'Content-Type': 'application/json', 'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'X-Content-Type-Options': 'nosniff'};
@@ -31,7 +37,7 @@ export function productionPurchaseRelay(config: {enabled: boolean; supabaseUrl: 
       }
       const body = new Uint8Array(size); let offset = 0;
       for (const chunk of chunks) {body.set(chunk, offset); offset += chunk.byteLength;}
-      const response = await send(new URL('/apple-purchases/purchase', target), {method: 'POST', redirect: 'error', signal,
+      const response = await send(new URL(route, target), {method: 'POST', redirect: 'error', signal,
         headers: {'Content-Type': 'application/json', Authorization: req.headers.get('authorization')!, Origin: origin}, body});
       if (!response.ok || !response.headers.get('content-type')?.startsWith('application/json')) {
         await response.body?.cancel(); return reply(response.ok ? 503 : response.status, 'purchase_verification_pending');

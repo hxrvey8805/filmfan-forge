@@ -1,0 +1,101 @@
+CineGeek normal purchase screens — prepared 17 November 2026
+
+Status: LOCAL ONLY. Nothing in this update is deployed, merged, installed on the
+phone or published. No real purchase, AI request, policy activation or enrollment
+was made. Current Production verification remains on with customer sales off.
+
+What this adds
+Monthly, Annual and Restore use the same purchase flow in onboarding and Profile.
+Prices come from Apple; the annual monthly equivalent and full yearly charge are
+both visible. Pending/cancelled/failed verification never completes onboarding.
+An onboarding-save retry after successful verification does not repurchase.
+Profile opens Apple's native Manage Subscriptions sheet even if the billing
+server cannot be reached. Account switches cannot deliver someone else's receipt.
+
+The new native adapter supports Release/TestFlight but accepts only Apple's
+verified Sandbox app environment and the CineGeek bundle. It is explicitly
+opted in; the real Production purchase opt-in remains absent. Debug test tools
+and their separate Supabase project retain their existing gates.
+
+A separate apple_review_* ledger in the live CineGeek project accepts Sandbox
+receipts only for explicitly enrolled test accounts, for at most 30 days.
+Enrollment alone gives no Pro access or questions. Normal accounts cannot enroll
+themselves. Accounts with any existing Production entitlement or private Monthly
+grant cannot enter this lane. Never enroll the owner's everyday Monthly account.
+Verified test access is visible through the ordinary app plan/allowance RPCs and
+ends when the receipt expires, is revoked, enrollment expires or review is disabled.
+No test purchase writes the real paid ledger. Both plans remain 15/month; restoring
+or switching plans does not reset usage. Existing XP, AI model, context, spoiler
+checks and caps ($5 total, $0.35/question, $3/account/calendar month) are unchanged.
+
+Scope of the release checkout
+cinegeek-apple-review-release-2026-11-17 starts from current main 07fab513.
+It contains only the review SQL, scoped ledger extension, fixed review relay and
+boundary tests. Native/client work remains in the main local development folder;
+it will be installed as a private test build, with no public frontend publication.
+Render is packaged separately from that local source for the existing approved
+cinegeek-apple-production server. No new hosting service or credential is needed.
+The scoped ledger bridge gains five review operations, not enrollment/policy SQL.
+
+Local evidence
+- 1,421 web/server checks passed: the main run passed 1,417; four socket checks
+  were blocked by the shell sandbox. All five tests in that HTTP file then passed
+  with localhost-listening permission. No failed assertions remain.
+- 33 native simulator tests passed (16 StoreKit, 17 Focus). StoreKit test fixtures
+  now wait for asynchronous transaction publication instead of reading stale
+  caches immediately; original assertions are retained.
+- Frontend and Node TypeScript, scoped ESLint, three Deno entrypoints and the
+  native web build passed. App scheme Release device compile passed unsigned.
+- Controlled Apple doubles and disposable PGlite tests are not live Apple
+  receipt tests and do not prove multi-connection PostgreSQL contention.
+- Exact backend checkout is tested separately before a deployment request.
+Private logs/hashes: .cinegeek-private/apple-review-prep-2026-11-17 in App workspace.
+
+Approval needed for next deployment
+The previous one-request Lovable credit approval covered completed PR #24.
+Request one deployment using existing credits for these exact review changes,
+plus a deployment to the already approved Render server and a private iPhone
+build. No extra hosting purchase, top-up, public release or customer sales.
+
+Controlled rollout (do not execute before that approval)
+1. Recheck main, back up active entitlement helper, policies, permissions and
+   owner's plan/XP/allowance/budget. Confirm the new review objects are absent;
+   do not rerun CREATE SQL on an already-applied schema.
+2. Apply supabase/release/apple-review.sql once in its transaction. It starts off.
+   Confirm the paid/private entitlement branches, permissions and budgets match.
+3. Deploy the updated apple-billing-ledger and new apple-review-purchases Edge
+   function. Its legacy JWT gateway is disabled because the fixed Node route
+   verifies the real signed-in app session, Apple signature and account token.
+   APPLE_REVIEW_RELAY_ENABLED stays false until postflight checks.
+4. Deploy the reviewed Node package to the existing Render instance, auto-deploy
+   off. Preserve its credentials, production routes, recovery cursor and gates.
+   APPLE_REVIEW_VERIFICATION_ENABLED initially false; then enable for review tests.
+5. Use a dedicated ordinary test account, not the owner's private Monthly account.
+   Inspect its identity first; enroll it for seven days explicitly. Activate only
+   review enabled/sales_enabled and review relay. Enrollment still grants nothing
+   before a verified purchase. Ordinary users and Production sales remain off.
+6. Use a fresh Apple Sandbox tester or deliberately cleared test history so prior
+   purchases bound to the isolated test project's account token cannot transfer.
+   Passwords/login prompts remain user-entered. Never rewrite receipt ownership.
+7. Point Apple's Sandbox notification URL to the reviewed fixed route:
+   https://cinegeek-apple-production.onrender.com/apple-review-purchases/notifications
+   Preserve its Production URL. Record the old Sandbox URL for rollback.
+8. Install the private normal-screen build. Test Monthly onboarding, Annual upgrade,
+   restore, cancellation/pending, sign-out/in, restart, expiry/refund, account
+   separation and notification/missed-notification recovery. Inspect actual
+   server ledger and ordinary tier RPCs; do not rely solely on the UI message.
+9. Confirm real ledger unchanged, owner still Monthly with unchanged XP/questions,
+   sales off, and all AI caps unchanged. Record live results separately from mocks.
+
+Rollback
+Disable review sales first, then review verification/relay and review policy.
+Existing real purchases, private owner access and Production recovery stay intact.
+Keep test ledger evidence; do not delete purchase/ownership history to roll back.
+Restore the previous Sandbox notification URL if abandoning this test lane.
+Never alter the Production sales flag or remove the account-token requirement.
+
+Still separate release work
+Multi-connection billing race checks; Focus distribution approval; public AI
+operating budget and packs; privacy/content/account checks; user visual review;
+full TestFlight walkthrough; store listing; approval and controlled launch.
+No customer charge or App Store submission is authorized by this test deployment.
