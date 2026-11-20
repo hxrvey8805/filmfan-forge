@@ -400,6 +400,30 @@ export type Database = {
           },
         ]
       }
+      cinegeek_ai_permissions: {
+        Row: {
+          allowed: boolean
+          feature: string
+          notice_version: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allowed: boolean
+          feature: string
+          notice_version: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allowed?: boolean
+          feature?: string
+          notice_version?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       cinegeek_games: {
         Row: {
           awarded: number
@@ -1316,6 +1340,11 @@ export type Database = {
         }
         Returns: Json
       }
+      cinegeek_account_privacy_ready: { Args: never; Returns: string }
+      cinegeek_ai_allowed: {
+        Args: { p_feature: string; p_user: string; p_version: string }
+        Returns: boolean
+      }
       cinegeek_game_access: {
         Args: { p_game: string; p_user: string }
         Returns: boolean
@@ -1384,6 +1413,7 @@ export type Database = {
         }
         Returns: Json
       }
+      get_ai_privacy_choices: { Args: never; Returns: Json }
       get_apple_purchase_configuration: { Args: never; Returns: Json }
       get_apple_review_configuration: { Args: never; Returns: Json }
       get_cinegeek_access: { Args: never; Returns: Json }
@@ -1516,6 +1546,10 @@ export type Database = {
       }
       reserve_smart_list_interpretation_legacy: {
         Args: { p_call: string; p_hash: string; p_user: string }
+        Returns: Json
+      }
+      set_ai_privacy_choice: {
+        Args: { p_allowed: boolean; p_feature: string; p_version: string }
         Returns: Json
       }
       settle_companion_sol_call: {
