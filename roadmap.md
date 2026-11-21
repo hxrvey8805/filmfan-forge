@@ -1,4 +1,12 @@
-# Approved PR #27 rollout
+# Approved PR #28 rollout
+
+- [x] Synced merge 493a1f0085bc97dd930e505f690d7b276f829a30 and tested 657f2bc6b818c597149b91206ccf6e48cf332725 have identical tree 52c576fed06ec5c2c93003a1b8b20f4898c385ad; exact SQL SHA-256 matches 9ed93781dffff3da2b25914abe44631ace4c893603aceffb5eb395bd006baef8.
+- [x] Read-only preflight: v2/version/hash absent; legacy authenticated-only RPC intact, production sales false, approved AI caps and private grant intact.
+- [ ] Apply only the exact daily skin rewards migration once.
+- [ ] Verify live definition, execution permissions, unchanged tables, inventory, receipts, grant, review policy and AI/purchase safeguards; save receipt.
+- No edge deployments, source redesign, publishing, live rewards/AI, settings changes or older task work. TestFlight build 30 remains separate.
+
+## Archived PR #27 receipt (not an active task)
 
 - [x] Confirm merged 1b3d7231c9622e214989ebfd2cd09d5f5018cb53 exactly matches tested 9ae9afc1b4eb599e68acc7dcc20cce7c50bf8791 tree a911579a08fd29b520c3f96bfeedb27afd725225.
 - [x] Deploy only actor-connect and game-result before the migration; both succeeded, existing verify_jwt=false and auth.getUser validation preserved.
