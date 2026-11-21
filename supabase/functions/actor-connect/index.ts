@@ -1,7 +1,7 @@
-import {economyUser,reply} from "../_shared/economy-http.ts";
+import {economyUser,reply,tmdb} from "../_shared/economy-http.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-import { titleCast } from "../_shared/actor-cast.ts";
+import { gameCatalogueCast } from "../_shared/game-catalogue.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -128,21 +128,8 @@ serve(async (req) => {
       const movie = action === 'getMovieCast';
       const titleId = Number(movie ? movieId : tvId);
       if (!Number.isSafeInteger(titleId) || titleId <= 0) throw new Error('Invalid title ID');
-      const paths = movie ? [`movie/${titleId}/credits`] : [`tv/${titleId}/aggregate_credits`, `tv/${titleId}/credits`];
-      let receivedCast = false;
-      for (const path of paths) {
-        const response = await fetch(`https://api.themoviedb.org/3/${path}?api_key=${TMDB_API_KEY}`);
-        if (!response.ok) continue;
-        const { cast } = await response.json();
-        if (!Array.isArray(cast)) continue;
-        receivedCast = true;
-        const members = titleCast(cast);
-        if (members.length) {
-          return Response.json({ cast: members, castVersion: 2 }, { headers: corsHeaders });
-        }
-      }
-      if (!receivedCast) throw new Error('Failed to fetch cast credits');
-      return Response.json({ cast: [], castVersion: 2 }, { headers: corsHeaders });
+      const cast = await gameCatalogueCast(movie ? 'movie' : 'tv', titleId, tmdb);
+      return Response.json({ cast, castVersion: 2 }, { headers: corsHeaders });
     }
 
     return new Response(

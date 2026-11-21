@@ -38,6 +38,8 @@ describe('mobile destinations', () => {
     expect(screen.getByText('Pack store')).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Profile', exact: true })); });
     expect(screen.getByText('filmgeek@example.com')).toBeTruthy();
+    expect(screen.queryByRole('heading',{name:'Your Plan'})).toBeNull();
+    fireEvent.click(screen.getByRole('link',{name:/Your Plan/}));
     expect(screen.getByRole('heading',{name:'Your Plan'})).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Profile', exact: true }).getAttribute('aria-current')).toBe('page');
   });

@@ -13,6 +13,7 @@ import { orderedGameCast } from "@/lib/game-cast";
 import type { GameCastMember as CastMember } from "../../supabase/functions/_shared/actor-cast";
 import { ShufflePortrait } from "@/components/ShufflePortrait";
 import { useToast } from '@/hooks/use-toast';
+import { DailyReward } from '@/components/DailyReward';
 
 interface Actor {
   id: number;
@@ -36,7 +37,7 @@ type PathStep = {
   image: string;
 };
 
-type GameState = 'loading' | 'unavailable' | 'ready' | 'playing' | 'checking' | 'won';
+type GameState = 'loading' | 'unavailable' | 'ready' | 'playing' | 'checking' | 'won' | 'rejected';
 type ViewMode = 'filmography' | 'cast';
 type FilmographyFilter = 'movies' | 'tv';
 
@@ -68,6 +69,8 @@ const DailyPuzzle = () => {
   const [reward,setReward]=useState(0);
   const frozenPath=useRef<PathStep[]|null>(null);
   const expiry=useRef<number|null>(null);
+  const actionBusy=useRef(false);
+  const submitting=useRef(false);
 
   useEffect(() => {
     if (viewMode !== 'filmography' || !backCredit.current) return;
@@ -200,6 +203,8 @@ const DailyPuzzle = () => {
   };
 
   const loadCast = async (contentId: number, type: string, title: string, posterPath: string) => {
+    if(actionBusy.current||isLoading||gameState!=='playing')return;
+    actionBusy.current=true;
     setIsLoading(true);
     setViewMode('cast');
     const request = ++loadId.current;
@@ -229,6 +234,7 @@ const DailyPuzzle = () => {
       console.error('Error loading cast:', error);
       setCastError(true);
     } finally {
+      actionBusy.current=false;
       if (request === loadId.current) setIsLoading(false);
     }
   };
@@ -241,21 +247,33 @@ const DailyPuzzle = () => {
   };
 
   const submitWin=async()=>{
-    if(!frozenPath.current||!gameId.current)return;
+    if(!frozenPath.current||!gameId.current||submitting.current)return;
+    submitting.current=true;
     setResultError('');setIsLoading(true);
     try{
       const {data,error}=await supabase.functions.invoke('game-result',{body:{gameId:gameId.current,path:frozenPath.current.map(({type,id})=>({type,id}))}});
+      const failure=error?.context instanceof Response?await error.context.clone().json().catch(()=>null):data;
+      if(failure?.code==='game_expired'){
+        setResultError('This connection reached the server after the two-minute limit. No XP was awarded.');
+        setGameState('rejected');accountChanged();window.dispatchEvent(new CustomEvent('gameStateChange',{detail:'rejected'}));return;
+      }
       if(error||data?.error)throw new Error(data?.error??'Your result is saved. Retry verification shortly.');
-      if(!data?.won)throw new Error('That path could not be verified as a win.');
+      if(data?.won===false){
+        setResultError('The cast records couldn’t confirm every link in this path. No XP was awarded.');
+        setGameState('rejected');accountChanged();window.dispatchEvent(new CustomEvent('gameStateChange',{detail:'rejected'}));return;
+      }
+      if(data?.won!==true||!Number.isInteger(data.xp)||data.xp<0||data.xp>75)throw new Error('Your result hasn’t been confirmed yet. Please retry.');
       setReward(data.xp);setGameState('won');accountChanged();window.dispatchEvent(new CustomEvent('gameStateChange',{detail:'won'}));
       toast({variant:'success',title:`${data.xp} XP earned`,description:data.xp===0?'You have reached today’s XP cap.':'Connection verified!'});
     }catch(e){setResultError(e instanceof Error?e.message:'Please retry verification.');}
-    finally{setIsLoading(false);}
+    finally{setIsLoading(false);submitting.current=false;}
   };
   const selectActor = async (actor: CastMember) => {
-    if(gameState!=='playing'||isLoading)return;
+    if(gameState!=='playing'||isLoading||actionBusy.current)return;
     if(path.some(p=>p.type==='actor'&&p.id===actor.id)){toast({title:'Try a new connection',description:'An actor can only appear once in a path.'});return;}
     if(path.length>=20 && actor.id!==targetActor?.id){toast({title:'Path limit reached',description:'Reach the target within ten connections.'});return;}
+    actionBusy.current=true;
+    try{
     if(actor.id===targetActor?.id){
       const finished=[...path,{type:'actor' as const,id:actor.id,name:actor.name,image:actor.profilePath}];
       frozenPath.current=finished;setPath(finished);setGameState('checking');await submitWin();return;
@@ -276,6 +294,7 @@ const DailyPuzzle = () => {
     });
     
     await loadFilmography(actor.id);
+    }finally{actionBusy.current=false;}
   };
 
   const resetGame = () => {
@@ -436,8 +455,10 @@ const DailyPuzzle = () => {
         </Card>
       )}
 
-      {gameState==='checking'&&<div className="play-panel" role="status"><strong>{isLoading?'Checking your connection…':'Verification pending'}</strong>{resultError&&<p className="text-sm mt-2">{resultError}</p>}<Button className="mt-3" disabled={isLoading} onClick={()=>void submitWin()}>Retry verification</Button><Button variant="ghost" disabled={isLoading} onClick={resetGame}>Leave result</Button></div>}
+      {gameState==='checking'&&<div className="play-panel" role="status"><strong>{isLoading?'Checking your connection…':'Couldn’t finish checking'}</strong>{resultError&&<p className="text-sm mt-2">{resultError}</p>}<Button className="mt-3" disabled={isLoading} onClick={()=>void submitWin()}>Retry verification</Button><Button variant="ghost" disabled={isLoading} onClick={resetGame}>Leave result</Button></div>}
+      {gameState==='rejected'&&<div className="play-panel" role="status"><strong>Connection not confirmed</strong><p className="text-sm text-muted-foreground mt-2">{resultError}</p><Button className="mt-4" onClick={resetGame}>Back to game</Button></div>}
       {gameState==='won'&&<p className="text-primary">{reward} XP earned · daily earning cap 225 XP</p>}
+      {gameState==='won'&&<DailyReward/>}
       {gameState==='ready'&&<p className="text-sm text-muted-foreground">{access?.plan==='free'?`${access.gamesRemaining??0} free game remaining today · resets at midnight UTC`:'Pro · unlimited games, up to 225 XP earned daily'}</p>}
       {/* Start/Reset Buttons */}
       {gameState === 'ready' && <div className="game-actions">
