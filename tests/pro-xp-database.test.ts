@@ -28,7 +28,7 @@ beforeAll(async()=>{
     '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance']) await pg.exec(migration(name));
   for(const name of ['20251114214139_cac7e901-0afa-4a2d-9233-df3d7be49a29','20251114215942_67f42c53-f7a7-40eb-9c4c-76f082338a1b',
     '20251126204536_add_pack_tier','20261112160000_smart_list_interpreter','20261113200000_pro_xp_collections',
-    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout'])await pg.exec(migration(name));
+    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout','20261121150000_game_connection_recheck'])await pg.exec(migration(name));
 });
 
 afterAll(()=>pg.close());
@@ -205,4 +205,22 @@ it('activates the proposed private policy without funding or raising the global 
  expect((await pg.query('SELECT limit_micro_usd,committed_micro_usd FROM companion_sol_budget')).rows).toEqual(budget);
  expect((await pg.query('SELECT enabled,question_limit_micro_usd,user_month_limit_micro_usd,question_call_limit,user_day_limit_micro_usd FROM companion_usage_policy')).rows[0])
   .toMatchObject({enabled:true,question_limit_micro_usd:350000,user_month_limit_micro_usd:3000000,question_call_limit:64,user_day_limit_micro_usd:null});
+});
+it('rechecks an old on-time rejection once, awards once, and preserves the frozen proof and deadline',async()=>{
+ await pro();const id=randomUUID(),token=randomUUID(),proof=JSON.stringify([{type:'actor',id:1},{type:'movie',id:10},{type:'actor',id:3},{type:'movie',id:10},{type:'actor',id:2}]);
+ await call('start_cinegeek_game',[id,1,2]);
+ await pg.query("UPDATE cinegeek_games SET status='lost',proof=$2::jsonb,started_at=now()-interval '10 minutes',submitted_at=now()-interval '9 minutes',expires_at=now()-interval '8 minutes',verification_version=1 WHERE id=$1",[id,proof]);
+ expect((await call('claim_cinegeek_win',[user,id,proof,token],'service_role')).status).toBe('verifying');
+ await expect(call('claim_cinegeek_win',[user,id,proof,randomUUID()],'service_role')).rejects.toThrow('Checking');
+ expect(await call('finish_cinegeek_win',[user,id,token,true],'service_role')).toEqual({won:true,xp:75});
+ expect((await call('claim_cinegeek_win',[user,id,proof,randomUUID()],'service_role')).status).toBe('won');
+ expect(await call('finish_cinegeek_win',[user,id,token,true],'service_role')).toEqual({won:true,xp:75});
+ expect((await access()).xp).toBe(75);
+ await expect(call('claim_cinegeek_win',[user,id,'[1,2,3]',randomUUID()],'service_role')).rejects.toThrow('cannot change');
+});
+it.each(['late','missing','current'])('does not reopen a %s rejection',async scenario=>{
+ const id=randomUUID(),proof='[1,2,3]';await call('start_cinegeek_game',[id,1,2]);
+ await pg.query("UPDATE cinegeek_games SET status='lost',proof=$2::jsonb,submitted_at=CASE WHEN $3='missing' THEN NULL WHEN $3='late' THEN expires_at+interval '1 second' ELSE now() END,verification_version=CASE WHEN $3='current' THEN 2 ELSE 1 END WHERE id=$1",[id,proof,scenario]);
+ expect((await call('claim_cinegeek_win',[user,id,proof,randomUUID()],'service_role')).status).toBe('lost');
+ expect((await access()).xp).toBe(0);
 });

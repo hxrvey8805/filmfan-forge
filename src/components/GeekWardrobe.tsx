@@ -18,7 +18,7 @@ export function GeekWardrobe({ compact = false }: { compact?: boolean }) {
   const [unlocking,setUnlocking]=useState(false);
   async function select(key:Outfit){
     if(canWear(access,key)){choose(key);return;}
-    if(access?.plan!=='monthly'){toast.info('Monthly unlocks skins with XP. Annual includes them all. See Your Plan below.');return;}
+    if(access?.plan!=='monthly'){toast.info('Monthly unlocks skins with XP. Annual includes them all. See Profile → Your Plan.');return;}
     if(unlocking)return;
     setUnlocking(true);
     try{await redeemXp(access.userId,`skin:${key}`);toast.success('Skin unlocked. Select it to wear it.');

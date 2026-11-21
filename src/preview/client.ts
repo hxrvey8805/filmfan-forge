@@ -1,6 +1,9 @@
 // In-memory design fixtures. Vite aliases this file only when serving the
 // explicit mobile-preview mode. It never imports a real client or uses fetch.
 import { previewActorConnect } from "./actor-connect";
+import {gamePath,verifyGamePath} from "../../supabase/functions/_shared/game-verification";
+let samplePlan="free", previewSpinEarned=false, previewSpinUsed=false;
+const previewGames=new Map<string,{start:number;target:number;expires:number;won:boolean}>();
 type Row = Record<string, unknown>;
 const user = { id: "design-preview-user", email: "filmgeek@example.com", user_metadata: {} as Record<string, unknown> };
 try { user.user_metadata = JSON.parse(localStorage.getItem('cinegeek.preview.metadata') ?? '{}'); } catch { /* no saved preview */ }
@@ -125,20 +128,40 @@ export const supabase = {
   rpc: async (name: string,args:Record<string,unknown>={}) => {
     // Local design samples only. Never sets a live entitlement or calls a provider.
     const selected=new URLSearchParams(window.location.search).get('samplePlan');
-    const plan=selected==='monthly'||selected==='annual'?selected:'free';
+    if(selected==='free'||selected==='monthly'||selected==='annual')samplePlan=selected;
+    const plan=samplePlan;
     if(name==='get_cinegeek_access')return {data:{userId:user.id,plan,purchasesEnabled:false,smartLists:plan!=='free',focusGeek:true,
       allSkins:plan==='annual',unlockedSkins:plan==='monthly'?['jedi']:[],badges:[],gamesRemaining:plan==='free'?1:null,
-      xp:750,lifetimeXp:1250,xpToday:75,xpDailyCap:225,spinAvailable:false,expiresAt:plan==='free'?null:'2027-01-01T00:00:00Z'},error:null};
+      xp:750,lifetimeXp:1250,xpToday:75,xpDailyCap:225,spinAvailable:plan!=='free'&&previewSpinEarned&&!previewSpinUsed,expiresAt:plan==='free'?null:'2027-01-01T00:00:00Z'},error:null};
     if(name==='get_ai_privacy_choices')return {data:{...privacyChoices},error:null};
     if(name==='set_ai_privacy_choice'){privacyChoices[String(args.p_feature)]=args.p_allowed===true;return {data:{...privacyChoices},error:null};}
     if(name==='get_companion_allowance')return {data:{mode:'monthly',plan,included:plan==='free'?0:15,limit:plan==='free'?0:15,purchased:0,renewsAt:plan==='free'?null:'2026-12-13T00:00:00Z'},error:null};
-    if(name==='start_cinegeek_game')return {data:{id:args.p_game,status:'playing',expires_at:new Date(Date.now()+120000).toISOString()},error:null};
+    if(name==='start_cinegeek_game'){
+      const game={start:Number(args.p_start),target:Number(args.p_target),expires:Date.now()+120000,won:false};previewGames.set(String(args.p_game),game);
+      return {data:{id:args.p_game,status:'playing',expires_at:new Date(game.expires).toISOString()},error:null};
+    }
+    if(name==='spin_cinegeek_reward'){
+      if(plan==='free'||!previewSpinEarned)return unavailable();
+      previewSpinUsed=true;return {data:{kind:'xp',xp:25},error:null};
+    }
     if(name==='end_cinegeek_game')return {data:null,error:null};
     return unavailable();
   },
   functions: {
     invoke: async (name: string, options: { body?: Record<string, unknown> } = {}) => {
       const body = options.body ?? {};
+      if (name === 'game-result') {
+        const game=previewGames.get(String(body.gameId));if(!game)return unavailable();
+        if(game.won)return {data:{won:true,xp:75},error:null};
+        if(Date.now()>game.expires)return {data:{code:'game_expired',error:'Game has ended'},error:null};
+        const path=gamePath(body.path,game.start,game.target);
+        const won=!!path&&await verifyGamePath(path,async(type,id)=>{
+          const result=previewActorConnect(type==='movie'?{action:'getMovieCast',movieId:id}:{action:'getTVCast',tvId:id});
+          return ('cast' in (result??{})?result?.cast:[])?.map(person=>person.id)??[];
+        });
+        if(won){game.won=true;previewSpinEarned=true;}
+        return {data:{won,xp:won?75:0},error:null};
+      }
       if (name === "actor-connect") {
         const data = previewActorConnect(body);
         return data ? { data, error: null } : unavailable();

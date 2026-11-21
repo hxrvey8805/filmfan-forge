@@ -171,7 +171,7 @@ const Dashboard = () => {
             <img className="brand-mark" src="/cinegeek-mark.svg" width="36" height="36" alt="" />
             <span className="text-xl font-bold tracking-[-0.06em]">cine<span className="text-primary">geek</span><span className="text-primary">.</span></span>
           </button>
-          <button onClick={() => selectTab(activeTab === "play" ? "play" : "profile", activeTab === "play" ? "store" : undefined)} disabled={isGamePlaying}
+          <button onClick={() => selectTab(activeTab === "play" ? "play" : "profile", activeTab === "play" ? "store" : "plan")} disabled={isGamePlaying}
             className="flex items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-muted-foreground" aria-label={activeTab === "play" ? "Open store" : "View profile and question allowance"}>
             {activeTab === "play" ? <><Zap className="w-4 h-4 text-primary" /><span className="text-foreground tabular-nums">{xp.toLocaleString()} XP</span></>
               : <><span className="w-1.5 h-1.5 rounded-full bg-primary" /><span>{allowance.mode === 'monthly' ? `${allowance.included + allowance.purchased} questions` : allowance.mode === 'beta' ? `${remainingFree ?? '…'} free questions` : 'Questions'}</span></>}

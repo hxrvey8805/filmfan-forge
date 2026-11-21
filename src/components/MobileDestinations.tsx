@@ -1,26 +1,55 @@
-import {Link} from "react-router-dom";
+import { useLayoutEffect, type ReactNode } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ChevronRight, ShieldCheck, Smartphone, LogOut, Crown, Shirt, LifeBuoy, Layers3, Zap, MessageCircle } from "lucide-react";
 import { YourPlan } from "./YourPlan";
-import { ChevronRight, ShieldCheck, Smartphone, LogOut, UserRound } from "lucide-react";
 import { GeekWardrobe } from "./GeekWardrobe";
-import { Button } from "@/components/ui/button";
+import { GeekAvatar } from "./GeekAvatar";
+import { useGeekOutfit, outfits } from "@/hooks/use-geek-outfit";
+import { useProAccess } from "@/hooks/use-pro-access";
 import { type QuestionAllowance } from '@/lib/question-allowance';
+import "./profile-home.css";
+
+function Row({ icon, title, detail }: { icon: ReactNode; title: string; detail?: string }) {
+  return <><span className="profile-row-icon">{icon}</span><span className="profile-row-copy"><strong>{title}</strong>{detail && <small>{detail}</small>}</span><ChevronRight size={17} aria-hidden="true" /></>;
+}
 
 export function ProfileHome({ email, onLogout, onInstall, allowance }: {
-  email: string; onLogout: () => void; onInstall: () => void;
-  allowance?: QuestionAllowance;
+  email: string; onLogout: () => void; onInstall: () => void; allowance?: QuestionAllowance;
 }) {
-  return <div className="max-w-2xl mx-auto space-y-7 animate-fade-in">
-    <div><p className="eyebrow">Your little corner of cinema</p><h1 className="screen-heading mt-2">Profile</h1></div>
-    <div className="flex items-center gap-4 py-2"><span className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center"><UserRound className="w-7 h-7 text-primary" /></span><div className="min-w-0"><h2 className="text-lg font-semibold">A fellow film geek</h2><p className="text-sm text-muted-foreground break-all mt-1">{email}</p></div></div>
-    <YourPlan allowance={allowance}/>
-    <GeekWardrobe/>
-    <div className="rounded-2xl border border-white/10 overflow-hidden">
-      <div className="flex gap-3 p-5"><ShieldCheck className="w-5 h-5 shrink-0 text-primary mt-0.5" /><div><h3 className="text-sm font-medium">Your place in the story</h3><p className="text-xs text-muted-foreground mt-2 leading-relaxed">Open a title, choose your episode and set your timestamp. Your companion and conversation stay within that point.</p></div></div>
-      {import.meta.env.MODE !== "native" && <button onClick={onInstall} className="w-full border-t border-white/10 p-5 flex items-center gap-3 text-left hover:bg-white/5"><Smartphone className="w-5 h-5 text-muted-foreground" /><span className="flex-1 text-sm">Add CineGeek to your home screen</span><ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" /></button>}
-    </div>
-    <Button variant="outline" asChild className="w-full rounded-xl"><Link to="/account">Account & privacy</Link></Button>
-    <p className="text-center text-sm"><Link to="/support" className="text-primary">Support</Link> · <Link to="/privacy" className="text-primary">Privacy notice</Link></p>
-    <Button variant="outline" onClick={onLogout} className="w-full rounded-xl gap-2 bg-transparent text-muted-foreground"><LogOut className="w-4 h-4" />Sign out</Button>
-    <p className="text-center text-[11px] text-muted-foreground">Made for the “wait, what just happened?” moments.</p>
+  const access = useProAccess(), { look } = useGeekOutfit();
+  const [params] = useSearchParams(), location = useLocation();
+  const view = params.get('view') ?? (location.hash === '#your-plan' ? 'plan' : null);
+  const plan = !access ? 'Checking plan…' : access.plan === 'annual' ? 'Annual Pro' : access.plan === 'monthly' ? 'Monthly Pro' : 'Free';
+  const href = (tab: string, next?: string) => {
+    const p = new URLSearchParams(params); p.set('tab', tab); p.delete('view');
+    if (next) p.set('view', next);
+    return `/dashboard?${p}`;
+  };
+  useLayoutEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [view]);
+  if (view === 'plan' || view === 'wardrobe') return <div className="profile-page profile-detail">
+    <Link className="profile-back" to={href('profile')}><ArrowLeft size={18} />Profile</Link>
+    {view === 'plan' ? <YourPlan allowance={allowance} /> : <GeekWardrobe />}
+  </div>;
+  return <div className="profile-page animate-fade-in">
+    <h1 className="screen-heading">Profile</h1>
+    <section className="profile-membership" aria-label="Your membership">
+      <Link to={href('profile', 'wardrobe')} className="profile-geek" aria-label="Dress your Geek"><GeekAvatar look={look} /></Link>
+      <div className="profile-identity"><span className="profile-plan-tag">{access?.plan !== 'free' && access && <Crown size={13} />}{plan}</span><h2>Your CineGeek</h2><p>{email}</p><span className="profile-level">{access ? `Level ${1 + Math.floor(access.lifetimeXp / 1000)}` : 'Loading progress…'}</span></div>
+      <div className="profile-stats">
+        <Link to={href('play', 'store')}><Zap size={16} /><span><strong>{access ? access.xp.toLocaleString() : '—'}</strong><small>XP to spend</small></span></Link>
+        <Link to={href('profile', 'plan')}><MessageCircle size={16} /><span><strong>{allowance?.mode === 'monthly' ? allowance.included + allowance.purchased : '—'}</strong><small>Questions left</small></span></Link>
+      </div>
+    </section>
+    <section className="profile-menu" aria-label="Your CineGeek settings">
+      <Link to={href('profile', 'plan')} className="profile-row"><Row icon={<Crown />} title="Your Plan" detail={access?.plan === 'free' ? 'Explore Pro' : 'Membership & questions'} /></Link>
+      <Link to={href('profile', 'wardrobe')} className="profile-row"><Row icon={<Shirt />} title="Dress your Geek" detail={outfits[look].name} /></Link>
+      <Link to={href('play', 'packs')} className="profile-row"><Row icon={<Layers3 />} title="Your collection" detail="Cards & packs" /></Link>
+    </section>
+    <section className="profile-menu" aria-label="Account settings">
+      <Link to="/account" className="profile-row"><Row icon={<ShieldCheck />} title="Account & privacy" /></Link>
+      <Link to="/support" className="profile-row"><Row icon={<LifeBuoy />} title="Help & support" /></Link>
+      {import.meta.env.MODE !== 'native' && <button onClick={onInstall} className="profile-row"><Row icon={<Smartphone />} title="Add to home screen" /></button>}
+    </section>
+    <div className="profile-footer"><button onClick={onLogout}><LogOut size={15} />Sign out</button><Link to="/privacy">Privacy notice</Link></div>
   </div>;
 }
