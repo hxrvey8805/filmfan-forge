@@ -5,6 +5,7 @@ import type { Database, Json } from '@/integrations/supabase/types';
 // Reviewed release RPC contracts, kept separate from live-generated schema types.
 type TierFunctions = {
   spin_cinegeek_reward: { Args: Record<string, never>; Returns: Json };
+  spin_cinegeek_reward_v2: { Args: Record<string, never>; Returns: Json };
   decide_cinegeek_pack: {
     Args: { p_pack: string; p_keep: boolean; p_replace?: string | null };
     Returns: Json;

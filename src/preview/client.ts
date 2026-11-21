@@ -2,7 +2,9 @@
 // explicit mobile-preview mode. It never imports a real client or uses fetch.
 import { previewActorConnect } from "./actor-connect";
 import {gamePath,verifyGamePath} from "../../supabase/functions/_shared/game-verification";
-let samplePlan="free", previewSpinEarned=false, previewSpinUsed=false;
+let samplePlan="free", sampleReward="xp", previewSpinEarned=false, previewSpinUsed=false;
+const previewSkins=new Set(['jedi']);
+let previewSpinPrize:Record<string,unknown>|null=null;
 const previewGames=new Map<string,{start:number;target:number;expires:number;won:boolean}>();
 type Row = Record<string, unknown>;
 const user = { id: "design-preview-user", email: "filmgeek@example.com", user_metadata: {} as Record<string, unknown> };
@@ -129,9 +131,10 @@ export const supabase = {
     // Local design samples only. Never sets a live entitlement or calls a provider.
     const selected=new URLSearchParams(window.location.search).get('samplePlan');
     if(selected==='free'||selected==='monthly'||selected==='annual')samplePlan=selected;
+    if(new URLSearchParams(window.location.search).get('sampleReward')==='skin')sampleReward='skin';
     const plan=samplePlan;
     if(name==='get_cinegeek_access')return {data:{userId:user.id,plan,purchasesEnabled:false,smartLists:plan!=='free',focusGeek:true,
-      allSkins:plan==='annual',unlockedSkins:plan==='monthly'?['jedi']:[],badges:[],gamesRemaining:plan==='free'?1:null,
+      allSkins:plan==='annual',unlockedSkins:plan==='monthly'?[...previewSkins]:[],badges:[],gamesRemaining:plan==='free'?1:null,
       xp:750,lifetimeXp:1250,xpToday:75,xpDailyCap:225,spinAvailable:plan!=='free'&&previewSpinEarned&&!previewSpinUsed,expiresAt:plan==='free'?null:'2027-01-01T00:00:00Z'},error:null};
     if(name==='get_ai_privacy_choices')return {data:{...privacyChoices},error:null};
     if(name==='set_ai_privacy_choice'){privacyChoices[String(args.p_feature)]=args.p_allowed===true;return {data:{...privacyChoices},error:null};}
@@ -140,9 +143,15 @@ export const supabase = {
       const game={start:Number(args.p_start),target:Number(args.p_target),expires:Date.now()+120000,won:false};previewGames.set(String(args.p_game),game);
       return {data:{id:args.p_game,status:'playing',expires_at:new Date(game.expires).toISOString()},error:null};
     }
-    if(name==='spin_cinegeek_reward'){
+    if(name==='spin_cinegeek_reward'||name==='spin_cinegeek_reward_v2'){
       if(plan==='free'||!previewSpinEarned)return unavailable();
-      previewSpinUsed=true;return {data:{kind:'xp',xp:25},error:null};
+      if(!previewSpinPrize){
+        previewSpinPrize=sampleReward==='skin'
+          ? plan==='monthly'?{kind:'skin',skin:'spider'}:{kind:'badge',badge:'film_buff'}
+          :{kind:'xp',xp:25};
+        if(previewSpinPrize.kind==='skin')previewSkins.add(String(previewSpinPrize.skin));
+      }
+      previewSpinUsed=true;return {data:previewSpinPrize,error:null};
     }
     if(name==='end_cinegeek_game')return {data:null,error:null};
     return unavailable();

@@ -1,0 +1,39 @@
+Daily skin rewards and owned wardrobe — staged 21 November 2026
+
+Monthly's wardrobe contains Arcade plus confirmed owned skins. XP unlocks remain
+available through a separate optional browser. Free sees Arcade; Annual sees all
+skins. Reward odds and limits are collapsed below the post-win spinner.
+
+The new authenticated spin_cinegeek_reward_v2 RPC uses the existing locked wallet,
+eligibility and daily receipt. Prizes are 50% up to 25 XP, 20% actor pack, 20%
+director pack and 10% random unowned skin. Annual, or Monthly with every skin,
+receives a badge in the cosmetic slot. No client-chosen prize, new currency,
+payment, additional daily spin or changed XP cap. A skin is saved before the
+response and appears through the existing account-access refresh.
+
+Deployment: apply 20261121170000_daily_skin_rewards.sql once before releasing the
+new client in TestFlight. No edge-function redeployment is needed. Preserve the
+legacy spin RPC and all existing wallet/table grants. The new RPC is executable
+only by authenticated users (and its database owner); its body enforces the
+current signed-in user's Pro plan and eligible win. Verify anon/PUBLIC have no
+EXECUTE and client table-write permissions remain absent.
+
+Both RPC generations consume the same daily spin; an old receipt remains the
+same when retrieved with v2. Old clients do not generate skins. If an old device
+already has its spinner open while a newer device wins a skin, the old client
+cannot render that new receipt; updating/refreshing retrieves the actual inventory
+and prevents another spin. No receipt conversion or second prize is performed.
+
+Local validation: 72 focused UI/database/integration checks passed, TypeScript
+passed, native web build passed. Preview confirmed win -> spinner -> skin reveal
+-> wardrobe count grows, current outfit unchanged, optional rules collapsed.
+No live prize, XP or account alteration was used during development.
+
+Postflight: verify function definition/grants and unchanged purchase/AI settings.
+Use a real eligible test win through the app; confirm one daily receipt, same
+response on retry, owned skin visible and wearable only on eligible paid plans.
+Do not mint a win or award XP by SQL merely to make the spinner appear.
+
+Real purchases stay disabled. AI answers, privacy/consent, spoiler checks and
+existing $5 overall / $0.35 per question / $3 account-month caps are unchanged.
+No public frontend publishing or App Store marketing screenshots in this release.

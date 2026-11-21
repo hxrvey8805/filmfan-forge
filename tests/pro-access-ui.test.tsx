@@ -51,16 +51,31 @@ it.each([false,true])('Free and unconfirmed access show only Arcade in the wardr
   expect(screen.queryByText('Pro skin')).toBeNull();
  }
 });
-it.each(['monthly','annual'] as const)('%s retains its full wardrobe in Profile and title setup',plan=>{
- const scene=(compact:boolean)=><ProAccessContext.Provider value={planFixture(plan)}><GeekViewer.Provider value="viewer-a"><GeekWardrobe compact={compact}/></GeekViewer.Provider></ProAccessContext.Provider>;
+it.each([false,true])('Monthly shows only owned skins in each picker (compact=%s)',compact=>{
+ const a={...planFixture('monthly'),unlockedSkins:['jedi','unknown-skin']};
+ const view=render(<ProAccessContext.Provider value={a}><GeekViewer.Provider value="viewer-a"><GeekWardrobe compact={compact}/></GeekViewer.Provider></ProAccessContext.Provider>);
+ if(compact)fireEvent.click(screen.getByRole('button',{name:'Outfit'}));
+ expect(screen.getAllByRole('radio')).toHaveLength(2);
+ expect(screen.getByRole('radio',{name:'Arcade'})).toBeTruthy();expect(screen.getByRole('radio',{name:'Jedi Geek'})).toBeTruthy();
+ expect(screen.queryByRole('radio',{name:'Spider-Geek'})).toBeNull();expect(screen.queryByText(/1,500 XP/)).toBeNull();
+ fireEvent.click(screen.getByRole('radio',{name:'Jedi Geek'}));expect((screen.getByRole('radio',{name:'Jedi Geek'}) as HTMLInputElement).checked).toBe(true);
+ fireEvent.click(screen.getByRole('button',{name:'Unlock with XP'}));
+ expect(screen.getByRole('dialog')).toBeTruthy();expect(screen.getByRole('button',{name:'Unlock Spider-Geek for 1,500 XP'})).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'Unlock Jedi Geek for 1,500 XP'})).toBeNull();
+});
+it('a newly granted skin appears only after confirmed access refresh',()=>{
+ const a=planFixture('monthly');
+ const scene=(access:typeof a)=><ProAccessContext.Provider value={access}><GeekViewer.Provider value="viewer-a"><GeekWardrobe/></GeekViewer.Provider></ProAccessContext.Provider>;
+ const view=render(scene(a));expect(screen.getAllByRole('radio')).toHaveLength(1);
+ view.rerender(scene({...a,unlockedSkins:['spider']}));expect(screen.getAllByRole('radio')).toHaveLength(2);
+ fireEvent.click(screen.getByRole('radio',{name:'Spider-Geek'}));expect((screen.getByRole('radio',{name:'Spider-Geek'}) as HTMLInputElement).checked).toBe(true);
+});
+it('Annual retains all wearable skins without an XP shop',()=>{
+ const scene=(compact:boolean)=><ProAccessContext.Provider value={planFixture('annual')}><GeekViewer.Provider value="viewer-a"><GeekWardrobe compact={compact}/></GeekViewer.Provider></ProAccessContext.Provider>;
  const view=render(scene(false));expect(screen.getAllByRole('radio')).toHaveLength(Object.keys(outfits).length);
- if(plan==='monthly')expect(screen.getAllByText('Unlock · 1,500 XP')).toHaveLength(Object.keys(outfits).length-1);
+ expect(screen.queryByRole('button',{name:'Unlock with XP'})).toBeNull();
  view.rerender(scene(true));fireEvent.click(screen.getByRole('button',{name:'Outfit'}));
  expect(screen.getAllByRole('radio')).toHaveLength(Object.keys(outfits).length);
- if(plan==='annual'){
-  fireEvent.click(screen.getByRole('radio',{name:'Jedi Geek'}));
-  expect((screen.getByRole('radio',{name:'Jedi Geek'}) as HTMLInputElement).checked).toBe(true);
- }
 });
 it('Free cannot run saved Smart Lists or activate Smart mode from a matching name',async()=>{
  localStorage.setItem(homeListKey('viewer-a'),JSON.stringify([{id:'smart',name:'Horror',mode:'smart',rule:{kind:'genre',value:'Horror'}}]));
