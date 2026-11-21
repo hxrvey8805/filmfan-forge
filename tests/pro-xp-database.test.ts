@@ -28,7 +28,7 @@ beforeAll(async()=>{
     '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance']) await pg.exec(migration(name));
   for(const name of ['20251114214139_cac7e901-0afa-4a2d-9233-df3d7be49a29','20251114215942_67f42c53-f7a7-40eb-9c4c-76f082338a1b',
     '20251126204536_add_pack_tier','20261112160000_smart_list_interpreter','20261113200000_pro_xp_collections',
-    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout','20261121150000_game_connection_recheck'])await pg.exec(migration(name));
+    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout','20261121150000_game_connection_recheck','20261121170000_daily_skin_rewards'])await pg.exec(migration(name));
 });
 
 afterAll(()=>pg.close());
@@ -223,4 +223,53 @@ it.each(['late','missing','current'])('does not reopen a %s rejection',async sce
  await pg.query("UPDATE cinegeek_games SET status='lost',proof=$2::jsonb,submitted_at=CASE WHEN $3='missing' THEN NULL WHEN $3='late' THEN expires_at+interval '1 second' ELSE now() END,verification_version=CASE WHEN $3='current' THEN 2 ELSE 1 END WHERE id=$1",[id,proof,scenario]);
  expect((await call('claim_cinegeek_win',[user,id,proof,randomUUID()],'service_role')).status).toBe('lost');
  expect((await access()).xp).toBe(0);
+});
+
+// Use PostgreSQL's own seeded random source to exercise real prize branches.
+async function seededSpin(kind:'skin'|'xp'|'actor'|'director') {
+ const ranges={xp:[0,.5],actor:[.5,.7],director:[.7,.9],skin:[.9,1]};
+ const [lo,hi]=ranges[kind];let seed=0;
+ for(let i=0;i<100;i++){
+  seed=i/100;await pg.query('SELECT setseed($1)',[seed]);
+  const n=(await pg.query<{n:number}>('SELECT random() n')).rows[0].n;
+  if(n>=lo&&n<hi){await pg.query('SELECT setseed($1)',[seed]);return call('spin_cinegeek_reward_v2');}
+ }
+ throw new Error('No deterministic seed for prize branch');
+}
+const skinKeys=['breaking','stranger','trek','matrix','jurassic','jedi','chucky','karate','mha','peaky','spider','hogwarts','thrones','pulp','social','squid','dune','scar','gladiator','wolf'];
+it('skin prize adds only an unowned skin and retries cannot reroll or duplicate it',async()=>{
+ await pro();await win();
+ await pg.query("INSERT INTO cinegeek_unlocks(user_id,item,kind) SELECT $1,unnest($2::text[]),'skin'",[user,skinKeys.filter(k=>k!=='spider')]);
+ const before=await access();const prize=await seededSpin('skin');
+ expect(prize).toMatchObject({kind:'skin',skin:'spider'});
+ expect((await access()).unlockedSkins).toContain('spider');expect((await access()).xp).toBe(before.xp);
+ expect(await call('spin_cinegeek_reward_v2')).toEqual(prize);
+ // Both RPC generations share the same daily receipt and cannot award twice.
+ expect(await call('spin_cinegeek_reward')).toEqual(prize);
+ expect((await pg.query("SELECT * FROM cinegeek_xp_events WHERE user_id=$1 AND kind='daily_spin'",[user])).rows).toHaveLength(1);
+ expect((await access()).unlockedSkins).toHaveLength(skinKeys.length);
+});
+it.each(['annual','monthly'])('%s with every skin available receives a badge in the cosmetic slot',async plan=>{
+ await pro(plan);await win();
+ if(plan==='monthly')await pg.query("INSERT INTO cinegeek_unlocks(user_id,item,kind) SELECT $1,unnest($2::text[]),'skin'",[user,skinKeys]);
+ const prize=await seededSpin('skin');expect(prize.kind).toBe('badge');expect((await access()).badges).toContain(prize.badge);
+ if(plan==='annual')expect((await access()).unlockedSkins).toEqual([]);
+});
+it.each(['xp','actor','director'] as const)('keeps the %s prize and daily XP cap',async kind=>{
+ await pro();await win();await win();await win();const prize=await seededSpin(kind);
+ if(kind==='xp')expect(prize).toMatchObject({kind:'xp',xp:0});
+ else expect(prize).toMatchObject({kind:'pack',packType:kind});
+ expect((await access()).xpToday).toBe(225);expect((await access()).spinAvailable).toBe(false);
+});
+it('legacy first spin and concurrent v2 requests retrieve the same prize',async()=>{
+ await pro();await win();const old=await call('spin_cinegeek_reward');
+ const result=await Promise.all([call('spin_cinegeek_reward_v2'),call('spin_cinegeek_reward_v2')]);
+ expect(result).toEqual([old,old]);
+ expect((await pg.query("SELECT * FROM cinegeek_xp_events WHERE user_id=$1 AND kind='daily_spin'",[user])).rows).toHaveLength(1);
+});
+it('new spin requires an eligible Pro win and cannot be invoked anonymously',async()=>{
+ await expect(call('spin_cinegeek_reward_v2')).rejects.toThrow('Pro benefit');
+ await pro();await expect(call('spin_cinegeek_reward_v2')).rejects.toThrow('first game');
+ await expect(call('spin_cinegeek_reward_v2',[],'anon')).rejects.toThrow('permission');
+ expect((await access()).unlockedSkins).toEqual([]);
 });

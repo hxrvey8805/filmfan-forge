@@ -14,12 +14,24 @@
 .geek-options { padding: .9rem 1rem; border-top: 1px solid hsl(var(--foreground) / .09); }
 .geek-greeting .geek-options { margin-top: .5rem; border: 1px solid hsl(var(--foreground) / .12); border-radius: 14px; background: hsl(var(--card)); }
 .geek-options legend { padding: 0; font-size: .84rem; font-weight: 600; overflow-wrap: anywhere; }
-.geek-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; margin-top: .6rem; }
+.geek-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; margin-top: .75rem; }
 .geek-choice { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 44px; text-align: center; padding: .3rem .2rem; border: 1px solid hsl(var(--foreground) / .17); border-radius: 10px; position: relative; font-size: .75rem; line-height: 1.15; color: hsl(var(--foreground) / .85); cursor: pointer; }
 .geek-default-badge { margin-top: .18rem; border-radius: 1rem; padding: .12rem .45rem; background: #ffce4621; color: #ffdc82; font-size: .63rem; font-weight: 650; }
-.geek-swatch { width: min(100%, 58px); }
+.geek-swatch { width: min(100%, 88px); }
 .geek-choice input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .geek-choice:has(input:checked) { background: #213c3e; border-color: #70d8c1; color: #beffee; }
 .geek-choice:has(input:focus-visible) { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
 .geek-detail,.geek-local { margin-top: .6rem; font-size: .75rem; line-height: 1.45; color: hsl(var(--muted-foreground)); }
 .geek-detail strong { color: hsl(var(--foreground)); font-weight: 550; }
+.geek-wearing { color:#9cf7db; font-size:.73rem; }
+.geek-selected { position:absolute; top:6px; right:6px; color:#9cf7db; }
+.geek-unlock-link { display:flex; align-items:center; justify-content:center; gap:7px; min-height:44px; margin:12px auto 0; color:#b9beca; font-size:.76rem; }
+.geek-unlock-link:hover { color:#ffdc82; }
+.geek-unlock-dialog.geek-unlock-dialog { width:min(420px,calc(100vw - 32px)); max-height:calc(100dvh - 48px); overflow:auto; border-radius:24px; background:#1b1c24; padding:28px 20px 20px; }
+.geek-unlock-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.geek-unlock-grid button { display:flex; flex-direction:column; align-items:center; gap:5px; padding:12px; border:1px solid #ffffff1c; border-radius:16px; background:#ffffff05; }
+.geek-unlock-grid button:disabled { opacity:.6; cursor:default; }
+.geek-unlock-grid button:focus-visible { outline:2px solid #ffdc82; outline-offset:2px; }
+.geek-unlock-grid .geek-avatar { width:104px; max-width:100%; }
+.geek-unlock-grid strong { font-size:.78rem; font-weight:600; }
+.geek-unlock-grid span { color:#ffdc82; font-size:.7rem; }

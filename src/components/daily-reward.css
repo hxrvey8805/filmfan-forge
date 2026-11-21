@@ -12,6 +12,11 @@
 .daily-spin-odds{font-size:10px;color:#aaa8b5;text-align:center;line-height:1.6}
 .daily-spin-odds summary{cursor:pointer;padding:5px}
 .daily-spin-odds p{margin-top:5px}
+.daily-spin-odds dl{margin:8px auto;max-width:230px;text-align:left}
+.daily-spin-odds dl>div{display:flex;justify-content:space-between;gap:16px;padding:3px 0}
+.daily-spin-odds dd{color:#e6deca;font-variant-numeric:tabular-nums}
+.daily-spin-skin{display:grid;place-items:center;height:290px;background:radial-gradient(ellipse,#f9c65520,transparent 68%)}
+.daily-spin-skin .geek-avatar{width:220px;max-width:100%}
 .daily-spin-error{font-size:12px;line-height:1.5;color:#ffb5a1}
 @media(prefers-reduced-motion:reduce){.daily-spin-wheel{transition:none}}
 @media(max-height:680px){.daily-spin-stage{height:230px;transform:scale(.8);transform-origin:top center;margin-bottom:-38px}.daily-spin-dialog.daily-spin-dialog{padding-top:25px}}

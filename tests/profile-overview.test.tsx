@@ -16,5 +16,5 @@ it.each(['free','monthly','annual'] as const)('%s profile keeps details behind w
  fireEvent.click(screen.getByRole('link',{name:/Your Plan/}));expect(screen.getByRole('heading',{name:'Your Plan'})).toBeTruthy();
  expect(screen.getAllByRole('button',{name:'Purchases coming soon'}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
  fireEvent.click(screen.getByRole('link',{name:'Profile'}));fireEvent.click(screen.getAllByRole('link',{name:/Dress your Geek/})[0]);
- expect(screen.getAllByRole('radio').length).toBe(plan==='free'?1:21);
+ expect(screen.getAllByRole('radio').length).toBe(plan==='annual'?21:1);
 });

@@ -36,7 +36,7 @@ it('a failed request does not display a prize; retry retrieves the server result
  fireEvent.click(screen.getByRole('button',{name:'Spin my reward'}));
  await screen.findByRole('alert');expect(screen.queryByText('+25 XP')).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'Retry daily spin'}));
- await screen.findByRole('heading',{name:'+25 XP'});expect(rpc.mock.calls.map(c=>c[0])).toEqual(['spin_cinegeek_reward','spin_cinegeek_reward']);
+ await screen.findByRole('heading',{name:'+25 XP'});expect(rpc.mock.calls.map(c=>c[0])).toEqual(['spin_cinegeek_reward_v2','spin_cinegeek_reward_v2']);
 });
 it('a delayed eligibility refresh opens the earned reward once',async()=>{
  const a={...planFixture('monthly'),spinAvailable:false};
@@ -52,4 +52,25 @@ it('wheel positions correspond to server rewards and reject malformed awards',()
  expect(rewardAngle({kind:'pack',packType:'director'})).toBe(270);
  expect(rewardAngle({kind:'badge',badge:'film_buff'})).toBe(342);
  for(const bad of [null,{kind:'cash'},{kind:'xp',xp:250},{kind:'pack',packType:'bogus'}])expect(readDailyPrize(bad)).toBeNull();
+});
+
+it('reveals a server-confirmed skin and keeps odds collapsed',async()=>{
+ rpc.mockResolvedValue({data:{kind:'skin',skin:'spider'},error:null});
+ const view=render(<ProAccessContext.Provider value={planFixture('monthly')}><DailyReward/></ProAccessContext.Provider>);
+ const odds=document.querySelector('details');expect(odds?.open).toBe(false);
+ expect(screen.getByText('New Geek skin')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Spin my reward'}));
+ await screen.findByRole('heading',{name:'Spider-Geek unlocked'});
+ expect(screen.getByText('Added to your wardrobe.')).toBeTruthy();
+ expect(document.querySelector('.daily-spin-skin [data-outfit="spider"]')).toBeTruthy();
+ expect(rpc).toHaveBeenCalledWith('spin_cinegeek_reward_v2',undefined);
+});
+it('Annual and a complete Monthly wardrobe display badge odds',()=>{
+ const view=render(<ProAccessContext.Provider value={planFixture('annual')}><DailyReward/></ProAccessContext.Provider>);
+ expect(screen.getByText('Collectible badge')).toBeTruthy();
+});
+it('rejects unknown/default skin rewards instead of inventing a reveal',()=>{
+ expect(readDailyPrize({kind:'skin',skin:'jedi'})).toEqual({kind:'skin',skin:'jedi'});
+ expect(rewardAngle({kind:'skin',skin:'jedi'})).toBe(342);
+ for(const skin of ['classic','bogus','__proto__','toString',null])expect(readDailyPrize({kind:'skin',skin})).toBeNull();
 });
