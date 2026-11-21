@@ -1,8 +1,18 @@
-# Approved PR #25 deployment
+# Approved PR #27 rollout
 
-- [x] Verify apple-billing-ledger and apple-review-purchases plus exact shared dependencies against tested 8230033f6d3a6cdfff8c4f95073f00381bd6bbe9.
-- [x] Deploy only those two functions with verify_jwt=false; both deployments succeeded.
-- [x] Record submitted hashes: ledger d62fcfef8fc806966466887a3becb3f83f614942bcdb4869cb3204794fb5494c; review 06cfdcaf69ec4becaeecdee3287f7b7dbeb22b1396665f3554300128393bb307.
-- [x] Confirm review switch absent; existing ledger and Production settings untouched. No SQL, activation, enrollment, secrets, purchases or publishing.
+- [x] Confirm merged 1b3d7231c9622e214989ebfd2cd09d5f5018cb53 exactly matches tested 9ae9afc1b4eb599e68acc7dcc20cce7c50bf8791 tree a911579a08fd29b520c3f96bfeedb27afd725225.
+- [x] Deploy only actor-connect and game-result before the migration; both succeeded, existing verify_jwt=false and auth.getUser validation preserved.
+- [x] Apply exact 20261121150000_game_connection_recheck.sql once as Drizzle 0009_game_connection_recheck; live journal id 10, hash 82407b870cf8b91045ae22a296bd66e54a67778d454224defe8535e3c0cfd324. Original timestamp is not separately recorded in supabase_migrations.schema_migrations; do not rerun the applied body.
+- [x] Verify default 1, NOT NULL smallint, check IN (1,2); claim/finish retain postgres/service_role EXECUTE only, no PUBLIC/anon/authenticated EXECUTE and no direct client game/XP table access.
+- [x] Verify all six bridges with exact gameCatalogueCast rules: The Wonder (Ruth Bradley/Florence Pugh), Avengers: Doomsday (Florence Pugh/Pedro Pascal), Avengers: Doomsday (Pedro Pascal/Letitia Wright), Black Panther (Letitia Wright/Michael B. Jordan), The Thomas Crown Affair (Michael B. Jordan/Adria Arjona), Andor (Adria Arjona/Kyle Soller): all PASS.
 
-The older preview-error task is replaced and must not be resumed.
+## Rollout receipt — 2026-11-21
+
+- Submitted package SHA-256 (files and settings): actor-connect `3d2920b092166e50f182d9dc4bcd8e583365786ccaed9f6f0948145450a2e240`; game-result `8c32b9c833b04cd81d21c16ace656f23dd21644b5246a1502880f74ab5ab91ff`.
+- index.ts SHA-256: actor-connect `593659c6220dc85f3d1b6a3c94daab39068faaa8542772e67cd4c742f28f04b2`; game-result `bac99653e93c580aab261e1a0c69740db6e13520c7312c384ee1cab5898e6b29`.
+- Production sales remain false. Global enabled=true, cap 5000000 micro-USD, committed 1193650, halt NULL; question 350000, account UTC month 3000000, daily NULL, calls 64. No settings changed. Owner private grant remains unrevoked with original dates; review policy remains enabled=true/sales_enabled=true.
+- Saved game 4a8c6522-1cab-4047-bf28-a9638e3102fc was on time and retains original repeated-title proof, lost status, awarded 0, verification_version 1. No authenticated recheck/award invoked: normal game-result owns that step.
+- 41 reviewed catalogue, path and database tests passed. Backend source/config unchanged after deployment. Migration tooling generated journal/snapshot and schema types only; no manual runtime source edits.
+- Deployment success is confirmed; numeric active revisions and independent live bundle hash readback are not exposed. TestFlight build 29 and authenticated recheck/award remain operator verification, not background tasks.
+
+Older tasks must not be resumed. No application source edits, publishing, purchases, AI calls, key/budget changes or manual game/XP changes.

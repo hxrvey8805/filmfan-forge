@@ -438,6 +438,7 @@ export type Database = {
           user_id: string
           verification_token: string | null
           verification_until: string | null
+          verification_version: number
         }
         Insert: {
           awarded?: number
@@ -452,6 +453,7 @@ export type Database = {
           user_id: string
           verification_token?: string | null
           verification_until?: string | null
+          verification_version?: number
         }
         Update: {
           awarded?: number
@@ -466,6 +468,7 @@ export type Database = {
           user_id?: string
           verification_token?: string | null
           verification_until?: string | null
+          verification_version?: number
         }
         Relationships: []
       }

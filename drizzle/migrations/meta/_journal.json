@@ -64,6 +64,13 @@
       "when": 1794576125290,
       "tag": "0008_subtitle_unavailability",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795273192696,
+      "tag": "0009_game_connection_recheck",
+      "breakpoints": true
     }
   ]
 }
