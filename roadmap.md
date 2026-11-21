@@ -4,7 +4,7 @@
 - [x] Read-only preflight: v2/version/hash absent; legacy authenticated-only RPC intact, production sales false, approved AI caps and private grant intact.
 - [x] Applied exact 20261121170000_daily_skin_rewards.sql once through the Lovable SQL editor at 2026-11-21 15:51 UTC after build credits exhausted. Recorded exact source in supabase_migrations.schema_migrations version 20261121170000; DO NOT REAPPLY.
 - [x] Exported live postflight: v2 body MD5 46af60614f8c9ffb5e81f35033a8f51b matches reviewed source; postgres/authenticated EXECUTE only. Legacy function, table permissions, wallet/inventory/event/game content hashes, owner grant, review policy and AI/purchase settings match preflight. No live reward invoked. Private evidence: .cinegeek-private/skin-rewards-2026-11-21/migration-verification.json.
-- Backend complete; do not resume the paused migration. No edge deployments, source redesign, public publishing, live rewards/AI, settings changes or older task work. Build 30 uploaded successfully, Apple processing/group assignment handled separately.
+- Backend complete; do not resume the paused migration. No edge deployments, source redesign, public publishing, live rewards/AI, settings changes or older task work. Build 30 uploaded and processed successfully; testing notes saved and added to CineGeek Owner Testing (1 tester), build ID d177fb5b-668f-4345-8337-cf4f8337ef95. Real purchases remain disabled; no public App Store submission. Device installation and a naturally won live skin are not claimed as verified.
 
 ## Archived PR #27 receipt (not an active task)
 
