@@ -2,9 +2,9 @@
 
 - [x] Synced merge 493a1f0085bc97dd930e505f690d7b276f829a30 and tested 657f2bc6b818c597149b91206ccf6e48cf332725 have identical tree 52c576fed06ec5c2c93003a1b8b20f4898c385ad; exact SQL SHA-256 matches 9ed93781dffff3da2b25914abe44631ace4c893603aceffb5eb395bd006baef8.
 - [x] Read-only preflight: v2/version/hash absent; legacy authenticated-only RPC intact, production sales false, approved AI caps and private grant intact.
-- [ ] Apply only the exact daily skin rewards migration once.
-- [ ] Verify live definition, execution permissions, unchanged tables, inventory, receipts, grant, review policy and AI/purchase safeguards; save receipt.
-- No edge deployments, source redesign, publishing, live rewards/AI, settings changes or older task work. TestFlight build 30 remains separate.
+- [x] Applied exact 20261121170000_daily_skin_rewards.sql once through the Lovable SQL editor at 2026-11-21 15:51 UTC after build credits exhausted. Recorded exact source in supabase_migrations.schema_migrations version 20261121170000; DO NOT REAPPLY.
+- [x] Exported live postflight: v2 body MD5 46af60614f8c9ffb5e81f35033a8f51b matches reviewed source; postgres/authenticated EXECUTE only. Legacy function, table permissions, wallet/inventory/event/game content hashes, owner grant, review policy and AI/purchase settings match preflight. No live reward invoked. Private evidence: .cinegeek-private/skin-rewards-2026-11-21/migration-verification.json.
+- Backend complete; do not resume the paused migration. No edge deployments, source redesign, public publishing, live rewards/AI, settings changes or older task work. Build 30 uploaded successfully, Apple processing/group assignment handled separately.
 
 ## Archived PR #27 receipt (not an active task)
 
