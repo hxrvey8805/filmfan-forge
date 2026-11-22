@@ -47,7 +47,7 @@ const Index = () => {
     setDetail({ title, source: "watching" });
   };
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [searchModalType, setSearchModalType] = useState<"favourite" | "watchlist" | "watching" | "watched">("watchlist");
+  const [searchModalType, setSearchModalType] = useState<ShelfId | "companion">("companion");
   const [favouritesItems, setFavourites] = useState<Title[]>([]);
   const [watchListItems, setWatchList] = useState<Title[]>([]);
   const [currentlyWatchingItems, setCurrentlyWatching] = useState<Title[]>([]);
@@ -77,6 +77,11 @@ const Index = () => {
     { id: "shelf:favourite", name: "Favourites", mode: "shelf", titles: favourites },
     { id: "shelf:watched", name: "Watched", mode: "shelf", titles: watched },
   ], [watchList, currentlyWatching, favourites, watched]);
+  const openLibraryTitle = (title: Title) => {
+    const contains = (items: Title[]) => items.some(item => titleKey(item) === titleKey(title));
+    if (contains(currentlyWatching)) openWatching(title);
+    else setDetail({ title, source: contains(watchList) ? "watchlist" : contains(watched) ? "watched" : contains(favourites) ? "favourite" : undefined });
+  };
 
   useEffect(() => {
     checkAuth();
@@ -183,7 +188,7 @@ const Index = () => {
         poster_path: title.posterPath, year: title.year, list_type: "favourite",
       });
       if (error) throw error;
-      setFavourites([...favourites, title]);
+      await loadUserTitles();
       toast.success(`Added "${title.title}" to Favourites`);
     } catch (error) {
       console.error("Error adding to favourites:", error);
@@ -204,9 +209,9 @@ const Index = () => {
         poster_path: title.posterPath, year: title.year, list_type: "watchlist",
       });
       if (error) throw error;
-      setWatchList([...watchList, title]);
-      setSortedWatchList([...watchList, title]);
-      toast.success(`Added "${title.title}" to Watch List`);
+      // The database replaces conflicting shelves atomically, retaining progress.
+      await loadUserTitles();
+      toast.success(`${currentlyWatching.some(item => titleKey(item) === titleKey(title)) ? "Moved" : "Added"} "${title.title}" to Watch List`);
     } catch (error) {
       console.error("Error adding to watchlist:", error);
       toast.error("Failed to add to Watch List");
@@ -226,8 +231,8 @@ const Index = () => {
         poster_path: title.posterPath, year: title.year, list_type: "watching",
       });
       if (error) throw error;
-      setCurrentlyWatching([...currentlyWatching, title]);
-      toast.success(`Added "${title.title}" to Currently Watching`);
+      await loadUserTitles();
+      toast.success(`${watchList.some(item => titleKey(item) === titleKey(title)) ? "Moved" : "Added"} "${title.title}" to Currently Watching`);
     } catch (error) {
       console.error("Error adding to watching:", error);
       toast.error("Failed to add to Currently Watching");
@@ -247,7 +252,7 @@ const Index = () => {
         poster_path: title.posterPath, year: title.year, list_type: "watched",
       });
       if (error) throw error;
-      setWatched([...watched, title]);
+      await loadUserTitles();
       toast.success(`Added "${title.title}" to Watched`);
     } catch (error) {
       console.error("Error adding to watched:", error);
@@ -305,25 +310,24 @@ const Index = () => {
         return;
       }
       const table = supabase.from("user_titles");
-      const change = target.personal ? table.delete() : table.update({ list_type: destination! });
-      const result = await change.eq("user_id", user.id).eq("title_id", title.id).eq("type", title.type)
-        .eq("list_type", source).select("id").maybeSingle();
+      // Assigning a shelf keeps compatible copies (e.g. Watching + Favourites).
+      // The database removes conflicting statuses in this same transaction.
+      const result = target.personal
+        ? await table.delete().eq("user_id", user.id).eq("title_id", title.id).eq("type", title.type)
+          .eq("list_type", source).select("id").maybeSingle()
+        : await table.insert({ user_id: user.id, title_id: title.id, title: title.title,
+          type: title.type, poster_path: title.posterPath, year: title.year, progress: title.progress,
+          list_type: destination! }).select("id").maybeSingle();
       if (result.error) throw result.error;
       if (!result.data) {
         await loadUserTitles();
         toast.info(savedOnDevice ? "Saved to " + target.label + ". Your shelves have been refreshed." : "This title changed elsewhere. Your shelves have been refreshed.");
         return;
       }
-      const setters = { watchlist: setWatchList, watching: setCurrentlyWatching, favourite: setFavourites, watched: setWatched };
-      setters[source as ShelfId](items => items.filter(t => !same(t)));
-      if (source === "watchlist") setSortedWatchList(items => items.filter(t => !same(t)));
-      if (destination) {
-        const add = (items: Title[]) => items.some(same) ? items : [...items, title];
-        setters[destination](add);
-        if (destination === "watchlist") setSortedWatchList(add);
-      }
+      // Refresh every shelf, including compatible copies and preserved progress.
+      await loadUserTitles();
       setShelf(source);
-      toast.success("Moved “" + title.title + "” to " + target.label + ".");
+      toast.success((target.personal ? "Moved “" : "Saved “") + title.title + "” to " + target.label + ".");
     } catch {
       toast.error(savedOnDevice ? "Saved to " + target.label + ", but the shelf move couldn’t be confirmed. You can retry safely." : "Couldn’t move this title. Please try again.");
     } finally { moving.current = false; }
@@ -407,7 +411,7 @@ const Index = () => {
     } catch { toast.error("Couldn’t save your list on this device."); }
   }
 
-  const openSearchModal = (type: "favourite" | "watchlist" | "watching" | "watched") => {
+  const openSearchModal = (type: ShelfId | "companion") => {
     setSearchModalType(type);
     setSearchModalOpen(true);
   };
@@ -465,6 +469,10 @@ const Index = () => {
   const handleWatchedFilterChange = (value: string) => setWatchedFilter(value);
 
   const handleSearchSelect = async (title: Title) => {
+    if (searchModalType === "companion") {
+      openLibraryTitle(title);
+      return;
+    }
     setShelf(searchModalType);
     if (searchModalType === "favourite") handleAddToFavourites(title);
     else if (searchModalType === "watchlist") await handleAddToWatchList(title);
@@ -509,8 +517,8 @@ const Index = () => {
       <>
         <div className="home-heading">
           <div className="min-w-0"><p className="eyebrow">Home</p><h1 className="screen-heading mt-1.5">What’s on next?</h1></div>
-          <button onClick={() => openSearchModal("watchlist")} className="home-search" aria-label="Find a movie or TV show">
-            <Search size={19} aria-hidden="true" /><span className="hidden sm:inline">Find a title</span>
+          <button onClick={() => openSearchModal("companion")} className="home-search" aria-label="Find a title to ask your geek">
+            <Search size={19} aria-hidden="true" /><span className="hidden sm:inline">Ask your geek</span>
           </button>
         </div>
         <WatchingSpotlight titles={currentlyWatching} onFindTitle={() => openSearchModal("watching")}
@@ -584,11 +592,7 @@ const Index = () => {
         </Tabs>
       </section>
 
-      {accountId && <HomeLists key={accountId} viewer={accountId} shelves={libraryShelves} onTitleActions={openMove} onOpen={title => {
-        const contains = (items: Title[]) => items.some(t => titleKey(t) === titleKey(title));
-        if (contains(currentlyWatching)) openWatching(title);
-        else setDetail({ title, source: contains(watchList) ? "watchlist" : contains(watched) ? "watched" : contains(favourites) ? "favourite" : undefined });
-      }} />}
+      {accountId && <HomeLists key={accountId} viewer={accountId} shelves={libraryShelves} onTitleActions={openMove} onOpen={openLibraryTitle} />}
 
       {moveRequest && <MoveTitleMenu request={moveRequest} onClose={() => setMoveRequest(null)}
         onMove={target => void moveTitle(moveRequest.source, moveRequest.title, target)}

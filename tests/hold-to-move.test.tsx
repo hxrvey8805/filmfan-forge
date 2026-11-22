@@ -26,8 +26,12 @@ afterEach(async () => {
   await preview.from("user_titles").delete().eq("title_id", movie.title_id);
   await preview.auth.signOut(); localStorage.clear();
 });
-async function home() {
+async function home(shelf?: string) {
   render(<MemoryRouter><Index/></MemoryRouter>);
+  if (shelf) {
+    await screen.findByRole("tablist", {name:"Library shelves"});
+    fireEvent.mouseDown(screen.getByRole("tab", {name:shelf}), {button:0});
+  }
   return screen.findByRole("button", { name: "Open Move me" });
 }
 const finger = (x: number, y: number) => ({ identifier: 8, clientX: x, clientY: y });
@@ -56,10 +60,11 @@ it("does not open the menu for a swipe; a quick tap still opens the title", asyn
 });
 
 it("opens destinations directly from three dots and moves only the chosen record, preserving progress", async () => {
+  await preview.from("user_titles").insert({...movie,user_id:account,list_type:"watching"});
   await preview.from("user_titles").insert([{ ...movie, type:"tv", user_id:account, title:"Series with same ID" },
     { ...movie, user_id:account, list_type:"favourite" }]);
-  await home(); const menu = options();
-  const button = within(menu).getByRole("button", {name:"Watching"});
+  await home("Watching"); const menu = options();
+  const button = within(menu).getByRole("button", {name:"Watched"});
   expect((within(menu).getByRole("button", {name:"Favourites"}) as HTMLButtonElement).disabled).toBe(true);
   expect(within(menu).queryByText("Already here")).toBeNull();
   const rowsInMenu = within(menu).getAllByRole("button");
@@ -68,9 +73,10 @@ it("opens destinations directly from three dots and moves only the chosen record
   await act(async () => fireEvent.click(button));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByRole("button", {name:"Open Move me"})).toBeNull();
-  expect((await rows()).map(r => [r.type,r.list_type,r.progress])).toEqual([
-    ["movie","watching",37],["tv","watchlist",37],["movie","favourite",37],
-  ]);
+  expect((await rows()).map(r => [r.type,r.list_type,r.progress])).toEqual(expect.arrayContaining([
+    ["movie","watched",37],["tv","watchlist",37],["movie","favourite",37],
+  ]));
+  expect(await rows()).toHaveLength(3);
 });
 
 it("can move to a personal list without changing folder order or offering a smart destination", async () => {
@@ -101,8 +107,9 @@ it("keeps the source title if the personal list cannot be saved", async () => {
 vi.mock("@/components/AIPrivacy",()=>({useAIPrivacy:()=>({ensure:async()=>true,reload:()=>{}})}));
 
 it("removes only the selected shelf copy after confirmation", async () => {
+  await preview.from("user_titles").insert({...movie,user_id:account,list_type:"watching"});
   await preview.from("user_titles").insert({...movie,user_id:account,list_type:"favourite"});
-  await home(); const menu = options();
+  await home("Watching"); const menu = options();
   fireEvent.click(within(menu).getByRole("button",{name:"Remove from list"}));
   expect((await rows())).toHaveLength(2);
   await act(async()=>fireEvent.click(within(menu).getByRole("button",{name:"Remove title"})));

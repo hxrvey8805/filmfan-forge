@@ -1,0 +1,24 @@
+Library shelf rules and Home search — local changes, 22 November 2026
+
+User-confirmed behaviour
+- Watchlist cannot share a title with Watching, Watched or Favourites.
+- Watching and Watched replace each other.
+- Favourites may accompany Watching or Watched, or stand alone.
+- My Lists remain independent; copies in other custom lists are untouched.
+- Three-dot shelf actions retain compatible copies; Remove only deletes the selected copy.
+- Home's top search opens Ask your Geek setup without adding/moving any library title.
+  Each shelf's + button still adds to that shelf.
+
+Release order (held; do not deploy or update TestFlight yet)
+1. Privately back up affected user_titles rows before applying the staged migration.
+2. Apply supabase/migrations/20261122210000_exclusive_active_shelves.sql before shipping this client.
+   Existing conflicting statuses retain Watching over Watched; either existing status or
+   Favourites takes priority over Watchlist. Saved progress is recovered before cleanup.
+   The transaction, partial unique indexes and RLS-aware trigger protect every write path,
+   including search, three-dot actions, onboarding, older clients and separate devices.
+   Movie/TV IDs are distinct. No new RPC or generated schema update is needed.
+3. Ship the client together with the held poster reorder/menu improvements, then check
+   search, each shelf transition and My Lists on the actual iPhone.
+
+No live data, purchases, AI answers, spoiler checks or spending limits are changed by
+preparing this work. The local design preview mirrors the new database rules.

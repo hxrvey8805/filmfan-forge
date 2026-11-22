@@ -66,11 +66,30 @@ function from(table: string) {
     const all = tables[table] ?? [];
     const matches = (row: Row) => predicates.every(p => p(row));
     let rows = all.filter(matches);
-    if (operation === "insert") {
-      rows = payload.map(row => ({ id: crypto.randomUUID(), ...row }));
-      tables[table] = [...all, ...rows];
+    if (operation === "insert" || operation === "update") {
+      rows = operation === "insert" ? payload.map(row => ({ id: crypto.randomUUID(), ...row }))
+        : rows.map(row => ({ ...row, ...payload[0] }));
+      let next = [...all];
+      for (const row of rows) {
+        const previous = operation === "update" ? all.find(item => item.id === row.id) : undefined;
+        if (table === "user_titles") {
+          const sameTitle = (item: Row) => item.user_id === row.user_id && item.type === row.type && item.title_id === row.title_id;
+          const conflicts: Record<string,string[]> = {watchlist:['watching','watched','favourite'],
+            watching:['watchlist','watched'],watched:['watchlist','watching'],favourite:['watchlist']};
+          const conflicting = (item: Row) => sameTitle(item) && item.id !== row.id
+            && (conflicts[String(row.list_type)] ?? []).includes(String(item.list_type));
+          const priority = ['watching','watched','watchlist','favourite'];
+          const other = next.filter(conflicting).sort((a,b) => priority.indexOf(String(a.list_type)) - priority.indexOf(String(b.list_type)))[0];
+          if (!previous || !['watchlist','watching'].includes(String(previous.list_type))) row.progress = other?.progress ?? row.progress;
+          next = next.filter(item => !conflicting(item));
+          if (next.some(item => item.id !== row.id && sameTitle(item) && item.list_type === row.list_type)) {
+            return { data: [] as Row[], error: { code: "23505", message: "This title is already in that list." } };
+          }
+        }
+        next = previous ? next.map(item => item.id === row.id ? row : item) : [...next, row];
+      }
+      tables[table] = next;
     } else if (operation === "delete") tables[table] = all.filter(row => !matches(row));
-    else if (operation === "update") tables[table] = all.map(row => matches(row) ? { ...row, ...payload[0] } : row);
     return { data: rows, error: null };
   };
   const query = {
