@@ -122,11 +122,12 @@ export function FocusRoomScene({ look, running, styleName, time, canUseLamp = fa
       <radialGradient id={prefix+"-shelf-halo"}><stop stopColor="var(--room-accent, #9294fb)" stopOpacity=".36"/><stop offset="1" stopColor="var(--room-accent, #9294fb)" stopOpacity="0"/></radialGradient>
       <linearGradient id={prefix+"-wood"} x2=".25" y2="1"><stop stopColor="#c58e64"/><stop offset="1" stopColor="#9d6854"/></linearGradient>
       <radialGradient id={prefix+"-lamp"}><stop stopColor="var(--room-lamplight, #ffe4a7)" stopOpacity=".85"/><stop offset=".55" stopColor="var(--room-lamplight, #ffcd86)" stopOpacity=".37"/><stop offset="1" stopColor="var(--room-lamplight, #ffc277)" stopOpacity="0"/></radialGradient>
+      <linearGradient id={prefix+"-lamp-fabric"}><stop stopColor="#bfb39e"/><stop offset=".4" stopColor="#e9dfc9"/><stop offset="1" stopColor="#c9bca3"/></linearGradient>
       <linearGradient id={prefix+"-sun"} x2="1" y2=".5"><stop stopColor="var(--room-accent, #af9cd6)"/><stop offset="1" stopColor="var(--room-lamplight, #edb47c)" stopOpacity=".16"/></linearGradient>
-      <radialGradient id={prefix+"-edge"} cx=".56" cy=".37" r=".78"><stop offset=".51" stopColor="var(--room-shadow, #443547)" stopOpacity="0"/><stop offset="1" stopColor="var(--room-shadow, #443547)" stopOpacity=".19"/></radialGradient>
+      <radialGradient id={prefix+"-edge"} gradientUnits="userSpaceOnUse" cx="268.8" cy="177.6" r="374.4"><stop offset=".51" stopColor="var(--room-shadow, #443547)" stopOpacity="0"/><stop offset="1" stopColor="var(--room-shadow, #443547)" stopOpacity=".19"/></radialGradient>
       <linearGradient id={prefix+"-tv"} x2="1" y2=".8"><stop stopColor="#211e2b"/><stop offset=".75" stopColor="#333241"/><stop offset="1" stopColor="#20202d"/></linearGradient>
       <linearGradient id={prefix+"-beam"} x1="0" y1="1" x2="1" y2=".15"><stop stopColor="#b5e6d6" stopOpacity=".4"/><stop offset="1" stopColor="#c1e9d9" stopOpacity="0"/></linearGradient>
-      <clipPath id={prefix+"-set"}><rect width="480" height="480"/></clipPath>
+      <clipPath id={prefix+"-set"}><rect width="480" height="1178"/></clipPath>
       <linearGradient id={prefix+"-ceiling"} x2="0" y2="1"><stop stopColor="#1b1820"/><stop offset="1" stopColor="var(--room-shadow,#3c3859)"/></linearGradient>
       <radialGradient id={prefix+"-can-light"}><stop stopColor="var(--room-lamplight,#ffe4a7)" stopOpacity=".25"/><stop offset="1" stopColor="var(--room-lamplight,#ffe4a7)" stopOpacity="0"/></radialGradient>
       <pattern id={prefix+"-curtain"} width="30" height="20" patternUnits="userSpaceOnUse">
@@ -153,24 +154,19 @@ export function FocusRoomScene({ look, running, styleName, time, canUseLamp = fa
       <path d="M0-11h110l9 8v4H0Z" fill="var(--room-timber,#6d4745)" stroke="var(--room-shadow,#40323d)" strokeWidth="2"/>
       <rect x="120" y="-55" width="35" height="56" fill="var(--room-timber,#494051)"/>
       {[123,131,139,147].map(x=><path key={x} d={`M${x}-55V1`} stroke="var(--room-wood-edge,#576e65)" strokeWidth="4"/>)}
-      <rect y="478" width="480" height="700" fill={paint("floor")}/>
-      <g stroke="#201d21" strokeWidth="1.4" opacity=".34">
-        <path d="M173 480-61 764m367-284L115 860m321-380-73 386M22 480l-86 78m49-18 501-90M-10 629l500-107m-500 211 500-130"/>
-      </g>
-      <path d="M14 506v9l9-1 1-9m77-11 1 8 7-1 1-9" fill="#46363c"/>
-      <rect className="room-lights-down" x="0" y="-1200" width="480" height="2600" fill="var(--room-shadow,#201b38)"/>
+      <rect className="room-lights-down" x="0" y="-1200" width="480" height="1200" fill="var(--room-shadow,#201b38)"/>
     </g>
-    <path d="M-1 476h125v16L-1 508Z" fill="#80584f" stroke="#272431" strokeWidth="3"/>
     <path d="M-2500-1200H0v2600h-2500Zm2980 0h2500v2600H480Z" fill={paint("curtain")}/>
     <g clipPath={paint("set")}>
 
     <path d="M0 0h480v480H0Z" fill={paint("wall")}/>
     <path className="room-lamp-glow" d="M132 12q168 35 348 120v122l-349-28Z" fill={paint("sun")} opacity=".36"/>
-    <path d="m0 333 480-60v207H0Z" fill={paint("floor")}/>
+    {/* A single floor continues below the square scene, with no portrait-screen join. */}
+    <path d="M0 333 480 273V1178H0Z" fill={paint("floor")}/>
     <path d="m0 333 480-60" stroke="var(--room-wood-edge, #845f5c)" strokeWidth="6"/>
-    <g stroke="var(--room-floor-dark, #754c44)" strokeWidth="1.2" opacity=".55">
-      <path d="m329 291-156 189m233-200L306 480m168-201-38 201M78 321 0 376m222-73L24 480"/>
-      <path d="m0 412 480-77M0 460l480-84m-242 84 242-45"/>
+    <g fill="none" stroke="var(--room-shadow, #3c3540)" strokeWidth="1.2" opacity=".28">
+      <path d="M329 291-403 1178M406 280-43 1178M474 279 304 1178M78 321-200 517M222 303-757 1178"/>
+      <path d="M0 412 480 335M0 460 480 376M0 568 480 479M0 733 480 629M0 958 480 831"/>
     </g>
     <FilmCollection />
     <ellipse cx="135" cy="189" rx="78" ry="140" fill={paint("shelf-halo")}/>
@@ -193,22 +189,33 @@ export function FocusRoomScene({ look, running, styleName, time, canUseLamp = fa
 
     {/* The light pools on the wall, from the standing lamp just behind the right armrest. */}
     <ellipse className="room-lamp-glow" cx="451" cy="155" rx="120" ry="148" fill={paint("lamp")}/>
-    <g transform="translate(-12 0)" stroke="#61474b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round">
-      <ellipse cx="458" cy="365" rx="17" ry="4" fill="#7d5b50"/>
-      <path d="M455 153h5v210l-5 1Z" fill="#bb956b"/>
-      <path d="M438 109q18-5 36-1l11 60q-29 11-61-2Z" fill="#e3b987"/>
-      <path className="room-shade-light" d="M441 112q15-3 30-1l11 55q-27 9-54-2Z" fill="var(--room-lamplight, #f8d99c)" stroke="none"/>
-      <path d="m444 116-8 45m18-45-3 46m15-47 5 48" stroke="#cfaa7e" strokeWidth="1.2"/>
-
-      <path d="M438 109q18 4 36-1" fill="none" stroke="#bc936b" strokeWidth="1.4"/>
-      <g fill="#608675" stroke="#476354">
-        <path d="M470 310q-2-31-18-47-3 25 18 47Zm2-7q-3-32 8-44v39Zm1 7q6-21 14-23v27Z"/>
-        <path d="m461 314 20-1-2 25-14 1Z" fill="#a56e5d" stroke="#765a52"/>
-      </g>
+    <g className="room-standing-lamp" transform="translate(-12 0)" stroke="#39343b" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
+      <ellipse cx="458" cy="365" rx="18" ry="4" fill="#39373b"/>
+      <path d="M444 364q14 3 28 0" fill="none" stroke="#81756b" strokeWidth="1.2"/>
+      <path d="M456 162h3v200h-3Z" fill="#454047"/>
+      <path d="M457 176v181" fill="none" stroke="#8e8277" strokeWidth=".8"/>
+      <path d="M455 173h5v5h-5Z" fill="#b59a72" stroke="none"/>
+      {/* A smooth linen drum shade, with a thin rim and a warm diffuser. */}
+      <path d="M425 125C425 117 480 117 480 125V166C480 174 425 174 425 166Z" fill={paint("lamp-fabric")}/>
+      <path className="room-shade-light" d="M427 126Q452 132 478 126V165Q452 172 427 165Z" fill="var(--room-lamplight, #f8d99c)" stroke="none" opacity=".7"/>
+      <ellipse cx="452.5" cy="125" rx="27.5" ry="5.7" fill="#cfc3af" stroke="#6f6660" strokeWidth="1.5"/>
+      <path d="M426 166q26 8 53 0" fill="none" stroke="#6f6660" strokeWidth="1.5"/>
+    </g>
+    {/* Leave breathing room around every leaf; the pot sits in front of the stand. */}
+    <g className="room-side-plant" transform="translate(423 260)" stroke="#425e50" strokeWidth="1.7" strokeLinejoin="round" strokeLinecap="round">
+      <ellipse cx="30" cy="87" rx="17" ry="3" fill="#2f2b31" opacity=".22" stroke="none"/>
+      <path d="M30 70V35m0 26-13-25m13 26 12-22" fill="none"/>
+      <path d="M30 59C13 52 5 32 8 21C23 29 32 44 30 59Z" fill="#709380"/>
+      <path d="M30 47C22 28 26 7 36 0C40 18 39 35 30 47Z" fill="#608675"/>
+      <path d="M31 63C30 44 38 29 47 25C49 42 43 57 31 63Z" fill="#7d9e89"/>
+      <path d="M30 65C22 60 16 50 17 40C29 45 34 57 30 65Z" fill="#567b68"/>
+      <path d="M16 65h28l-3 19q-11 5-22 0Z" fill="#a7836d" stroke="#715c54"/>
+      <ellipse cx="30" cy="65" rx="14" ry="3" fill="#65574d" stroke="#715c54"/>
+      <path d="M21 71l2 10" stroke="#c6a38a" strokeWidth="1.3"/>
     </g>
 
     {/* Lower the house lights behind the chair, leaving Geek and the snacks readable. */}
-    <rect className="room-lights-down" width="480" height="480" fill="var(--room-shadow, #201b38)" pointerEvents="none"/>
+    <rect className="room-lights-down" width="480" height="1178" fill="var(--room-shadow, #201b38)" pointerEvents="none"/>
     <WallClock time={time} running={running}/>
     {/* Oak swivel base and one deep, upholstered seat. */}
     <ellipse cx="292" cy="361" rx="103" ry="17" fill="var(--room-shadow, #3a2b43)" opacity=".47"/>
@@ -261,6 +268,7 @@ export function FocusRoomScene({ look, running, styleName, time, canUseLamp = fa
 
     {/* We see the back of the foreground TV. The screen faces the armchair. */}
     <g stroke="#272431" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round">
+      <path d="M14 506v9l9-1 1-9m77-11 1 8 7-1 1-9" fill="#46363c" stroke="none"/>
       <path d="m0 423 80-6 44 15v61L0 508Z" fill="#80584f"/>
       <path d="m0 419 78-6 46 15-86 8-38-7Z" fill="#ad7c63"/>
       <path d="m30 399 12-1-1 14 17 4-2 3-43 1-5-3 21-5Z" fill="#353340"/>
@@ -276,7 +284,7 @@ export function FocusRoomScene({ look, running, styleName, time, canUseLamp = fa
       <path className="room-tv-rim" d="m83 282 1 121" stroke="#c6f9e3" strokeWidth="2.2"/>
       <circle className="room-tv-power" cx="73" cy="401" r="1.6" stroke="none"/>
     </g>
-    <rect width="480" height="480" fill={paint("edge")} pointerEvents="none"/>
+    <rect width="480" height="1178" fill={paint("edge")} pointerEvents="none"/>
     <g transform="translate(-12 0)"><LampPullCord enabled={canUseLamp} running={running} onToggleFocus={onToggleFocus} /></g>
     </g>
   </svg>;
