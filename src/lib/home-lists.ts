@@ -7,7 +7,7 @@ export const titleKey = (t: Pick<LibraryTitle, "type" | "id">) => t.type + ":" +
 export const uniqueTitles = (titles: LibraryTitle[]) => [...new Map(titles.map(t => [titleKey(t), t])).values()];
 export type MetadataField = FactField | "runtime" | "release";
 export type HomeList = { id: string; name: string } & (
-  { mode: "manual"; titles: LibraryTitle[] } | { mode: "smart"; rule: ListRule; sources?: string[]; request?: string }
+  { mode: "manual"; titles: LibraryTitle[] } | { mode: "smart"; rule: ListRule; sources?: string[]; request?: string; excluded?: string[] }
 );
 export type TitleFacts = {
   directors: string[]; genres: string[]; minutes: number[];

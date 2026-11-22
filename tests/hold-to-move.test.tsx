@@ -38,8 +38,8 @@ function start(poster: HTMLElement) {
 function lift(poster: HTMLElement, x = 100, y = 400) {
   fireEvent.touchEnd(poster, { touches: [], changedTouches: [finger(x, y)] });
 }
-function hold(poster: HTMLElement) {
-  vi.useFakeTimers({ toFake: ["setTimeout","clearTimeout"] }); start(poster); act(() => vi.advanceTimersByTime(475)); vi.useRealTimers();
+function options() {
+  fireEvent.click(screen.getByRole("button", {name:"Options for Move me"}));
   return screen.getByRole("dialog", { name: "Move me" });
 }
 const rows = async () => (await preview.from("user_titles").select().eq("title_id", movie.title_id)).data;
@@ -55,16 +55,17 @@ it("does not open the menu for a swipe; a quick tap still opens the title", asyn
   expect(await screen.findByRole("button", {name:"Enter room"})).toBeTruthy();
 });
 
-it("slides to a highlighted destination and moves only the chosen record, preserving progress", async () => {
+it("opens destinations directly from three dots and moves only the chosen record, preserving progress", async () => {
   await preview.from("user_titles").insert([{ ...movie, type:"tv", user_id:account, title:"Series with same ID" },
     { ...movie, user_id:account, list_type:"favourite" }]);
-  const poster = await home(), menu = hold(poster);
+  await home(); const menu = options();
   const button = within(menu).getByRole("button", {name:"Watching"});
-  expect((within(menu).getByRole("button", {name:/Favourites.*Already here/}) as HTMLButtonElement).disabled).toBe(true);
-  Object.defineProperty(document, "elementFromPoint", {configurable:true, value:() => button.firstElementChild});
-  fireEvent.touchMove(poster, {touches:[finger(105,330)],changedTouches:[finger(105,330)]});
-  expect(button.hasAttribute("data-sliding")).toBe(true);
-  await act(async () => lift(poster,105,330));
+  expect((within(menu).getByRole("button", {name:"Favourites"}) as HTMLButtonElement).disabled).toBe(true);
+  expect(within(menu).queryByText("Already here")).toBeNull();
+  const rowsInMenu = within(menu).getAllByRole("button");
+  expect(rowsInMenu.indexOf(within(menu).getByRole("button",{name:"Remove from list"})))
+    .toBe(rowsInMenu.indexOf(within(menu).getByRole("button",{name:"Watched"})) + 1);
+  await act(async () => fireEvent.click(button));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByRole("button", {name:"Open Move me"})).toBeNull();
   expect((await rows()).map(r => [r.type,r.list_type,r.progress])).toEqual([
@@ -72,11 +73,10 @@ it("slides to a highlighted destination and moves only the chosen record, preser
   ]);
 });
 
-it("can lift then tap a personal list without changing its order or offering a smart list", async () => {
+it("can move to a personal list without changing folder order or offering a smart destination", async () => {
   const smart = {id:"horror",name:"Horror",mode:"smart",rule:{kind:"genre",scope:"all",value:"Horror"}};
   localStorage.setItem(homeListKey(account), JSON.stringify([folder, smart]));
-  const poster = await home(), menu = hold(poster);
-  lift(poster); fireEvent.click(poster); // Some browsers also synthesize a click.
+  await home(); const menu = options();
   expect(within(menu).queryByRole("button", {name:"Horror"})).toBeNull();
   await act(async () => fireEvent.click(within(menu).getByRole("button", {name:"Friday options"})));
   expect(await rows()).toHaveLength(0);
@@ -89,7 +89,7 @@ it("can lift then tap a personal list without changing its order or offering a s
 
 it("keeps the source title if the personal list cannot be saved", async () => {
   localStorage.setItem(homeListKey(account), JSON.stringify([folder]));
-  const poster = await home(), menu = hold(poster); lift(poster);
+  await home(); const menu = options();
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw Error("full"); });
   const fail = vi.spyOn(toast,"error");
   await act(async () => fireEvent.click(within(menu).getByRole("button",{name:"Friday options"})));
@@ -99,3 +99,40 @@ it("keeps the source title if the personal list cannot be saved", async () => {
 
 // These tests exercise library interactions; explicit AI consent is covered in ai-privacy-ui.
 vi.mock("@/components/AIPrivacy",()=>({useAIPrivacy:()=>({ensure:async()=>true,reload:()=>{}})}));
+
+it("removes only the selected shelf copy after confirmation", async () => {
+  await preview.from("user_titles").insert({...movie,user_id:account,list_type:"favourite"});
+  await home(); const menu = options();
+  fireEvent.click(within(menu).getByRole("button",{name:"Remove from list"}));
+  expect((await rows())).toHaveLength(2);
+  await act(async()=>fireEvent.click(within(menu).getByRole("button",{name:"Remove title"})));
+  expect((await rows()).map(row=>row.list_type)).toEqual(["favourite"]);
+});
+
+it("reorders a custom list, saves it across reopening and keeps folder order", async () => {
+  const first={id:10,type:"movie",title:"First pick",posterPath:""}, second={...first,id:11,title:"Second pick"};
+  localStorage.setItem(homeListKey(account),JSON.stringify([{...folder,titles:[first,second]},{...folder,id:"later",name:"Later"}]));
+  await home(); fireEvent.click(screen.getByRole("button",{name:"Friday options"}));
+  const button=screen.getByRole("button",{name:"Open First pick"});
+  fireEvent.keyDown(button,{key:" "});fireEvent.keyDown(button,{key:"ArrowRight"});fireEvent.keyDown(button,{key:"Enter"});
+  const saved=JSON.parse(localStorage.getItem(homeListKey(account))!);
+  expect(saved.map((list:{id:string})=>list.id)).toEqual(["friday","later"]);
+  expect(saved[0].titles.map((title:{id:number})=>title.id)).toEqual([11,10]);
+  fireEvent.click(screen.getByRole("button",{name:"Friday options"}));
+  fireEvent.click(screen.getByRole("button",{name:"Friday options"}));
+  const posters=within(document.getElementById("my-lists")!).getAllByRole("button",{name:/^Open /});
+  expect(posters.map(button=>button.getAttribute("aria-label"))).toEqual(["Open Second pick","Open First pick"]);
+});
+
+it("moves out of a custom list without deleting the title from other lists", async () => {
+  const custom={id:9123,type:"movie",title:"Custom title",posterPath:""};
+  localStorage.setItem(homeListKey(account),JSON.stringify([{...folder,titles:[custom]},{...folder,id:"later",name:"Later",titles:[custom]}]));
+  await home();fireEvent.click(screen.getByRole("button",{name:"Friday options"}));
+  fireEvent.click(screen.getByRole("button",{name:"Options for Custom title"}));
+  await act(async()=>fireEvent.click(within(screen.getByRole("dialog",{name:"Custom title"})).getByRole("button",{name:"Watched"})));
+  const saved=JSON.parse(localStorage.getItem(homeListKey(account))!);
+  expect(saved[0].titles).toEqual([]);expect(saved[1].titles).toEqual([custom]);
+  const records=(await preview.from("user_titles").select().eq("title_id",9123)).data;
+  expect(records.map(row=>row.list_type)).toEqual(["watched"]);
+  await preview.from("user_titles").delete().eq("title_id",9123);
+});
