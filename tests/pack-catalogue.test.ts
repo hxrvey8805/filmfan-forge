@@ -1,6 +1,7 @@
 import {describe,it,expect,vi} from 'vitest';
 import {drawPack,uniformIndex,PACK_ODDS,PACK_ROSTER,PACK_CATALOGUE_VERSION,readPackPick,personNameKey,type PackPick} from '../supabase/functions/_shared/pack-catalogue';
 import {resolvePackPerson,openCollectiblePack} from '../supabase/functions/_shared/pack-service';
+import {PACK_PERSON_IDS} from '../supabase/functions/_shared/pack-identities';
 const next=(...values:number[])=>()=>values.shift()!;
 const pick:PackPick={name:'Emma Stone',packType:'actor',rarity:'star',version:PACK_CATALOGUE_VERSION};
 const id='00000000-0000-4000-8000-000000000001';
@@ -46,27 +47,39 @@ describe('approved pack odds',()=>{
  });
 });
 describe('profile verification and persistent draws',()=>{
- it('resolves an exact normalized name and verifies its actual credit, without relying on popularity',async()=>{
-  const read=vi.fn().mockResolvedValueOnce({results:[{id:1,name:'Emma Stone',profile_path:'/face.jpg',adult:false},{id:2,name:'Emily Stone'}]}).mockResolvedValueOnce({cast:[{character:'Mia'}]});
-  expect(await resolvePackPerson(pick,read)).toEqual({id:1,name:'Emma Stone',profile_path:'/face.jpg',rarity:'star',catalogue_version:PACK_CATALOGUE_VERSION});
-  expect(read.mock.calls).toEqual([['search/person?query=Emma%20Stone&include_adult=false&language=en-US'],['person/1/combined_credits']]);
+ it('covers the exact frozen roster with unique reviewed identities',()=>{
+  const names=Object.values(PACK_ROSTER).flatMap(t=>Object.values(t).flat());
+  expect(Object.keys(PACK_PERSON_IDS).sort()).toEqual([...names].sort());
+  expect(new Set(Object.values(PACK_PERSON_IDS)).size).toBe(80);
+  for(const id of Object.values(PACK_PERSON_IDS))expect(Number.isSafeInteger(id)&&id>0).toBe(true);
  });
- it('normalizes accents and punctuation, verifies directors and uses initials for missing/unsafe photos',async()=>{
+ it('loads the reviewed identity directly instead of rejecting same-name search collisions',async()=>{
+  const read=vi.fn().mockResolvedValueOnce({id:54693,name:'Emma Stone',profile_path:'/face.jpg',adult:false}).mockResolvedValueOnce({cast:[{character:'Mia'}]});
+  expect(await resolvePackPerson(pick,read)).toEqual({id:54693,name:'Emma Stone',profile_path:'/face.jpg',rarity:'star',catalogue_version:PACK_CATALOGUE_VERSION});
+  expect(read.mock.calls).toEqual([['person/54693?language=en-US'],['person/54693/combined_credits']]);
+ });
+ it('normalizes accents, accepts documented aliases and verifies directing credits',async()=>{
   expect(personNameKey('Lupita Nyong’o')).toBe(personNameKey("Lupita Nyong'o"));
   const director:PackPick={...pick,name:'Céline Sciamma',packType:'director',rarity:'established'};
-  const read=vi.fn().mockResolvedValueOnce({results:[{id:3,name:'Celine Sciamma',profile_path:'https://other.test/image.jpg'}]}).mockResolvedValueOnce({crew:[{job:'Director'}]});
-  expect(await resolvePackPerson(director,read)).toMatchObject({id:3,profile_path:null,name:'Céline Sciamma'});
+  const read=vi.fn().mockResolvedValueOnce({id:68813,name:'Celine Sciamma',profile_path:'https://other.test/image.jpg'}).mockResolvedValueOnce({crew:[{job:'Director'}]});
+  expect(await resolvePackPerson(director,read)).toMatchObject({id:68813,profile_path:null,name:'Céline Sciamma'});
+  const alias=vi.fn().mockResolvedValueOnce({id:54693,name:'Emily Jean Stone',also_known_as:['Emma Stone']}).mockResolvedValueOnce({cast:[{character:'Mia'}]});
+  expect(await resolvePackPerson(pick,alias)).toMatchObject({id:54693,name:'Emma Stone'});
  });
  it.each([
-  {results:[{id:1,name:'Someone else'}]},
-  {results:[{id:1,name:'Emma Stone'},{id:2,name:'Emma Stone'}]},
-  {results:[{id:1,name:'Emma Stone',adult:true}]},
- ])('refuses ambiguous, wrong or adult profiles without rerolling',async response=>{
+  {id:54693,name:'Someone else'},
+  {id:2080867,name:'Emma Stone'},
+  {id:54693,name:'Emma Stone',adult:true},
+  {name:'Emma Stone'},
+ ])('refuses wrong, same-name but different, missing-ID or adult profiles without rerolling',async response=>{
   const read=vi.fn().mockResolvedValue(response);await expect(resolvePackPerson(pick,read)).rejects.toThrow('verified');expect(read).toHaveBeenCalledOnce();
  });
- it('refuses a profile with only self-appearances or no directing credits',async()=>{
-  for(const p of [pick,{...pick,packType:'director' as const}]){
-   const read=vi.fn().mockResolvedValueOnce({results:[{id:1,name:p.name}]}).mockResolvedValueOnce({cast:[{character:'Self'}],crew:[{job:'Writer'}]});
+ it('rejects a pick outside its frozen catalogue before a provider request',async()=>{
+  const read=vi.fn();await expect(resolvePackPerson({...pick,name:'Not in roster'},read)).rejects.toThrow('unavailable');expect(read).not.toHaveBeenCalled();
+ });
+ it('refuses self-only actors and directors with no directing credits',async()=>{
+  for(const p of [pick,{...pick,name:'Christopher Nolan',packType:'director' as const,rarity:'icon' as const}]){
+   const read=vi.fn().mockResolvedValueOnce({id:PACK_PERSON_IDS[p.name],name:p.name}).mockResolvedValueOnce({cast:[{character:'Self'}],crew:[{job:'Writer'}]});
    await expect(resolvePackPerson(p,read)).rejects.toThrow('credit');
   }
  });
@@ -85,7 +98,7 @@ describe('profile verification and persistent draws',()=>{
   const read=vi.fn(async()=>{order.push('profile');throw Error('offline');});
   await expect(openCollectiblePack(rpc,read,'u',id,'first',next(60,4))).rejects.toThrow('offline');
   expect(saved).toEqual(pick);expect(order).toEqual(['claim_cinegeek_pack','store_cinegeek_pack_pick','profile']);
-  const retryRead=vi.fn().mockResolvedValueOnce({results:[{id:1,name:'Emma Stone'}]}).mockResolvedValueOnce({cast:[{character:'Mia'}]});
+  const retryRead=vi.fn().mockResolvedValueOnce({id:54693,name:'Emma Stone'}).mockResolvedValueOnce({cast:[{character:'Mia'}]});
   const random=vi.fn();const result=await openCollectiblePack(rpc,retryRead,'u',id,'second',random);
   expect(result.person).toMatchObject({name:'Emma Stone',rarity:'star'});expect(random).not.toHaveBeenCalled();
   expect(rpc.mock.calls.filter(c=>c[0]==='store_cinegeek_pack_pick')).toHaveLength(1);

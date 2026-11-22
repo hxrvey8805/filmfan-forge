@@ -1,23 +1,22 @@
 import {drawPack,personNameKey,readPackPick,type PackPick,type PackType} from './pack-catalogue.ts';
+import {PACK_PERSON_IDS} from './pack-identities.ts';
 type Rpc=(name:string,args:Record<string,unknown>)=>Promise<{data:unknown;error:unknown}>;
 type Read=(path:string)=>Promise<unknown>;
 const object=(value:unknown):Record<string,unknown>=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const objects=(value:unknown):Record<string,unknown>[]=>Array.isArray(value)?value.map(object):[];
 export async function resolvePackPerson(pick:PackPick,read:Read){
-  const result=object(await read(`search/person?query=${encodeURIComponent(pick.name)}&include_adult=false&language=en-US`));
-  const matches=new Map<number,{id:number;name:string;profile_path?:string}>();
-  for(const p of objects(result.results)){
-    if(typeof p.id==='number'&&Number.isSafeInteger(p.id)&&p.id>0&&p.adult!==true&&typeof p.name==='string'&&personNameKey(p.name)===personNameKey(pick.name))matches.set(p.id,{id:p.id,name:p.name,profile_path:typeof p.profile_path==='string'?p.profile_path:undefined});
-  }
-  // No substitute person, cross-category fallback or popularity-based reroll.
-  if(matches.size!==1)throw Error('Person could not be verified');
-  const person=[...matches.values()][0];
-  const credits=object(await read(`person/${person.id}/combined_credits`));
+  if(!readPackPick(pick))throw Error('Pack draw unavailable');
+  const expectedId=PACK_PERSON_IDS[pick.name];
+  if(!Number.isSafeInteger(expectedId)||expectedId<=0)throw Error('Person could not be verified');
+  const person=object(await read(`person/${expectedId}?language=en-US`));
+  const names=[person.name,...(Array.isArray(person.also_known_as)?person.also_known_as:[])];
+  if(person.id!==expectedId||person.adult===true||!names.some(name=>typeof name==='string'&&personNameKey(name)===personNameKey(pick.name)))throw Error('Person could not be verified');
+  const credits=object(await read(`person/${expectedId}/combined_credits`));
   const valid=pick.packType==='director'
     ? objects(credits.crew).some(c=>c.job==='Director')
     : objects(credits.cast).some(c=>typeof c.character==='string'&&c.character.trim()&&!/\b(self|himself|herself)\b/i.test(c.character));
   if(!valid)throw Error('Person credit could not be verified');
-  return {id:person.id,name:pick.name,profile_path:typeof person.profile_path==='string'&&/^\/[A-Za-z0-9_-]+\.(jpg|png)$/.test(person.profile_path)?person.profile_path:null,
+  return {id:expectedId,name:pick.name,profile_path:typeof person.profile_path==='string'&&/^\/[A-Za-z0-9_-]+\.(jpg|png)$/.test(person.profile_path)?person.profile_path:null,
     rarity:pick.rarity,catalogue_version:pick.version};
 }
 export async function openCollectiblePack(rpc:Rpc,read:Read,user:string,packId:string,token:string,next:()=>number){
