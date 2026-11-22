@@ -2,6 +2,7 @@
 // explicit mobile-preview mode. It never imports a real client or uses fetch.
 import { previewActorConnect } from "./actor-connect";
 import {gamePath,verifyGamePath} from "../../supabase/functions/_shared/game-verification";
+import { SHELF_CONFLICTS, type LibraryShelfId } from '../lib/library-shelves';
 let samplePlan="free", sampleReward="xp", previewSpinEarned=false, previewSpinUsed=false;
 const previewSkins=new Set(['jedi']);
 let previewSpinPrize:Record<string,unknown>|null=null;
@@ -50,8 +51,23 @@ const searchableTitles = [...titles,
   { id: 985, title: "Eraserhead", year: 1977, type: "movie", posterPath: "" },
   { id: 1018, title: "Mulholland Drive", year: 2001, type: "movie", posterPath: "" },
 ];
+const previewCollection=[
+  {person_id:1,person_name:'Andrew Garfield',profile_path:'/5ydZ6TluPtxlz5G8nlWMB7SGmow.jpg'},
+  {person_id:2,person_name:'Jesse Eisenberg',profile_path:'/2ojZrkt5rdkUi857WSeCatxXdGS.jpg'},
+  {person_id:3,person_name:'Jonah Hill',profile_path:'/cymlWttB83MsAGR2EkTgANtjeRH.jpg'},
+  {person_id:4,person_name:'Toni Collette',profile_path:null},
+  {person_id:5,person_name:'John Turturro',profile_path:null},
+  {person_id:6,person_name:'Paul Dano',profile_path:null},
+].slice(0,new URLSearchParams(window.location.search).get('sampleCollection')==='full'?6:3)
+  .map((p,i)=>({...p,id:`preview-card-${i}`,user_id:user.id,person_type:'actor',card_rarity:null}));
+const previewPackPeople:Record<string,Row>={
+  'preview-actor':{id:99,name:'Emma Stone',profile_path:'/ak2Y9wOI3wi2pNQU6OWSvVvWPj5.jpg',rarity:'star'},
+  'preview-director':{id:100,name:'Christopher Nolan',profile_path:null,rarity:'icon'},
+};
 const privacyChoices: Record<string,boolean>={};
 const tables: Record<string, Row[]> = {
+  user_collection:previewCollection,
+  user_packs:['actor','director'].map(type=>({id:`preview-${type}`,user_id:user.id,pack_type:type,is_opened:false})),
   user_titles: titles.map((t, i) => ({ id: `preview-${i}`, user_id: user.id, title_id: t.id, title: t.title,
     type: t.type, year: t.year, poster_path: t.posterPath, list_type: t.list, progress: null })),
   user_stats: [{ user_id: user.id, coins: 250 }],
@@ -66,11 +82,24 @@ function from(table: string) {
     const all = tables[table] ?? [];
     const matches = (row: Row) => predicates.every(p => p(row));
     let rows = all.filter(matches);
-    if (operation === "insert") {
-      rows = payload.map(row => ({ id: crypto.randomUUID(), ...row }));
-      tables[table] = [...all, ...rows];
+    if (operation === "insert" || operation === "update") {
+      rows = operation === "insert" ? payload.map(row => ({ id: crypto.randomUUID(), ...row }))
+        : rows.map(row => ({ ...row, ...payload[0] }));
+      let next = [...all];
+      for (const row of rows) {
+        const previous = operation === "update" ? all.find(item => item.id === row.id) : undefined;
+        if (table === "user_titles") {
+          const sameTitle = (item: Row) => item.user_id === row.user_id && item.type === row.type && item.title_id === row.title_id;
+          const conflicting = (item: Row) => sameTitle(item) && item.id !== row.id
+            && (SHELF_CONFLICTS[row.list_type as LibraryShelfId] ?? []).includes(item.list_type as LibraryShelfId);
+          if (next.some(conflicting) || next.some(item => item.id !== row.id && sameTitle(item) && item.list_type === row.list_type)) {
+            return { data: [] as Row[], error: { code: "23505", message: "This title is already in that list." } };
+          }
+        }
+        next = previous ? next.map(item => item.id === row.id ? row : item) : [...next, row];
+      }
+      tables[table] = next;
     } else if (operation === "delete") tables[table] = all.filter(row => !matches(row));
-    else if (operation === "update") tables[table] = all.map(row => matches(row) ? { ...row, ...payload[0] } : row);
     return { data: rows, error: null };
   };
   const query = {
@@ -128,6 +157,38 @@ export const supabase = {
   },
   from,
   rpc: async (name: string,args:Record<string,unknown>={}) => {
+    if(name==='decide_cinegeek_pack'){
+      const pack=tables.user_packs.find(p=>p.id===args.p_pack&&!p.is_opened);if(!pack)return unavailable();
+      const person=previewPackPeople[String(pack.id)],cards=tables.user_collection;
+      if(args.p_keep){
+        if(cards.some(c=>c.person_id===person.id))return {data:null,error:{message:'Already in your collection'}};
+        const old=cards.find(c=>c.id===args.p_replace&&c.person_type===pack.pack_type);
+        if(args.p_replace&&!old)return unavailable();
+        if(!old&&cards.filter(c=>c.person_type===pack.pack_type).length>=6)return {data:null,error:{message:'Choose a card to replace'}};
+        tables.user_collection=[...cards.filter(c=>c!==old),{id:crypto.randomUUID(),user_id:user.id,person_id:person.id,
+          person_name:person.name,person_type:pack.pack_type,profile_path:person.profile_path,card_rarity:person.rarity}];
+      }
+      pack.is_opened=true;return {data:{decision:args.p_keep?'kept':'skipped'},error:null};
+    }
+    if (name === 'move_cinegeek_library_title') {
+      const title = args.p_title as {id:number;type:string;title:string;posterPath?:string;year?:number};
+      const destination = args.p_destination as LibraryShelfId;
+      if (!currentSession() || !SHELF_CONFLICTS[destination] || !title || title.id <= 0 || !['movie','tv'].includes(title.type)) return unavailable();
+      const same = (row:Row) => row.user_id === user.id && row.title_id === title.id && row.type === title.type;
+      const own = tables.user_titles.filter(same);
+      const existing = own.find(row => row.list_type === destination);
+      if (existing) return {data:{id:existing.id},error:null};
+      const priority = ['watching','watched','watchlist','favourite'];
+      own.sort((a,b) => priority.indexOf(String(a.list_type)) - priority.indexOf(String(b.list_type)));
+      const source = args.p_source == null ? own[0] : own.find(row => row.list_type === args.p_source);
+      if (args.p_source != null && !source) return unavailable();
+      const conflicts = (row:Row) => SHELF_CONFLICTS[destination].includes(row.list_type as LibraryShelfId);
+      const progress = own.find(row => conflicts(row) && row.progress != null)?.progress ?? source?.progress;
+      const row = {...(source ?? {user_id:user.id,title_id:title.id,type:title.type,title:title.title,poster_path:title.posterPath ?? '',year:title.year}),
+        id:crypto.randomUUID(),list_type:destination,progress};
+      tables.user_titles = [...tables.user_titles.filter(item => !(same(item) && conflicts(item))),row];
+      return {data:{id:row.id},error:null};
+    }
     // Local design samples only. Never sets a live entitlement or calls a provider.
     const selected=new URLSearchParams(window.location.search).get('samplePlan');
     if(selected==='free'||selected==='monthly'||selected==='annual')samplePlan=selected;
@@ -159,6 +220,10 @@ export const supabase = {
   functions: {
     invoke: async (name: string, options: { body?: Record<string, unknown> } = {}) => {
       const body = options.body ?? {};
+      if(name==='open-pack'){
+        const pack=tables.user_packs.find(p=>p.id===body.packId&&!p.is_opened);
+        return pack?{data:{packType:pack.pack_type,person:previewPackPeople[String(pack.id)]},error:null}:unavailable();
+      }
       if (name === 'game-result') {
         const game=previewGames.get(String(body.gameId));if(!game)return unavailable();
         if(game.won)return {data:{won:true,xp:75},error:null};

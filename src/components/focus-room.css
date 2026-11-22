@@ -174,3 +174,13 @@
 .focus-protection-actions { display: flex; gap: .9rem; flex-wrap: wrap; }
 .focus-protection-actions button { min-height: 44px; color: var(--room-accent, #a5e0cf); font-size: .82rem; text-decoration: underline; text-underline-offset: 3px; }
 .focus-protection-actions button:disabled { opacity: .55; }
+
+/* Only the cord's small touch target captures a drag; the rest of the room keeps normal gestures. */
+.room-cord-target { display:block; width:100%; height:100%; padding:0; border:0; border-radius:14px; background:transparent; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; }
+.room-cord-target:active { cursor:grabbing; }
+.room-cord-target:focus-visible { outline:2px solid #f6dba1; outline-offset:-3px; background:#ffe1a00c; }
+.room-cord-target:disabled { pointer-events:none; cursor:default; }
+@media(prefers-reduced-motion:no-preference) {
+  .room-cord-glow { animation:room-cord-invite 1.8s ease-in-out 2; }
+  @keyframes room-cord-invite { 50% { opacity:.35; } }
+}

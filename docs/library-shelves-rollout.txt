@@ -1,0 +1,29 @@
+Library shelf rules and Home search — local changes, 22 November 2026
+
+User-confirmed behaviour
+- Watchlist cannot share a title with Watching, Watched or Favourites.
+- Normal additions are blocked if the title is already in a conflicting shelf.
+  They never automatically move/delete an existing title. The message explains
+  that the viewer can remove it first or use the title's three-dot Move menu.
+- Explicit moves between Watching and Watched replace the old status.
+- Favourites may accompany Watching or Watched, or stand alone.
+- My Lists remain independent; copies in other custom lists are untouched.
+- Three-dot shelf actions retain compatible copies; Remove only deletes the selected copy.
+- Home's top search opens Ask your Geek setup without adding/moving any library title.
+  Each shelf's + button still adds to that shelf.
+
+Release order (TestFlight update requested 22 November 2026)
+1. Privately back up affected user_titles rows before applying the staged migration.
+2. Apply supabase/migrations/20261122210000_exclusive_active_shelves.sql before shipping this client.
+   Existing conflicting statuses retain Watching over Watched; either existing status or
+   Favourites takes priority over Watchlist. Saved progress is recovered before cleanup.
+   Partial unique indexes block conflicting normal additions from all clients.
+   Only the explicit, authenticated move_cinegeek_library_title RPC removes conflicting
+   rows, atomically retaining compatible Favourites and saved progress. A failed move
+   leaves its source untouched. Movie/TV IDs are distinct. Generated schema stays unchanged.
+   Client move calls must not ship before this RPC is installed.
+3. Ship the client together with the held poster reorder/menu improvements, then check
+   search, each shelf transition and My Lists on the actual iPhone.
+
+No live data, purchases, AI answers, spoiler checks or spending limits are changed by
+preparing this work. The local design preview mirrors the new database rules.

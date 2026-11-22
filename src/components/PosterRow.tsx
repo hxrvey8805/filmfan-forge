@@ -1,15 +1,12 @@
 import { useId, useState } from "react";
-import { usePosterHold } from "@/hooks/use-poster-hold";
+import { createPortal } from "react-dom";
+import { usePosterReorder } from "@/hooks/use-poster-reorder";
+import { titleKey } from "@/lib/home-lists";
+import { MoveTitleMenu } from "./MoveTitleMenu";
+import "./poster-row.css";
 import { PosterArtwork } from "./PosterArtwork";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
-import { Clapperboard, Tv, Plus, Trash2, MessageSquare, Check, MoreHorizontal, ListVideo } from "lucide-react";
+import { Clapperboard, Tv, Plus, Trash2, Check, MoreHorizontal } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-} from "@/components/ui/carousel";
 import {
   Select,
   SelectContent,
@@ -44,7 +41,8 @@ interface PosterRowProps {
   title: string;
   items: Title[];
   onPosterClick: (title: Title) => void;
-  onMoveRequest?: (title: Title, anchor: HTMLElement, fromHold?: boolean) => void;
+  onMoveRequest?: (title: Title, anchor: HTMLElement) => void;
+  onReorder?: (titles: Title[]) => void;
   onAddClick?: () => void;
   onDeleteClick?: (title: Title) => void;
   filterValue?: string;
@@ -60,16 +58,20 @@ interface PosterRowProps {
   onToggleSelection?: (titleId: number) => void;
 }
 
-const PosterRow = ({ 
-  title, items, onPosterClick, onAddClick, onDeleteClick, onMoveRequest,
+const PosterRow = ({
+  title, items, onPosterClick, onAddClick, onDeleteClick, onMoveRequest, onReorder,
   filterValue, onFilterChange, customFilters = [], onAddCustomFilter, onDeleteCustomFilter,
   personalLists = [], onAddPersonalList, onDeletePersonalList,
   selectionMode = false, selectedTitleIds = [], onToggleSelection,
 }: PosterRowProps) => {
-  const [pendingRemoval, setPendingRemoval] = useState<Title | null>(null);
-  const hold = usePosterHold();
+  const [options, setOptions] = useState<{title: Title; anchor: HTMLElement} | null>(null);
+  const reorder = usePosterReorder(items.map(titleKey), !selectionMode && onReorder ? keys => {
+    const byKey = new Map(items.map(item => [titleKey(item), item]));
+    onReorder(keys.map(key => byKey.get(key)!));
+  } : undefined);
   const rowId = useId();
-  const canMove = !!onMoveRequest && !selectionMode;
+  const canReorder = !!onReorder && !selectionMode && items.length > 1;
+  const lifted = items.find(item => titleKey(item) === reorder.lift?.key);
   return (
     <section aria-label={title} className="space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
@@ -84,7 +86,7 @@ const PosterRow = ({
               <SelectItem value="all" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">All</SelectItem>
               <SelectItem value="movie" className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer">Movies</SelectItem>
               <SelectItem value="tv" className="rounded-lg text-sm font-medium focus:bg-accent/20 focus:text-accent cursor-pointer">TV Shows</SelectItem>
-              
+
               {/* Personal Lists */}
               {personalLists.map((list) => {
                 const isSelected = filterValue === list.id;
@@ -117,14 +119,14 @@ const PosterRow = ({
               {customFilters.map((filter) => {
                 const isSelected = filterValue === filter.id;
                 return (
-                  <SelectItem 
-                    key={filter.id} 
+                  <SelectItem
+                    key={filter.id}
                     value={filter.id}
                     className="rounded-lg text-sm font-medium focus:bg-primary/20 focus:text-primary cursor-pointer relative pl-8"
                   >
                     {!isSelected && onDeleteCustomFilter && (
-                      <Trash2 
-                        className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-destructive transition-colors cursor-pointer z-10" 
+                      <Trash2
+                        className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-destructive transition-colors cursor-pointer z-10"
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
@@ -172,57 +174,45 @@ const PosterRow = ({
 
       {items.length === 0 && <div className="rounded-2xl border border-dashed border-white/15 py-6 px-4 text-sm text-muted-foreground">{filterValue && filterValue !== "all" ? "No titles in this filter yet." : "A little room for your next great watch."}{onAddClick && <button onClick={onAddClick} className="text-primary block mt-1 text-xs font-medium">Add a title</button>}</div>}
       <div className="relative">
-        <Carousel
-          opts={{
-            align: "start",
-            skipSnaps: false,
-            dragFree: true,
-            containScroll: "trimSnaps",
-            dragThreshold: 2,
-            watchDrag: true,
-            watchResize: true,
-            loop: false,
-            duration: 20,
-            watchSlides: true,
-            slidesToScroll: 1,
-          }}
-          className="w-full"
-        >
-          <CarouselContent className="-ml-3">
+        <div ref={reorder.viewport} className="poster-row-viewport" aria-label={`${title} titles`}>
+          <div className="poster-row-track">
             {items.map((item) => {
               const posterId = rowId + item.type + item.id;
               const isSelectedForList = selectionMode && selectedTitleIds.includes(item.id);
-              
+
               return (
-                <CarouselItem
+                <div
                   key={item.type + ":" + item.id}
-                  className="pl-3 basis-[37%] min-[480px]:basis-[28%] sm:basis-1/4 md:basis-1/5 lg:basis-1/6"
+                  data-reorder-key={titleKey(item)}
+                  className="poster-row-item"
                 >
                   <div className={`group relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-card shadow-md hover:shadow-xl transition-all duration-300 ${
                     selectionMode && !isSelectedForList ? "opacity-40 grayscale" : ""
                   } ${isSelectedForList ? "ring-3 ring-primary shadow-lg shadow-primary/30" : ""}`}>
                     <button
                       id={posterId}
-                      data-hold-poster={canMove ? "" : undefined}
-                      onTouchStart={canMove ? e => { const button = e.currentTarget; hold.touch(e, () => onMoveRequest(item, button, true)); } : undefined}
-                      onPointerDown={canMove ? e => { const button = e.currentTarget; hold.pointer(e, () => onMoveRequest(item, button, true)); } : undefined}
-                      onContextMenu={canMove ? e => e.preventDefault() : undefined}
-                      onDragStart={canMove ? e => e.preventDefault() : undefined}
+                      onTouchStart={canReorder ? e => reorder.touch(e, titleKey(item)) : undefined}
+                      onPointerDown={canReorder ? e => reorder.pointer(e, titleKey(item)) : undefined}
+                      onKeyDown={canReorder ? e => reorder.keyboard(e, titleKey(item)) : undefined}
+                      aria-describedby={canReorder ? `${rowId}-reorder-help` : undefined}
+                      aria-grabbed={canReorder ? reorder.lift?.key === titleKey(item) : undefined}
+                      onContextMenu={e => e.preventDefault()}
+                      onDragStart={e => e.preventDefault()}
                       aria-label={selectionMode ? `Select ${item.title}` : `Open ${item.title}`}
                       aria-pressed={selectionMode ? isSelectedForList : undefined}
                       onClick={e => {
-                        if (canMove && hold.skipClick(e.currentTarget)) return;
+                        if (reorder.skipClick()) { e.preventDefault(); return; }
                         if (selectionMode && onToggleSelection) {
                           onToggleSelection(item.id);
                         } else {
                           onPosterClick(item);
                         }
                       }}
-                      className="w-full h-full active:scale-95 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+                      className="poster-row-button w-full h-full transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
                       style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
                     >
                       <PosterArtwork src={item.posterPath} type={item.type} lazy />
-                      
+
                       {/* Selection checkmark */}
                       {selectionMode && isSelectedForList && (
                         <div className="absolute top-2 left-2 bg-primary rounded-full p-1 shadow-lg">
@@ -253,27 +243,27 @@ const PosterRow = ({
                   </div>
                   <div className="flex items-start gap-1 mt-2">
                     <div className="min-w-0 flex-1 pt-1"><p className="text-xs font-medium leading-snug line-clamp-2">{item.title}</p><p className="text-[10px] text-muted-foreground mt-1">{item.year ? `${item.year} · ` : ""}{item.type === "tv" ? "Series" : "Movie"}</p></div>
-                    {!selectionMode && <DropdownMenu><DropdownMenuTrigger asChild>
-                      <button aria-label={`Options for ${item.title}`} className="-mr-2 -mt-1 flex justify-center items-center text-muted-foreground rounded-full hover:bg-white/5"><MoreHorizontal className="w-4 h-4" /></button>
-                    </DropdownMenuTrigger><DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => onPosterClick(item)} className="min-h-11"><MessageSquare className="w-4 h-4 mr-2" />Ask your geek</DropdownMenuItem>
-                      {canMove && <DropdownMenuItem className="min-h-11" onSelect={() => {
-                        const anchor = document.getElementById(posterId);
-                        if (anchor) window.setTimeout(() => onMoveRequest(item, anchor), 0);
-                      }}><ListVideo className="w-4 h-4 mr-2" />Move to list…</DropdownMenuItem>}
-                      {onDeleteClick && <DropdownMenuItem onSelect={() => setPendingRemoval(item)} className="text-destructive focus:text-destructive min-h-11"><Trash2 className="w-4 h-4 mr-2" />Remove from {title}</DropdownMenuItem>}
-                    </DropdownMenuContent></DropdownMenu>}
+                    {!selectionMode && <button aria-label={`Options for ${item.title}`} aria-haspopup="dialog"
+                      onClick={event => onMoveRequest ? onMoveRequest(item, event.currentTarget) : setOptions({title:item,anchor:event.currentTarget})}
+                      className="-mr-2 -mt-1 flex justify-center items-center text-muted-foreground rounded-full hover:bg-white/5"><MoreHorizontal className="w-4 h-4" /></button>}
+
                   </div>
-                </CarouselItem>
+                </div>
               );
             })}
-            
-          </CarouselContent>
-        </Carousel>
+
+          </div>
+        </div>
       </div>
-      <AlertDialog open={!!pendingRemoval} onOpenChange={open => { if (!open) setPendingRemoval(null); }}>
-        <AlertDialogContent><AlertDialogTitle>Remove {pendingRemoval?.title}?</AlertDialogTitle><AlertDialogDescription>This removes it from {title}. You can add it again using search.</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>Keep title</AlertDialogCancel><AlertDialogAction onClick={() => { if (pendingRemoval) onDeleteClick?.(pendingRemoval); setPendingRemoval(null); }}>Remove title</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-      </AlertDialog>
+      {canReorder && <p id={`${rowId}-reorder-help`} className="sr-only">Hold and drag to reorder. With a keyboard, press Space, use the arrow keys, then Enter to place.</p>}
+      <p className="sr-only" role="status" aria-live="polite">{reorder.announcement}</p>
+      {reorder.lift && lifted && createPortal(<div ref={reorder.ghost} className="poster-row-ghost" aria-hidden="true" style={{width:reorder.lift.width,height:reorder.lift.height,left:reorder.lift.left,top:reorder.lift.top}}>
+        <PosterArtwork src={lifted.posterPath} type={lifted.type}/>
+      </div>, document.body)}
+      {options && <MoveTitleMenu request={{...options, source:title, sourceLabel:title, targets:[]}}
+        onClose={() => setOptions(null)} onMove={() => {}} onOpen={() => { onPosterClick(options.title); setOptions(null); }}
+        onRemove={onDeleteClick ? () => { onDeleteClick(options.title); setOptions(null); } : undefined}/>}
+
     </section>
   );
 };

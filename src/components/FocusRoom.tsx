@@ -155,6 +155,8 @@ export function FocusRoom({ title, episodeLabel, active, validPosition, chatting
     return setup ? setup(options, busy || checking) : options;
   }
   const time = sessionTime(seconds ?? 0);
+  const canUseLamp = !busy && !checking && (running || validPosition);
+  const toggleFromLamp = () => { if (canUseLamp) void toggleSession(); };
   const focusAction = <button type="button" className="focus-session-action" onClick={toggleSession}
     disabled={busy || checking || (!running && !validPosition)}>
     {running ? <CircleStop size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
@@ -163,7 +165,7 @@ export function FocusRoom({ title, episodeLabel, active, validPosition, chatting
   return <section className="focus-room screening-room" data-chat={chatting ? "open" : "closed"} aria-label="Your screening room"
     data-session={running ? "active" : "idle"} data-room-style={roomStyle} style={roomStyle === defaultRoomStyle ? undefined : palette.paint}>
     <figure className="focus-room-card" aria-label={`${title} · ${episodeLabel}`}>
-      <FocusRoomScene look={look} running={running} styleName={palette.name} time={time} />
+      <FocusRoomScene look={look} running={running} styleName={palette.name} time={time} canUseLamp={canUseLamp} onToggleFocus={toggleFromLamp} />
     </figure>
     <span role="timer" aria-live="off" aria-label={`Focus time: ${time}`} className="sr-only" />
     {error && <p role="alert" className="room-focus-error">{error}</p>}

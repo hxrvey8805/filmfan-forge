@@ -6,6 +6,7 @@ import { WatchingSpotlight } from "@/components/WatchingSpotlight";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MoveTitleMenu, type MoveRequest, type MoveTarget, type ShelfId } from "@/components/MoveTitleMenu";
 import { homeListKey, readLists, writeLists } from "@/lib/home-list-storage";
+import { usePosterOrder } from "@/hooks/use-poster-order";
 import PosterRow from "@/components/PosterRow";
 import TitleDetailModal from "@/components/TitleDetailModal";
 import SearchModal from "@/components/SearchModal";
@@ -13,6 +14,8 @@ import CustomFilterDialog from "@/components/CustomFilterDialog";
 import type { LibraryShelf } from "@/lib/list-sources";
 import { HomeLists } from "@/components/HomeLists";
 import { titleKey } from "@/lib/home-lists";
+import { addLibraryTitle, moveLibraryTitle, LibraryConflictError } from "@/lib/library-title-service";
+import { SHELF_LABELS } from "@/lib/library-shelves";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -46,11 +49,11 @@ const Index = () => {
     setDetail({ title, source: "watching" });
   };
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [searchModalType, setSearchModalType] = useState<"favourite" | "watchlist" | "watching" | "watched">("watchlist");
-  const [favourites, setFavourites] = useState<Title[]>([]);
-  const [watchList, setWatchList] = useState<Title[]>([]);
-  const [currentlyWatching, setCurrentlyWatching] = useState<Title[]>([]);
-  const [watched, setWatched] = useState<Title[]>([]);
+  const [searchModalType, setSearchModalType] = useState<ShelfId | "companion">("companion");
+  const [favouritesItems, setFavourites] = useState<Title[]>([]);
+  const [watchListItems, setWatchList] = useState<Title[]>([]);
+  const [currentlyWatchingItems, setCurrentlyWatching] = useState<Title[]>([]);
+  const [watchedItems, setWatched] = useState<Title[]>([]);
   const [loading, setLoading] = useState(true);
   const [watchListFilter, setWatchListFilter] = useState<string>("all");
   const [favouritesFilter, setFavouritesFilter] = useState<string>("all");
@@ -63,6 +66,12 @@ const Index = () => {
 
   const [accountId, setAccountId] = useState<string | null>(null);
   const [moveRequest, setMoveRequest] = useState<MoveRequest | null>(null);
+  const favouriteOrder = usePosterOrder(favouritesItems, accountId, "shelf:favourite");
+  const watchOrder = usePosterOrder(watchListItems, accountId, "shelf:watchlist");
+  const watchingOrder = usePosterOrder(currentlyWatchingItems, accountId, "shelf:watching");
+  const watchedOrder = usePosterOrder(watchedItems, accountId, "shelf:watched");
+  const favourites = favouriteOrder.titles, watchList = watchOrder.titles;
+  const currentlyWatching = watchingOrder.titles, watched = watchedOrder.titles;
   const moving = useRef(false);
   const libraryShelves = useMemo<LibraryShelf[]>(() => [
     { id: "shelf:watchlist", name: "Watch list", mode: "shelf", titles: watchList },
@@ -70,6 +79,11 @@ const Index = () => {
     { id: "shelf:favourite", name: "Favourites", mode: "shelf", titles: favourites },
     { id: "shelf:watched", name: "Watched", mode: "shelf", titles: watched },
   ], [watchList, currentlyWatching, favourites, watched]);
+  const openLibraryTitle = (title: Title) => {
+    const contains = (items: Title[]) => items.some(item => titleKey(item) === titleKey(title));
+    if (contains(currentlyWatching)) openWatching(title);
+    else setDetail({ title, source: contains(watchList) ? "watchlist" : contains(watched) ? "watched" : contains(favourites) ? "favourite" : undefined });
+  };
 
   useEffect(() => {
     checkAuth();
@@ -163,105 +177,39 @@ const Index = () => {
     }
   };
 
-  const handleAddToFavourites = async (title: Title) => {
-    if (favourites.find(item => titleKey(item) === titleKey(title))) {
-      toast.info(`"${title.title}" is already in your Favourites`);
-      return;
-    }
+  const addToShelf = async (title: Title, destination: ShelfId) => {
+    if (moving.current) return;
+    moving.current = true;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
-        poster_path: title.posterPath, year: title.year, list_type: "favourite",
-      });
-      if (error) throw error;
-      setFavourites([...favourites, title]);
-      toast.success(`Added "${title.title}" to Favourites`);
+      if (!user || user.id !== accountId) return;
+      await addLibraryTitle(user.id, title, destination);
+      await loadUserTitles();
+      toast.success(`Added “${title.title}” to ${SHELF_LABELS[destination]}`);
     } catch (error) {
-      console.error("Error adding to favourites:", error);
-      toast.error("Failed to add to Favourites");
-    }
+      if (error instanceof LibraryConflictError) toast.info(error.message);
+      else toast.error(`Couldn’t add to ${SHELF_LABELS[destination]}. Please try again.`);
+    } finally { moving.current = false; }
   };
+  const handleAddToFavourites = (title: Title) => addToShelf(title, "favourite");
+  const handleAddToWatchList = (title: Title) => addToShelf(title, "watchlist");
+  const handleAddToCurrentlyWatching = (title: Title) => addToShelf(title, "watching");
+  const handleAddToWatched = (title: Title) => addToShelf(title, "watched");
 
-  const handleAddToWatchList = async (title: Title) => {
-    if (watchList.find(item => titleKey(item) === titleKey(title))) {
-      toast.info(`"${title.title}" is already in your Watch List`);
-      return;
-    }
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
-        poster_path: title.posterPath, year: title.year, list_type: "watchlist",
-      });
-      if (error) throw error;
-      setWatchList([...watchList, title]);
-      setSortedWatchList([...watchList, title]);
-      toast.success(`Added "${title.title}" to Watch List`);
-    } catch (error) {
-      console.error("Error adding to watchlist:", error);
-      toast.error("Failed to add to Watch List");
-    }
-  };
-
-  const handleAddToCurrentlyWatching = async (title: Title) => {
-    if (currentlyWatching.find(item => titleKey(item) === titleKey(title))) {
-      toast.info(`"${title.title}" is already in Currently Watching`);
-      return;
-    }
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
-        poster_path: title.posterPath, year: title.year, list_type: "watching",
-      });
-      if (error) throw error;
-      setCurrentlyWatching([...currentlyWatching, title]);
-      toast.success(`Added "${title.title}" to Currently Watching`);
-    } catch (error) {
-      console.error("Error adding to watching:", error);
-      toast.error("Failed to add to Currently Watching");
-    }
-  };
-
-  const handleAddToWatched = async (title: Title) => {
-    if (watched.find(item => titleKey(item) === titleKey(title))) {
-      toast.info(`"${title.title}" is already in your Watched list`);
-      return;
-    }
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
-        poster_path: title.posterPath, year: title.year, list_type: "watched",
-      });
-      if (error) throw error;
-      setWatched([...watched, title]);
-      toast.success(`Added "${title.title}" to Watched`);
-    } catch (error) {
-      console.error("Error adding to watched:", error);
-      toast.error("Failed to add to Watched");
-    }
-  };
-
-  function openMove(source: ShelfId, title: Title, anchor: HTMLElement, fromHold = false) {
+  function openMove(source: string, title: Title, anchor: HTMLElement) {
     if (moving.current || !accountId) return;
     const targets: MoveTarget[] = libraryShelves.filter(s => s.id !== "shelf:" + source).map(s => ({
       id: s.id, label: s.name, already: s.titles.some(t => titleKey(t) === titleKey(title)),
     }));
     try {
       for (const list of readLists(homeListKey(accountId)).reverse()) {
-        if (list.mode === "manual") targets.push({ id: list.id, label: list.name, personal: true });
+        if (list.mode === "manual") targets.push({ id: list.id, label: list.name, personal: true, already: list.id === source || list.titles.some(t => titleKey(t) === titleKey(title)) });
       }
     } catch { toast.error("Your personal lists couldn’t be read on this device."); }
-    setMoveRequest({ source, title, anchor, fromHold, targets });
+    setMoveRequest({ source, title, anchor, targets, sourceLabel: libraryShelves.find(s => s.id === "shelf:" + source)?.name ?? "this list" });
   }
 
-  async function moveTitle(source: ShelfId, title: Title, target: MoveTarget) {
+  async function moveTitle(source: string, title: Title, target: MoveTarget) {
     if (moving.current || target.already) return;
     moving.current = true;
     setMoveRequest(null);
@@ -282,26 +230,36 @@ const Index = () => {
         savedOnDevice = true;
       }
       const destination = shelf?.id.slice("shelf:".length) as ShelfId | undefined;
+      if (!libraryShelves.some(s => s.id === "shelf:" + source)) {
+        if (destination) {
+          await moveLibraryTitle(title, destination, null);
+          savedOnDevice = true;
+        }
+        const key = homeListKey(user.id);
+        writeLists(key, readLists(key).map(list => list.id !== source ? list : list.mode === "manual"
+          ? {...list, titles:list.titles.filter(t => !same(t))}
+          : {...list, excluded:[...new Set([...(list.excluded ?? []),titleKey(title)])]}));
+        await loadUserTitles();
+        toast.success("Moved “" + title.title + "” to " + target.label + ".");
+        return;
+      }
       const table = supabase.from("user_titles");
-      const change = target.personal ? table.delete() : table.update({ list_type: destination! });
-      const result = await change.eq("user_id", user.id).eq("title_id", title.id).eq("type", title.type)
-        .eq("list_type", source).select("id").maybeSingle();
+      // Assigning a shelf keeps compatible copies (e.g. Watching + Favourites).
+      // The database removes conflicting statuses in this same transaction.
+      const result = target.personal
+        ? await table.delete().eq("user_id", user.id).eq("title_id", title.id).eq("type", title.type)
+          .eq("list_type", source).select("id").maybeSingle()
+        : { data: await moveLibraryTitle(title, destination!, source as ShelfId), error: null };
       if (result.error) throw result.error;
       if (!result.data) {
         await loadUserTitles();
         toast.info(savedOnDevice ? "Saved to " + target.label + ". Your shelves have been refreshed." : "This title changed elsewhere. Your shelves have been refreshed.");
         return;
       }
-      const setters = { watchlist: setWatchList, watching: setCurrentlyWatching, favourite: setFavourites, watched: setWatched };
-      setters[source](items => items.filter(t => !same(t)));
-      if (source === "watchlist") setSortedWatchList(items => items.filter(t => !same(t)));
-      if (destination) {
-        const add = (items: Title[]) => items.some(same) ? items : [...items, title];
-        setters[destination](add);
-        if (destination === "watchlist") setSortedWatchList(add);
-      }
+      // Refresh every shelf, including compatible copies and preserved progress.
+      await loadUserTitles();
       setShelf(source);
-      toast.success("Moved “" + title.title + "” to " + target.label + ".");
+      toast.success((target.personal ? "Moved “" : "Saved “") + title.title + "” to " + target.label + ".");
     } catch {
       toast.error(savedOnDevice ? "Saved to " + target.label + ", but the shelf move couldn’t be confirmed. You can retry safely." : "Couldn’t move this title. Please try again.");
     } finally { moving.current = false; }
@@ -369,7 +327,23 @@ const Index = () => {
     }
   };
 
-  const openSearchModal = (type: "favourite" | "watchlist" | "watching" | "watched") => {
+  function removeRequestedTitle() {
+    if (!moveRequest || !accountId) return;
+    const { source, title } = moveRequest;
+    setMoveRequest(null);
+    const remove = {watchlist:handleDeleteFromWatchList, watching:handleDeleteFromCurrentlyWatching,
+      favourite:handleDeleteFromFavourites, watched:handleDeleteFromWatched}[source];
+    if (remove) { void remove(title); return; }
+    try {
+      const key = homeListKey(accountId);
+      writeLists(key, readLists(key).map(list => list.id !== source ? list : list.mode === "manual"
+        ? {...list, titles:list.titles.filter(t => titleKey(t) !== titleKey(title))}
+        : {...list, excluded:[...new Set([...(list.excluded ?? []),titleKey(title)])]}));
+      toast.success("Removed from this list");
+    } catch { toast.error("Couldn’t save your list on this device."); }
+  }
+
+  const openSearchModal = (type: ShelfId | "companion") => {
     setSearchModalType(type);
     setSearchModalOpen(true);
   };
@@ -393,9 +367,9 @@ const Index = () => {
 
   const handleFilterChange = async (value: string) => {
     setWatchListFilter(value);
-    
+
     const customFilter = customFilters.find(f => f.id === value);
-    
+
     if (customFilter) {
       setIsSorting(true);
       try {
@@ -427,6 +401,10 @@ const Index = () => {
   const handleWatchedFilterChange = (value: string) => setWatchedFilter(value);
 
   const handleSearchSelect = async (title: Title) => {
+    if (searchModalType === "companion") {
+      openLibraryTitle(title);
+      return;
+    }
     setShelf(searchModalType);
     if (searchModalType === "favourite") handleAddToFavourites(title);
     else if (searchModalType === "watchlist") await handleAddToWatchList(title);
@@ -443,9 +421,9 @@ const Index = () => {
   const shelf = chosenShelf ?? shelfSizes.find(([, count]) => count > 0)?.[0] ?? "watchlist";
 
   // Filter displayed items
-  const displayedWatchList = watchListFilter === "all" ? sortedWatchList
+  const displayedWatchList = watchListFilter === "all" ? watchList
     : watchListFilter === "movie" || watchListFilter === "tv"
-    ? sortedWatchList.filter(item => item.type === watchListFilter)
+    ? watchList.filter(item => item.type === watchListFilter)
     : sortedWatchList;
 
   const displayedFavourites = favouritesFilter === "all"
@@ -471,8 +449,8 @@ const Index = () => {
       <>
         <div className="home-heading">
           <div className="min-w-0"><p className="eyebrow">Home</p><h1 className="screen-heading mt-1.5">What’s on next?</h1></div>
-          <button onClick={() => openSearchModal("watchlist")} className="home-search" aria-label="Find a movie or TV show">
-            <Search size={19} aria-hidden="true" /><span className="hidden sm:inline">Find a title</span>
+          <button onClick={() => openSearchModal("companion")} className="home-search" aria-label="Find a title to ask your geek">
+            <Search size={19} aria-hidden="true" /><span className="hidden sm:inline">Ask your geek</span>
           </button>
         </div>
         <WatchingSpotlight titles={currentlyWatching} onFindTitle={() => openSearchModal("watching")}
@@ -492,7 +470,8 @@ const Index = () => {
               items={displayedCurrentlyWatching}
               onPosterClick={title => openWatching(title)}
               onAddClick={() => openSearchModal("watching")}
-              onMoveRequest={(title, anchor, fromHold) => openMove("watching", title, anchor, fromHold)}
+              onMoveRequest={(title, anchor) => openMove("watching", title, anchor)}
+              onReorder={watchingOrder.reorder}
               onDeleteClick={handleDeleteFromCurrentlyWatching}
               filterValue={currentlyWatchingFilter}
               onFilterChange={handleCurrentlyWatchingFilterChange}
@@ -504,7 +483,10 @@ const Index = () => {
               items={isSorting ? [] : displayedWatchList}
               onPosterClick={title => setDetail({ title, source: "watchlist" })}
               onAddClick={() => openSearchModal("watchlist")}
-              onMoveRequest={(title, anchor, fromHold) => openMove("watchlist", title, anchor, fromHold)}
+              onMoveRequest={(title, anchor) => openMove("watchlist", title, anchor)}
+              onReorder={titles => {
+                if (watchOrder.reorder(titles) && !["all", "movie", "tv"].includes(watchListFilter)) setSortedWatchList(titles);
+              }}
               onDeleteClick={handleDeleteFromWatchList}
               filterValue={watchListFilter}
               onFilterChange={handleFilterChange}
@@ -519,7 +501,8 @@ const Index = () => {
               items={displayedFavourites}
               onPosterClick={title => setDetail({ title, source: "favourite" })}
               onAddClick={() => openSearchModal("favourite")}
-              onMoveRequest={(title, anchor, fromHold) => openMove("favourite", title, anchor, fromHold)}
+              onMoveRequest={(title, anchor) => openMove("favourite", title, anchor)}
+              onReorder={favouriteOrder.reorder}
               onDeleteClick={handleDeleteFromFavourites}
               filterValue={favouritesFilter}
               onFilterChange={handleFavouritesFilterChange}
@@ -531,7 +514,8 @@ const Index = () => {
               items={displayedWatched}
               onPosterClick={title => setDetail({ title, source: "watched" })}
               onAddClick={() => openSearchModal("watched")}
-              onMoveRequest={(title, anchor, fromHold) => openMove("watched", title, anchor, fromHold)}
+              onMoveRequest={(title, anchor) => openMove("watched", title, anchor)}
+              onReorder={watchedOrder.reorder}
               onDeleteClick={handleDeleteFromWatched}
               filterValue={watchedFilter}
               onFilterChange={handleWatchedFilterChange}
@@ -540,14 +524,11 @@ const Index = () => {
         </Tabs>
       </section>
 
-      {accountId && <HomeLists key={accountId} viewer={accountId} shelves={libraryShelves} onOpen={title => {
-        const contains = (items: Title[]) => items.some(t => titleKey(t) === titleKey(title));
-        if (contains(currentlyWatching)) openWatching(title);
-        else setDetail({ title, source: contains(watchList) ? "watchlist" : contains(watched) ? "watched" : contains(favourites) ? "favourite" : undefined });
-      }} />}
+      {accountId && <HomeLists key={accountId} viewer={accountId} shelves={libraryShelves} onTitleActions={openMove} onOpen={openLibraryTitle} />}
 
       {moveRequest && <MoveTitleMenu request={moveRequest} onClose={() => setMoveRequest(null)}
-        onMove={target => void moveTitle(moveRequest.source, moveRequest.title, target)} />}
+        onMove={target => void moveTitle(moveRequest.source, moveRequest.title, target)}
+        onRemove={removeRequestedTitle} />}
 
       {/* Title Detail Modal */}
       {detail && (

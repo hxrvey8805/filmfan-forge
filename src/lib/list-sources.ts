@@ -42,7 +42,9 @@ export function resolveList(list: SmartList, sources: Map<string, ListSource>, a
       if (!union.has(key) || item.verified) union.set(key, item);
     }
     const result: Candidate[] = [];
+    const excluded = new Set(source.excluded ?? []);
     for (const [key, item] of union) {
+      if (excluded.has(key)) continue;
       const match = matchesRule(item.title, facts.get(key), source.rule, today);
       if (match !== false) result.push({title: item.title, verified: item.verified && match === true});
     }

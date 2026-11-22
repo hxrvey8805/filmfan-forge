@@ -1,0 +1,42 @@
+Six-card collections and pack reveal — staged 22 November 2026
+
+Status: TestFlight release requested on 22 November 2026. Server rollout and live catalogue verification remain required before distributing build 34.
+
+Behaviour
+- Six actor cards AND six director cards per account. Atomic keep/skip and same-category replacement remain. No sale or XP refund.
+- Pack prices remain 150 XP. AI, subscription permissions, daily reward odds and real-purchase flags are unchanged.
+- Sealed CineGeek pack -> explicit Reveal card -> portrait, Keep/Skip. Full shelf presents six replacement choices. Close preserves an undecided card. Reduced-motion respects system preference.
+- Existing cards/reveals retain identity with no retroactive category. Details distinguish legacy reveals from the new odds.
+
+Approved editorial category odds: Established 60%, Star 30%, Icon 10%.
+Actor catalogue: 16 established, 16 stars, 12 icons (44 people).
+Director catalogue: 12 established, 12 stars, 12 icons (36 people).
+Within each category every person is equally likely. Each icon has 10% / 12 = approximately 0.8333% per pack (1 in 120), not 10% individually. Independent draws, duplicates possible; no guaranteed icon after ten packs.
+The previous implementation sampled TMDB popularity pages; directors could be overrepresented across popular films. It did not provide stable rarity odds. The new frozen named catalogue replaces that source of probability.
+
+Draw integrity
+- Crypto uint32 randomness with rejection sampling: category roll then uniform name.
+- A service-only RPC saves the versioned name/category before TMDB access. Network errors, lease expiry, concurrent requests and reopen cannot select another person.
+- TMDB search exact normalized name plus actual combined acting/directing credit verifies the selected person. Ambiguous names and failed lookups stop safely; never reroll to a different category/person. Missing images use initials.
+- Client cannot mint or modify draws/cards/XP. Wallet locks serialize decisions; table trigger also enforces six.
+
+Validation completed locally
+- 82 tests across pack catalogue/service, UI decisions, real SQL migration/permissions in PGlite, rewards, Profile and Home/Focus regression.
+- 200,000 seeded draw simulation; exact category boundaries and roster reachability.
+- TypeScript application check, scoped ESLint and Deno check of open-pack.
+- Phone-width and 320px preview: sealed/reveal, full-six replacement and retained count, missing image fallback, expandable odds.
+- Native web bundle build recorded separately in private evidence.
+
+Rollout order
+1. Back up affected pack/collection state and confirm prior XP/tier migrations.
+2. Apply 20261122220000_six_card_pack_catalogue.sql once. Existing grants and trigger bindings are retained; only the new store-pick function adds service-only access.
+3. Before enabling the changed open-pack endpoint, run resolvePackPerson against all 80 frozen entries using the authorized server TMDB credential. This has NOT been exercised live locally; fixtures and response validation were tested. Resolve any ambiguous/unavailable identity before release, without changing persisted v1 draws.
+4. Deploy open-pack with _shared/pack-catalogue.ts and pack-service.ts. Check saved draw survives provider failure and existing reveal is unchanged with a disposable test pack.
+5. Verify keep, skip, sixth card, seventh-card replacement and cross-account denial live; then release the matching client.
+6. The separately staged exclusive library-shelves migration is still a distinct pending release item; do not silently omit it from the eventual combined rollout.
+
+Do not roll the collection cap back to five after users have six cards. A UI rollback can retain the six-slot database and versioned draws. Never mutate a catalogue version already used for saved picks; introduce a new version with backward-compatible resolution if needed.
+
+TMDB response contracts consulted:
+https://developer.themoviedb.org/reference/search-person
+https://developer.themoviedb.org/reference/person-combined-credits

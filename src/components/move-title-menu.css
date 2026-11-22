@@ -207,6 +207,12 @@
   font-weight: 650;
 }
 .move-title-choices h3 span { color: #b8bac8; font-size: .68rem; font-weight: 400; }
+.move-title-delete { --shelf-ink: #ffb2ad; --shelf-wash: #432c30; color: #ffb2ad; }
+.move-title-confirm { display: grid; gap: 10px; padding: 12px 10px; }
+.move-title-confirm p { font-size: 1rem; font-weight: 600; }
+.move-title-confirm small { color: #b8bac8; }
+.move-title-confirm button { min-height: 44px; border-radius: 12px; background: #ffffff0b; font-weight: 600; }
+.move-title-confirm button:focus-visible { outline: 2px solid hsl(var(--accent)); }
 
 .move-title-hint {
   display: flex;

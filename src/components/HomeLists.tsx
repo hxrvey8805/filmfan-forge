@@ -1,3 +1,5 @@
+import { usePosterOrder } from "@/hooks/use-poster-order";
+import { reorderVisible } from "@/lib/poster-order";
 import { useProAccess } from "@/hooks/use-pro-access";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Clapperboard, Clock3, ListVideo, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
@@ -16,11 +18,11 @@ import { homeListKey, listChangeEvent, readLists, writeLists } from "@/lib/home-
 import { listMetadata } from "@/lib/list-metadata";
 import { localDateKey } from "@/lib/list-release";
 
-type Props = { viewer: string; shelves: LibraryShelf[]; onOpen: (t: LibraryTitle) => void };
+type Props = { viewer: string; shelves: LibraryShelf[]; onOpen: (t: LibraryTitle) => void; onTitleActions?: (source: string, title: LibraryTitle, anchor: HTMLElement) => void };
 const examples = ["Action", "Comedy movies", "Horror under 90 minutes", "Friday options"];
 
-function SmartShelf({ list, sources, allTitles, onOpen }: {
-  list: SmartList; sources: Map<string, ListSource>; allTitles: LibraryTitle[]; onOpen: Props["onOpen"];
+function SmartShelf({ list, sources, allTitles, onOpen, viewer, onTitleActions }: {
+  list: SmartList; sources: Map<string, ListSource>; allTitles: LibraryTitle[]; onOpen: Props["onOpen"]; viewer: string; onTitleActions: Props["onTitleActions"];
 }) {
   const pool = useMemo(() => resolveList(list, sources, allTitles, new Map()), [list, sources, allTitles]);
   const [calendar, setCalendar] = useState(() => ({today:localDateKey(),hour:Math.floor(Date.now()/3_600_000)}));
@@ -48,17 +50,18 @@ function SmartShelf({ list, sources, allTitles, onOpen }: {
     }).catch(() => { if (!controller.signal.aborted) setResult({facts: new Map(), failed: true}); });
     return () => controller.abort();
   }, [pool, attempt, calendar]);
-  if (!result) return <p role="status" className="text-sm text-muted-foreground">Checking your saved titles…</p>;
-  const { candidates, missing } = resolveList(list, sources, allTitles, result.facts, calendar.today);
+  const { candidates, missing } = resolveList(list, sources, allTitles, result?.facts ?? new Map(), calendar.today);
   const matches = candidates.filter(item => item.verified).map(item => item.title);
+  const order = usePosterOrder(matches, viewer, list.id);
   const unknown = candidates.length - matches.length;
+  if (!result) return <p role="status" className="text-sm text-muted-foreground">Checking your saved titles…</p>;
   const sourceNames = list.sources?.flatMap(id => sources.get(id)?.name ?? []);
   const from = sourceNames === undefined ? "All lists" : sourceNames.join(", ") || "No available lists";
   return <>
     <p className="list-source-caption">From: {from}</p>
     {dateSensitive && <p className="text-xs text-muted-foreground">Upcoming first releases · updates as dates change.</p>}
     {missing.size > 0 && <p className="text-xs text-muted-foreground">A source list was removed. You can choose another in Edit rule.</p>}
-    {matches.length ? <PosterRow title={list.name} items={matches} onPosterClick={onOpen} /> :
+    {matches.length ? <PosterRow title={list.name} items={order.titles} onPosterClick={onOpen} onReorder={order.reorder} onMoveRequest={onTitleActions ? (title,anchor) => onTitleActions(list.id,title,anchor) : undefined} /> :
       <p className="text-sm text-muted-foreground">{unknown ? "No confirmed matches yet." : list.sources === undefined ?
         "No matches in your library yet. Matching titles appear here when you save them." :
         "No matches in the selected lists yet."}</p>}
@@ -66,7 +69,7 @@ function SmartShelf({ list, sources, allTitles, onOpen }: {
   </>;
 }
 
-export function HomeLists({ viewer, shelves, onOpen }: Props) {
+export function HomeLists({ viewer, shelves, onOpen, onTitleActions }: Props) {
   const pro=useProAccess()?.smartLists===true;
   const key = homeListKey(viewer);
   const [lists, setLists] = useState<HomeList[]>(() => { try { return readLists(key); } catch { return []; } });
@@ -135,7 +138,7 @@ export function HomeLists({ viewer, shelves, onOpen }: Props) {
       toast.error("You already have a list with that name."); return;
     }
     const id = editor === "edit" ? active! : crypto.randomUUID();
-    const list: HomeList = mode === "smart" && rule ? { id, name: name.trim(), mode, rule, request:criteria.trim(), sources: validSources } : { id, name: name.trim(), mode: "manual", titles: picked };
+    const list: HomeList = mode === "smart" && rule ? { id, name: name.trim(), mode, rule, request:criteria.trim(), sources: validSources, excluded: editor === "edit" && selected?.mode === "smart" ? selected.excluded : undefined } : { id, name: name.trim(), mode: "manual", titles: picked };
     if (save(current => editor === "edit" ? current.map(l => l.id === id ? list : l) : [...current, list])) { setActive(id); setEditor(null); focusList(id); }
   }
   function importLegacy() {
@@ -177,8 +180,11 @@ export function HomeLists({ viewer, shelves, onOpen }: Props) {
           <ChevronDown size={16} aria-hidden="true" className="list-chevron" />
         </button></h3>
         <div id={`list-body-${list.id}`} hidden={!open}>{open && <div className="list-folder-body">
-          {smart && !pro ? <p className="text-sm text-muted-foreground">Smart Lists are included in Pro. Your saved rule is kept. <a className="text-primary underline" href="/dashboard?tab=profile#your-plan">View plans</a></p> : smart ? <SmartShelf list={list} sources={sources} allTitles={allTitles} onOpen={onOpen}/> :
-            list.titles.length ? <PosterRow title={list.name} items={list.titles} onPosterClick={onOpen} /> :
+          {smart && !pro ? <p className="text-sm text-muted-foreground">Smart Lists are included in Pro. Your saved rule is kept. <a className="text-primary underline" href="/dashboard?tab=profile#your-plan">View plans</a></p> : smart ? <SmartShelf viewer={viewer} onTitleActions={onTitleActions} list={list} sources={sources} allTitles={allTitles} onOpen={onOpen}/> :
+            list.titles.length ? <PosterRow title={list.name} items={list.titles} onPosterClick={onOpen}
+              onReorder={titles => save(rows => rows.map(row => row.id === list.id && row.mode === "manual" ? {...row,titles:reorderVisible(row.titles,titles)} : row))}
+              onMoveRequest={onTitleActions ? (title,anchor) => onTitleActions(list.id,title,anchor) : undefined}
+              onDeleteClick={title => save(rows => rows.map(row => row.id === list.id && row.mode === "manual" ? {...row,titles:row.titles.filter(t=>titleKey(t)!==titleKey(title))} : row))} /> :
             <p className="text-sm text-muted-foreground">Add your first title from search, or pick one from your library in Edit list.</p>}
           <div className="list-folder-actions">
             {!smart && <Button size="sm" variant="secondary" onClick={() => setSearching(true)}><Search />Find a title</Button>}

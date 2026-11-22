@@ -83,7 +83,7 @@ it('keeps Focus watching and sends the chosen cutoff after ten minutes and a que
     expect(screen.queryByText(saved.answer)).toBeNull();
     expect(await screen.findByText('10:00', {}, {timeout: 2500})).toBeTruthy();
     expect(screen.getByRole('button', { name: 'End focus' })).toBeTruthy();
-    expect(screen.getByRole('img', { name: /Your geek watches the glowing TV/ })).toBeTruthy();
+    expect(screen.getByRole('group', { name: /Your geek watches the glowing TV/ })).toBeTruthy();
     chat();
     expect(screen.getByText(saved.answer)).toBeTruthy();
     tap('Watching at 15:07');
