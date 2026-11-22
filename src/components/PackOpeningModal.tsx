@@ -49,13 +49,13 @@ export default function PackOpeningModal({isOpen,onClose,packId,onPackOpened}:{i
   return <Dialog open={isOpen} onOpenChange={open=>{if(!open)close();}}>
     <DialogContent hideClose className="pack-reveal-dialog" onEscapeKeyDown={e=>{if(deciding.current)e.preventDefault();}} onPointerDownOutside={e=>{if(deciding.current)e.preventDefault();}}>
       <button className="pack-close" aria-label="Close" disabled={busy} onClick={close}><X size={18}/></button>
-      <p className="pack-kicker">CineGeek collection</p>
-      <DialogTitle className="pack-heading">{revealed?(type==='actor'?'One for your cast.':'Behind the camera.'):'Your next collectible.'}</DialogTitle>
-      <DialogDescription className="pack-subtitle">{revealed?'Make room for a favourite.':person?`${type==='actor'?'Actor':'Director'} pack · one collectible`:'Getting your pack ready…'}</DialogDescription>
+      <p className="pack-kicker">The CineGeek collection</p>
+      <DialogTitle className="pack-heading">{person?(type==='actor'?'Actor pack':'Director pack'):'Your pack'}</DialogTitle>
+      <DialogDescription className="sr-only">{revealed?'Keep this card, skip it, or close to decide later.':person?'Reveal your collectible.':'Getting your pack ready…'}</DialogDescription>
       <div className="pack-stage">
         {revealed&&person?<CollectibleCard name={person.name} photo={person.profile_path} type={type} rarity={person.rarity}/>:
           <div className={`pack-envelope${!person&&!error?' pack-envelope-loading':''}`} aria-hidden="true">
-            <img src="/cinegeek-mark.svg" alt=""/><strong>CineGeek</strong><small>{person?(type==='actor'?'The cast collection':'The director collection'):'The collection'}</small><span>ONE COLLECTIBLE</span>
+            <span className="pack-edition">{person?(type==='actor'?'Actors':'Directors'):'Collection'}</span><img src="/cinegeek-glasses.svg" alt=""/><strong>cinegeek<span>.</span></strong>
           </div>}
       </div>
       <p className="sr-only" role="status">{revealed&&person?`${person.name}, ${type}`:!person&&!error?'Preparing your collectible':''}</p>
@@ -74,7 +74,7 @@ export default function PackOpeningModal({isOpen,onClose,packId,onPackOpened}:{i
         </div>}
       </>}
       {error&&<div className="pack-error" role="alert">{error}{!person&&<Button variant="outline" onClick={()=>setAttempt(n=>n+1)}>Try again</Button>}</div>}
-      <p className="pack-later">Close to decide later.</p>
+      {revealed&&<p className="pack-later">Not sure? You can decide later.</p>}
       <PackOdds type={person?type:undefined} legacy={!!person&&!isRarity(person.rarity)}/>
     </DialogContent>
   </Dialog>;

@@ -1,6 +1,6 @@
 Six-card collections and pack reveal — staged 22 November 2026
 
-Status: local implementation only. Do not push, deploy or update TestFlight until the user's hold is lifted.
+Status: TestFlight release requested on 22 November 2026. Server rollout and live catalogue verification remain required before distributing build 34.
 
 Behaviour
 - Six actor cards AND six director cards per account. Atomic keep/skip and same-category replacement remain. No sale or XP refund.
@@ -27,7 +27,7 @@ Validation completed locally
 - Phone-width and 320px preview: sealed/reveal, full-six replacement and retained count, missing image fallback, expandable odds.
 - Native web bundle build recorded separately in private evidence.
 
-Rollout order when separately authorized
+Rollout order
 1. Back up affected pack/collection state and confirm prior XP/tier migrations.
 2. Apply 20261122220000_six_card_pack_catalogue.sql once. Existing grants and trigger bindings are retained; only the new store-pick function adds service-only access.
 3. Before enabling the changed open-pack endpoint, run resolvePackPerson against all 80 frozen entries using the authorized server TMDB credential. This has NOT been exercised live locally; fixtures and response validation were tested. Resolve any ambiguous/unavailable identity before release, without changing persisted v1 draws.

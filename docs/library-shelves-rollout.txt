@@ -12,7 +12,7 @@ User-confirmed behaviour
 - Home's top search opens Ask your Geek setup without adding/moving any library title.
   Each shelf's + button still adds to that shelf.
 
-Release order (held; do not deploy or update TestFlight yet)
+Release order (TestFlight update requested 22 November 2026)
 1. Privately back up affected user_titles rows before applying the staged migration.
 2. Apply supabase/migrations/20261122210000_exclusive_active_shelves.sql before shipping this client.
    Existing conflicting statuses retain Watching over Watched; either existing status or
