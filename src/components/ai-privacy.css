@@ -1,0 +1,50 @@
+.privacy-consent[role="dialog"] {
+  width: calc(100% - 32px);
+  max-width: 420px;
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: 0;
+  padding: 28px;
+  border: 1px solid #ffffff1c;
+  border-radius: 28px;
+  background: radial-gradient(ellipse at 8% 0%, #ffc1070c, transparent 58%), #1b1d20;
+  color: #f5f4ef;
+  box-shadow: 0 24px 80px #0009, inset 0 1px #ffffff08;
+}
+.privacy-consent .privacy-consent-header { margin-bottom: 16px; }
+.privacy-consent .privacy-consent-mark { display: block; width: 60px; height: 60px; margin: 0 0 22px; border-radius: 17px; }
+.privacy-consent .privacy-consent-eyebrow { margin: 0 0 9px; color: #ffd053; font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.privacy-consent .privacy-consent-title { margin: 0; font-family: var(--font-heading, inherit); font-size: 28px; font-weight: 750; line-height: 1.16; letter-spacing: -.04em; outline: none; }
+.privacy-consent .privacy-consent-summary { margin: 0; color: #b8bcc5; font-size: 14px; line-height: 1.65; text-wrap: pretty; }
+.privacy-consent .privacy-consent-summary strong { color: #f0eee8; font-weight: 600; }
+.privacy-consent .privacy-consent-details { margin-top: 12px; }
+.privacy-consent .privacy-consent-details summary { display: flex; align-items: center; gap: 7px; width: fit-content; min-height: 44px; color: #d6d7db; font-size: 12px; font-weight: 600; cursor: pointer; list-style: none; }
+.privacy-consent .privacy-consent-details summary::-webkit-details-marker { display: none; }
+.privacy-consent .privacy-consent-details summary svg { transition: transform .15s ease; }
+.privacy-consent .privacy-consent-details[open] summary svg { transform: rotate(180deg); }
+.privacy-consent .privacy-consent-details > div { padding: 2px 0 15px; color: #b8bcc5; font-size: 12px; line-height: 1.65; }
+.privacy-consent .privacy-consent-details p { margin: 0 0 12px; }
+.privacy-consent .privacy-consent-details a { display: inline-flex; align-items: center; min-height: 44px; color: #ffd053; text-decoration: underline; text-underline-offset: 4px; }
+.privacy-consent .privacy-consent-remember { margin: 8px 0 20px; padding-top: 18px; border-top: 1px solid #ffffff0e; color: #d0d2d7; font-size: 12px; line-height: 1.65; }
+.privacy-consent .privacy-consent-remember span { display: block; color: #989fa9; font-size: 11px; }
+.privacy-consent .privacy-consent-actions { display: grid; gap: 6px; }
+.privacy-consent .privacy-consent-allow { min-height: 50px; height: auto; padding: 13px 16px; border-radius: 14px; background: #ffc107; color: #181813; font-size: 14px; font-weight: 750; }
+.privacy-consent .privacy-consent-allow:hover { background: #ffd04b; }
+.privacy-consent .privacy-consent-decline { min-height: 44px; height: auto; border-radius: 12px; color: #b8bcc5; font-size: 13px; }
+.privacy-consent .privacy-consent-decline:hover { background: #ffffff08; color: #f5f4ef; }
+.privacy-consent[role="dialog"] > button:last-child { display: grid; place-items: center; top: 12px; right: 12px; width: 44px; height: 44px; border-radius: 50%; color: #b8bcc5; }
+.privacy-consent .privacy-consent-error { margin: 0 0 16px; padding: 12px; border-radius: 12px; background: #f2747410; color: #ffb4b4; font-size: 13px; line-height: 1.5; }
+.privacy-consent[role="dialog"] :is(summary, a):focus-visible { outline: 2px solid #ffd053; outline-offset: 4px; border-radius: 4px; }
+@media (max-width: 360px) {
+  .privacy-consent[role="dialog"] { width: calc(100% - 24px); padding: 24px; }
+  .privacy-consent .privacy-consent-title { font-size: 25px; }
+}
+@media (max-height: 650px) {
+  .privacy-consent .privacy-consent-mark { width: 48px; height: 48px; margin-bottom: 16px; border-radius: 14px; }
+  .privacy-consent .privacy-consent-header { margin-bottom: 12px; }
+  .privacy-consent .privacy-consent-remember { margin-top: 4px; margin-bottom: 14px; padding-top: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .privacy-consent[role="dialog"], .privacy-consent-details summary svg { animation: none !important; transition: none; }
+}
