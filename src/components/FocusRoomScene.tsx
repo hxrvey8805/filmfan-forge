@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { LampPullCord } from "./LampPullCord";
 import { CineGeekFrames } from "./GlassesWithLenses";
 import { FocusRoomSnacks } from "./FocusRoomSnacks";
 import { ArenaShield } from "./GladiatorCostume";
@@ -105,10 +106,10 @@ function WallClock({ time, running }: { time: string; running: boolean }) {
   </g>;
 }
 
-export function FocusRoomScene({ look, running, styleName, time }: { look: Outfit; running: boolean; styleName: string; time: string }) {
+export function FocusRoomScene({ look, running, styleName, time, canStart = false, onStart }: { look: Outfit; running: boolean; styleName: string; time: string; canStart?: boolean; onStart?: () => void }) {
   const prefix = useId().replace(/:/g, "");
   const paint = (name: string) => `url(#${prefix}-${name})`;
-  return <svg key={look} className="focus-room-scene" viewBox="0 0 480 480" preserveAspectRatio="xMidYMid meet" role="img"
+  return <svg key={look} className="focus-room-scene" viewBox="0 0 480 480" preserveAspectRatio="xMidYMid meet" role={onStart ? "group" : "img"}
     aria-label={(running
       ? "Your geek watches the glowing TV from a cherry-red armchair. The lamp is low and the popcorn is within reach."
       : "Your geek looks at you from a cherry-red armchair. The lamp is warm, the TV is off and the popcorn is ready.") + " Room style: " + styleName + "."}>
@@ -183,15 +184,22 @@ export function FocusRoomScene({ look, running, styleName, time }: { look: Outfi
     </g>
     <WallGallery />
 
+    {/* The rug lies underneath the lamp base and furniture. */}
+    <g className="room-rug">
+    <ellipse cx="266" cy="379" rx="204" ry="61" transform="rotate(-8 266 379)" fill="var(--room-rug, #67516c)" stroke="var(--room-shadow, #493f55)" strokeWidth="3"/>
+    <ellipse cx="266" cy="379" rx="190" ry="51" transform="rotate(-8 266 379)" fill="none" stroke="var(--room-weave, #bf9584)" strokeWidth="2"/>
+    <ellipse cx="266" cy="379" rx="180" ry="45" transform="rotate(-8 266 379)" fill="none" stroke="var(--room-weave, #a18c76)" strokeWidth="3.5" strokeDasharray="3 8"/>
+    </g>
+
     {/* The light pools on the wall, from the standing lamp just behind the right armrest. */}
     <ellipse className="room-lamp-glow" cx="451" cy="155" rx="120" ry="148" fill={paint("lamp")}/>
-    <g stroke="#61474b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round">
-      <ellipse cx="458" cy="383" rx="17" ry="4" fill="#7d5b50"/>
-      <path d="M455 153h5v228l-5 1Z" fill="#bb956b"/>
+    <g transform="translate(-12 0)" stroke="#61474b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round">
+      <ellipse cx="458" cy="365" rx="17" ry="4" fill="#7d5b50"/>
+      <path d="M455 153h5v210l-5 1Z" fill="#bb956b"/>
       <path d="m437 108 43-2v66q-24 5-56-5Z" fill="#e3b987"/>
       <path className="room-shade-light" d="m440 111 40-2v58q-24 5-52-3Z" fill="var(--room-lamplight, #f8d99c)" stroke="none"/>
       <path d="m444 116-8 45m18-45-3 46m15-47 2 49" stroke="#cfaa7e" strokeWidth="1.2"/>
-      <path d="M447 170v19" strokeWidth="1.4"/><circle cx="447" cy="191" r="2.3" fill="#b68a67"/>
+
       <g fill="#608675" stroke="#476354">
         <path d="M470 310q-2-31-18-47-3 25 18 47Zm2-7q-3-32 8-44v39Zm1 7q6-21 14-23v27Z"/>
         <path d="m461 314 20-1-2 25-14 1Z" fill="#a56e5d" stroke="#765a52"/>
@@ -201,10 +209,7 @@ export function FocusRoomScene({ look, running, styleName, time }: { look: Outfi
     {/* Lower the house lights behind the chair, leaving Geek and the snacks readable. */}
     <rect className="room-lights-down" width="480" height="480" fill="var(--room-shadow, #201b38)" pointerEvents="none"/>
     <WallClock time={time} running={running}/>
-    {/* Woven oval rug, oak swivel base and one deep, upholstered seat. */}
-    <ellipse cx="266" cy="379" rx="204" ry="61" transform="rotate(-8 266 379)" fill="var(--room-rug, #67516c)" stroke="var(--room-shadow, #493f55)" strokeWidth="3"/>
-    <ellipse cx="266" cy="379" rx="190" ry="51" transform="rotate(-8 266 379)" fill="none" stroke="var(--room-weave, #bf9584)" strokeWidth="2"/>
-    <ellipse cx="266" cy="379" rx="180" ry="45" transform="rotate(-8 266 379)" fill="none" stroke="var(--room-weave, #a18c76)" strokeWidth="3.5" strokeDasharray="3 8"/>
+    {/* Oak swivel base and one deep, upholstered seat. */}
     <ellipse cx="292" cy="361" rx="103" ry="17" fill="var(--room-shadow, #3a2b43)" opacity=".47"/>
     <g stroke="#492a37" strokeWidth="2.7" strokeLinejoin="round" strokeLinecap="round">
       <path d="m259 330 59-5 4 25-60 7Z" fill="#654840"/>
@@ -270,7 +275,8 @@ export function FocusRoomScene({ look, running, styleName, time }: { look: Outfi
       <path className="room-tv-rim" d="m83 282 1 121" stroke="#c6f9e3" strokeWidth="2.2"/>
       <circle className="room-tv-power" cx="73" cy="401" r="1.6" stroke="none"/>
     </g>
-    <rect width="480" height="480" fill={paint("edge")}/>
+    <rect width="480" height="480" fill={paint("edge")} pointerEvents="none"/>
+    <g transform="translate(-12 0)"><LampPullCord enabled={canStart && !running} onStart={onStart} /></g>
     </g>
   </svg>;
 }
