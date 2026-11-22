@@ -106,10 +106,10 @@ function WallClock({ time, running }: { time: string; running: boolean }) {
   </g>;
 }
 
-export function FocusRoomScene({ look, running, styleName, time, canStart = false, onStart }: { look: Outfit; running: boolean; styleName: string; time: string; canStart?: boolean; onStart?: () => void }) {
+export function FocusRoomScene({ look, running, styleName, time, canUseLamp = false, onToggleFocus }: { look: Outfit; running: boolean; styleName: string; time: string; canUseLamp?: boolean; onToggleFocus?: () => void }) {
   const prefix = useId().replace(/:/g, "");
   const paint = (name: string) => `url(#${prefix}-${name})`;
-  return <svg key={look} className="focus-room-scene" viewBox="0 0 480 480" preserveAspectRatio="xMidYMid meet" role={onStart ? "group" : "img"}
+  return <svg key={look} className="focus-room-scene" viewBox="0 0 480 480" preserveAspectRatio="xMidYMid meet" role={onToggleFocus ? "group" : "img"}
     aria-label={(running
       ? "Your geek watches the glowing TV from a cherry-red armchair. The lamp is low and the popcorn is within reach."
       : "Your geek looks at you from a cherry-red armchair. The lamp is warm, the TV is off and the popcorn is ready.") + " Room style: " + styleName + "."}>
@@ -196,10 +196,11 @@ export function FocusRoomScene({ look, running, styleName, time, canStart = fals
     <g transform="translate(-12 0)" stroke="#61474b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round">
       <ellipse cx="458" cy="365" rx="17" ry="4" fill="#7d5b50"/>
       <path d="M455 153h5v210l-5 1Z" fill="#bb956b"/>
-      <path d="m437 108 43-2v66q-24 5-56-5Z" fill="#e3b987"/>
-      <path className="room-shade-light" d="m440 111 40-2v58q-24 5-52-3Z" fill="var(--room-lamplight, #f8d99c)" stroke="none"/>
-      <path d="m444 116-8 45m18-45-3 46m15-47 2 49" stroke="#cfaa7e" strokeWidth="1.2"/>
+      <path d="M438 109q18-5 36-1l11 60q-29 11-61-2Z" fill="#e3b987"/>
+      <path className="room-shade-light" d="M441 112q15-3 30-1l11 55q-27 9-54-2Z" fill="var(--room-lamplight, #f8d99c)" stroke="none"/>
+      <path d="m444 116-8 45m18-45-3 46m15-47 5 48" stroke="#cfaa7e" strokeWidth="1.2"/>
 
+      <path d="M438 109q18 4 36-1" fill="none" stroke="#bc936b" strokeWidth="1.4"/>
       <g fill="#608675" stroke="#476354">
         <path d="M470 310q-2-31-18-47-3 25 18 47Zm2-7q-3-32 8-44v39Zm1 7q6-21 14-23v27Z"/>
         <path d="m461 314 20-1-2 25-14 1Z" fill="#a56e5d" stroke="#765a52"/>
@@ -276,7 +277,7 @@ export function FocusRoomScene({ look, running, styleName, time, canStart = fals
       <circle className="room-tv-power" cx="73" cy="401" r="1.6" stroke="none"/>
     </g>
     <rect width="480" height="480" fill={paint("edge")} pointerEvents="none"/>
-    <g transform="translate(-12 0)"><LampPullCord enabled={canStart && !running} running={running} onStart={onStart} /></g>
+    <g transform="translate(-12 0)"><LampPullCord enabled={canUseLamp} running={running} onToggleFocus={onToggleFocus} /></g>
     </g>
   </svg>;
 }

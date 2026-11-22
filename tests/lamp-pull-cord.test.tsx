@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { LampPullCord } from '../src/components/LampPullCord';
@@ -18,7 +19,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); });
 function setup(enabled = true) {
   const start = vi.fn();
-  const view = render(<svg><LampPullCord enabled={enabled} onStart={start} /></svg>);
+  const view = render(<svg><LampPullCord enabled={enabled} onToggleFocus={start} /></svg>);
   const cord = screen.getByRole('button', { name: 'Start focus with lamp cord' });
   return { start, cord, view };
 }
@@ -49,9 +50,9 @@ it.each(['pointerCancel', 'lostPointerCapture'] as const)('does not start after 
 it('supports a normal button activation and can start a later session after being re-enabled', () => {
   const { start, cord, view } = setup(); fireEvent.click(cord, { detail: 1 });
   expect(start).toHaveBeenCalledTimes(1);
-  view.rerender(<svg><LampPullCord enabled={false} onStart={start} /></svg>);
+  view.rerender(<svg><LampPullCord enabled={false} onToggleFocus={start} /></svg>);
   fireEvent.click(cord, { detail: 1 }); expect(start).toHaveBeenCalledTimes(1);
-  view.rerender(<svg><LampPullCord enabled onStart={start} /></svg>);
+  view.rerender(<svg><LampPullCord enabled onToggleFocus={start} /></svg>);
   fireEvent.click(cord, { detail: 1 }); expect(start).toHaveBeenCalledTimes(2);
 });
 it('keeps disabled cords inert for both gestures and button activation', () => {
@@ -70,7 +71,7 @@ it('keeps keyboard and assistive activation available after a cancelled pointer 
 
 it('remembers the hint after a successful cord start, across rooms and account switches', () => {
   const start = vi.fn();
-  const scene = (viewer: string, running = false) => <GeekViewer.Provider value={viewer}><svg><LampPullCord enabled={!running} running={running} onStart={start} /></svg></GeekViewer.Provider>;
+  const scene = (viewer: string, running = false) => <GeekViewer.Provider value={viewer}><svg><LampPullCord enabled running={running} onToggleFocus={start} /></svg></GeekViewer.Provider>;
   const view = render(scene('lamp-viewer-a'));
   expect(screen.getByText('Pull to start')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Start focus with lamp cord' }));
@@ -88,7 +89,7 @@ it('remembers the hint after a successful cord start, across rooms and account s
   expect(screen.queryByText('Pull to start')).toBeNull();
 });
 it('keeps the hint when a cord start fails, or Focus starts from the regular button', () => {
-  const scene = (enabled: boolean, running = false) => <GeekViewer.Provider value="lamp-viewer-failed"><svg><LampPullCord enabled={enabled} running={running} onStart={vi.fn()} /></svg></GeekViewer.Provider>;
+  const scene = (enabled: boolean, running = false) => <GeekViewer.Provider value="lamp-viewer-failed"><svg><LampPullCord enabled={enabled} running={running} onToggleFocus={vi.fn()} /></svg></GeekViewer.Provider>;
   const view = render(scene(true));
   fireEvent.click(screen.getByRole('button', { name: 'Start focus with lamp cord' }));
   view.rerender(scene(false)); // waiting for app blocking
@@ -96,5 +97,37 @@ it('keeps the hint when a cord start fails, or Focus starts from the regular but
   expect(screen.getByText('Pull to start')).toBeTruthy();
   view.rerender(scene(false, true)); // subsequently started using the normal button
   view.rerender(scene(true));
+  expect(screen.getByText('Pull to start')).toBeTruthy();
+});
+
+it('pulls to start, end and restart without the browser click toggling back', () => {
+  const toggle = vi.fn();
+  function Room() {
+    const [running, setRunning] = useState(false);
+    return <svg><LampPullCord enabled running={running} onToggleFocus={() => {
+      toggle(); setRunning(value => !value);
+    }} /></svg>;
+  }
+  render(<Room />);
+  for (const [from, to] of [['Start', 'End'], ['End', 'Start'], ['Start', 'End']]) {
+    const cord = screen.getByRole('button', { name: `${from} focus with lamp cord` });
+    down(cord);
+    fireEvent.pointerMove(cord, { clientX: 50, clientY: 85, pointerId: 1 });
+    fireEvent.pointerUp(cord, { clientX: 50, clientY: 85, pointerId: 1 });
+    fireEvent.click(cord, { detail: 1 });
+    expect(screen.getByRole('button', { name: `${to} focus with lamp cord` })).toBeTruthy();
+  }
+  expect(toggle).toHaveBeenCalledTimes(3);
+});
+it('does not dismiss the start guide just for using the cord to end a button-started session', () => {
+  const toggle = vi.fn();
+  const scene = (running: boolean) => <GeekViewer.Provider value="lamp-end-first"><svg>
+    <LampPullCord enabled running={running} onToggleFocus={toggle} />
+  </svg></GeekViewer.Provider>;
+  const view = render(scene(true));
+  expect(screen.queryByText('Pull to start')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'End focus with lamp cord' }));
+  view.rerender(scene(false));
+  expect(toggle).toHaveBeenCalledTimes(1);
   expect(screen.getByText('Pull to start')).toBeTruthy();
 });

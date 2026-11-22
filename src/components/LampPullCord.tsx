@@ -4,7 +4,7 @@ import { GeekViewer, useViewerPreference } from '@/hooks/use-viewer-preference';
 const pullThreshold = 24; // CSS pixels: a deliberate downward gesture at every room size.
 
 type Drag = { id: number; x: number; y: number; scale: number };
-export function LampPullCord({ enabled, running = false, onStart }: { enabled: boolean; running?: boolean; onStart?: () => void }) {
+export function LampPullCord({ enabled, running = false, onToggleFocus }: { enabled: boolean; running?: boolean; onToggleFocus?: () => void }) {
   const viewer = useContext(GeekViewer);
   const hint = useViewerPreference<'new' | 'used'>('focus-lamp-hint', 'new', value => value === 'used' ? 'used' : null);
   const pendingOwner = useRef<{ viewer: string | null } | null>(null);
@@ -16,8 +16,11 @@ export function LampPullCord({ enabled, running = false, onStart }: { enabled: b
   useEffect(() => {
     drag.current = null;
     setPull(0);
-    if (enabled) { activated.current = false; pendingOwner.current = null; }
-  }, [enabled, viewer]);
+    if (enabled) {
+      activated.current = false;
+      if (!running) pendingOwner.current = null;
+    }
+  }, [enabled, running, viewer]);
   useEffect(() => {
     // Keep the guide after a failed/cancelled start. Persist only once the cord's
     // own request actually starts Focus, for the same account on this device.
@@ -27,11 +30,11 @@ export function LampPullCord({ enabled, running = false, onStart }: { enabled: b
     }
   }, [running, viewer, hint.ready, hint.choose]);
 
-  function start() {
-    if (!enabled || !onStart || activated.current) return;
+  function activate() {
+    if (!enabled || !onToggleFocus || activated.current) return;
     activated.current = true;
-    pendingOwner.current = { viewer };
-    onStart();
+    pendingOwner.current = running ? null : { viewer };
+    onToggleFocus();
   }
   function begin(event: PointerEvent<HTMLButtonElement>) {
     if (!enabled || event.button !== 0 || event.isPrimary === false || drag.current) return;
@@ -53,11 +56,11 @@ export function LampPullCord({ enabled, running = false, onStart }: { enabled: b
     if (!current || event.pointerId !== current.id) return;
     const dx = event.clientX - current.x, dy = event.clientY - current.y;
     // A short tap uses the native button click. Dragging sideways/up or releasing
-    // before the threshold must not turn its synthetic click into a Focus start.
+    // before the threshold must not turn its synthetic click into a Focus toggle.
     suppressClick.current = Math.hypot(dx, dy) > 8;
     drag.current = null;
     setPull(0);
-    if (dy >= pullThreshold && Math.abs(dx) < 36 && dy > Math.abs(dx)) start();
+    if (dy >= pullThreshold && Math.abs(dx) < 36 && dy > Math.abs(dx)) activate();
   }
   function cancel() {
     if (!drag.current) return;
@@ -68,25 +71,26 @@ export function LampPullCord({ enabled, running = false, onStart }: { enabled: b
   return <g className="room-lamp-cord" data-pulling={pull > 0 ? 'true' : undefined}>
     <g aria-hidden="true" pointerEvents="none" className="room-cord-art">
       <path d={`M447 170v${19 + pull}`} fill="none" stroke="#61474b" strokeWidth="1.4" />
-      {enabled && showHint && <circle className="room-cord-glow" cx="447" cy={191 + pull} r="9" fill="#ffe1a0" opacity=".16" />}
+      {enabled && !running && showHint && <circle className="room-cord-glow" cx="447" cy={191 + pull} r="9" fill="#ffe1a0" opacity=".16" />}
       <circle cx="447" cy={191 + pull} r={enabled ? 3.4 : 2.3} fill="#d9b17d" stroke="#61474b" strokeWidth="1.6" />
-      {enabled && showHint && pull === 0 && <g className="room-cord-hint">
+      {enabled && !running && showHint && pull === 0 && <g className="room-cord-hint">
         <path d="M426 212q14 0 18-13m-4 2 4-3 1 5" fill="none" stroke="#f5d7a5" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
         <rect x="336" y="201" width="91" height="24" rx="12" fill="#292330" fillOpacity=".88" stroke="#f5d7a5" strokeOpacity=".24" />
         <text x="381.5" y="216.5" textAnchor="middle" fontSize="10" fontWeight="550" fill="#f5dfb7">Pull to start</text>
       </g>}
     </g>
-    {onStart && <foreignObject x="416" y="172" width="64" height="90">
+    {onToggleFocus && <foreignObject x="416" y="172" width="64" height="90">
       <button type="button" className="room-cord-target" disabled={!enabled}
-        aria-label="Start focus with lamp cord" title="Pull down or tap to start Focus"
+        aria-label={running ? "End focus with lamp cord" : "Start focus with lamp cord"}
+        title={running ? "Pull down or tap to end Focus and turn the lights on" : "Pull down or tap to start Focus"}
         onPointerDown={begin} onPointerMove={move} onPointerUp={end}
         onPointerCancel={cancel} onLostPointerCapture={cancel}
         onClick={event => {
           const suppress = suppressClick.current && event.detail > 0;
           suppressClick.current = false;
-          if (!suppress) start();
+          if (!suppress) activate();
         }}>
-        <span className="sr-only">Pull down or tap the lamp cord to start Focus.</span>
+        <span className="sr-only">{running ? "Pull down or tap to end Focus and turn the lights on." : "Pull down or tap the lamp cord to start Focus."}</span>
       </button>
     </foreignObject>}
   </g>;
