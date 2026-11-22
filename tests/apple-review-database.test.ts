@@ -4,6 +4,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {vector} from '@electric-sql/pglite-pgvector';
 import {beforeAll,afterAll,beforeEach,it,expect} from 'vitest';
 import type {VerifiedSandboxPurchase} from '../supabase/functions/_shared/apple-purchase-verification';
+import {readProAccess,canWear} from '../src/lib/pro-access';
 
 const pg=new PGlite({extensions:{vector}});
 const migration=(name:string)=>readFileSync(new URL(`../supabase/migrations/${name}.sql`,import.meta.url),'utf8');
@@ -26,6 +27,7 @@ beforeAll(async()=>{
     '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout'])await pg.exec(migration(name));
   await pg.exec(readFileSync(new URL('../supabase/release/apple-production.sql',import.meta.url),'utf8'));
   await pg.exec(readFileSync(new URL('../supabase/release/apple-review.sql',import.meta.url),'utf8'));
+  await pg.exec(migration('20261122120000_private_test_plan_grants'));
   expect((await pg.query<{enabled:boolean}>('SELECT enabled FROM apple_review_policy')).rows[0].enabled).toBe(false);
   expect((await pg.query<{enabled:boolean}>('SELECT enabled FROM companion_usage_policy')).rows[0].enabled).toBe(false);
   // EXCLUSIVELY inside this disposable PostgreSQL fixture. Never configure a
@@ -121,4 +123,82 @@ it('disables review without changing production policy or spending caps',async()
   finally {await pg.exec('UPDATE apple_review_policy SET enabled=true,sales_enabled=true');}
   expect((await pg.query('SELECT * FROM companion_usage_policy')).rows).toEqual(before);
   expect((await pg.query('SELECT sales_enabled FROM apple_production_policy')).rows[0]).toEqual({sales_enabled:false});
+});
+
+async function privateTestPlan(plan='monthly') {
+  await pg.query(`INSERT INTO cinegeek_private_test_grants(user_id,plan,starts_at,reason)
+    VALUES($1,$2,now()-interval '1 day','Disposable fixture only')
+    ON CONFLICT(user_id) DO UPDATE SET plan=excluded.plan`,[user,plan]);
+}
+it.each(['monthly','annual'])('keeps private %s access without expiry, a purchase or added allowance',async plan=>{
+  const policyBefore=(await pg.query('SELECT * FROM companion_usage_policy')).rows;
+  const budgetBefore=(await pg.query('SELECT * FROM companion_sol_budget')).rows;
+  await privateTestPlan(plan);
+  const a=readProAccess(await access());
+  expect(a).toMatchObject({plan,expiresAt:null,purchasesEnabled:false,smartLists:true,gamesRemaining:null});
+  expect(canWear(a,'jedi')).toBe(plan==='annual');
+  expect(await allowance()).toMatchObject({plan,included:15,limit:15});
+  expect(Number.isFinite(Date.parse(String((await allowance()).renewsAt)))).toBe(true);
+  expect((await pg.query('SELECT * FROM companion_pro_entitlements WHERE user_id=$1',[user])).rows).toHaveLength(0);
+  expect((await pg.query('SELECT * FROM apple_review_entitlements WHERE user_id=$1',[user])).rows).toHaveLength(0);
+  expect((await pg.query('SELECT * FROM companion_usage_policy')).rows).toEqual(policyBefore);
+  expect((await pg.query('SELECT * FROM companion_sol_budget')).rows).toEqual(budgetBefore);
+  expect((await pg.query('SELECT sales_enabled FROM apple_production_policy')).rows[0]).toEqual({sales_enabled:false});
+});
+it('keeps the private plan when Sandbox receipts expire or are revoked',async()=>{
+  const r=receipt({productId:annual});await deliver(r);await privateTestPlan('monthly');
+  expect(await access()).toMatchObject({plan:'monthly'});
+  await deliver({...r,status:5,verifiedAt:now+10,transaction:{...r.transaction,signedAt:now+10,revokedAt:now}});
+  await pg.query("UPDATE apple_review_testers SET starts_at=now()-interval '2 days',expires_at=now()-interval '1 day' WHERE user_id=$1",[user]);
+  expect(await access()).toMatchObject({plan:'monthly',expiresAt:null});
+  expect((await pg.query('SELECT * FROM active_companion_entitlement($1)',[user])).rows).toHaveLength(1);
+  await pg.query('UPDATE cinegeek_private_test_grants SET revoked=true WHERE user_id=$1',[user]);
+  expect(await access()).toMatchObject({plan:'free'});
+});
+it('preserves a private grant anchor and spent questions across plan changes and repeated reads',async()=>{
+  await privateTestPlan();await useIncluded();
+  const anchor=(await pg.query('SELECT starts_at FROM cinegeek_private_test_grants WHERE user_id=$1',[user])).rows;
+  await privateTestPlan('annual');
+  expect((await pg.query('SELECT starts_at FROM cinegeek_private_test_grants WHERE user_id=$1',[user])).rows).toEqual(anchor);
+  expect(await allowance()).toMatchObject({plan:'annual',included:14,limit:15});
+  expect(await access()).toMatchObject({plan:'annual'});
+  expect(await allowance()).toMatchObject({included:14});
+});
+it('reserves, retries and releases questions for a permanent grant without bypassing revocation',async()=>{
+  await privateTestPlan('annual');
+  const request=randomUUID(),attempt=randomUUID();
+  expect(await call('begin_companion_question',[user,request,attempt,{}])).toMatchObject({mode:'monthly',source:'monthly'});
+  expect(await allowance()).toMatchObject({included:14});
+  await call('end_companion_question_attempt',[user,request,attempt,true]);
+  const retry=randomUUID();
+  expect(await call('begin_companion_question',[user,request,retry,{}])).toMatchObject({mode:'monthly',source:'monthly'});
+  expect(await allowance()).toMatchObject({included:14});
+  await call('end_companion_question_attempt',[user,request,retry,true]);
+  await pg.query('UPDATE cinegeek_private_test_grants SET revoked=true WHERE user_id=$1',[user]);
+  expect(await call('begin_companion_question',[user,request,randomUUID(),{}])).toMatchObject({error:'questions_exhausted'});
+  expect((await pg.query('SELECT status FROM companion_question_requests WHERE id=$1',[request])).rows[0].status).toBe('released');
+});
+it('still prevents an ordinary refunded purchase from resurrecting the legacy private Monthly grant',async()=>{
+  await pg.query("INSERT INTO cinegeek_private_monthly_grants VALUES($1,now()-interval '1 day',now()+interval '1 month',false,'Legacy fixture')",[user]);
+  await pg.query(`INSERT INTO companion_pro_entitlements(user_id,plan,anchor,valid_until,verified_transaction_id)
+    VALUES($1,'annual',now()-interval '1 day',now()+interval '1 year','ordinary-test-receipt')`,[user]);
+  expect(await access()).toMatchObject({plan:'annual'});
+  await pg.query('UPDATE companion_pro_entitlements SET revoked=true WHERE user_id=$1',[user]);
+  expect(await access()).toMatchObject({plan:'free'});
+});
+it('honours optional test expiry and cleans up grants with account deletion',async()=>{
+  await privateTestPlan();
+  await pg.query("UPDATE cinegeek_private_test_grants SET starts_at=now()-interval '2 days',expires_at=now()-interval '1 day' WHERE user_id=$1",[user]);
+  expect(await access()).toMatchObject({plan:'free'});
+  await pg.query('DELETE FROM auth.users WHERE id=$1',[user]);
+  expect((await pg.query('SELECT * FROM cinegeek_private_test_grants WHERE user_id=$1',[user])).rows).toHaveLength(0);
+});
+it.each(['anon','authenticated','service_role'])('prevents %s from reading or assigning private test plans',async role=>{
+  await privateTestPlan();
+  for(const sql of ['SELECT * FROM cinegeek_private_test_grants',
+    "UPDATE cinegeek_private_test_grants SET plan='annual'",'DELETE FROM cinegeek_private_test_grants',
+    `INSERT INTO cinegeek_private_test_grants(user_id,plan,starts_at,reason) VALUES('${user}','annual',now(),'Self grant')`,
+    `SELECT * FROM active_companion_entitlement('${user}')`]) {
+    await expect(pg.transaction(async tx=>{await tx.exec(`SET LOCAL ROLE ${role}`);await tx.exec(sql);})).rejects.toThrow('permission');
+  }
 });
