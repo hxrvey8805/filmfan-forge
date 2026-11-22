@@ -148,25 +148,25 @@ All colors MUST be HSL.
 .home-search { padding: 0 .8rem; background: hsl(var(--card)); font-size: .8rem; }
 .watch-spotlight {
   position: relative; isolation: isolate; overflow: hidden; border-radius: 22px;
-  border: 1px solid #7877b944; padding: .7rem 1rem .85rem;
-  background: radial-gradient(ellipse at 100% 12%, #41365b, transparent 68%), linear-gradient(135deg,#20232e,#181921);
+  border: 1px solid hsl(var(--accent) / .23); padding: .7rem 1rem .85rem;
+  background: radial-gradient(ellipse at 100% 12%, hsl(var(--accent) / .2), transparent 68%), linear-gradient(135deg,hsl(220 24% 14%),hsl(220 20% 10%));
 }
 .spotlight-label, .spotlight-counter { font-size: .67rem; letter-spacing: .14em; font-weight: 650; }
 .spotlight-label { display: flex; align-items: center; gap: .55rem; text-transform: uppercase; color: hsl(var(--primary)); }
 .spotlight-label span { height: 7px; width: 7px; border-radius: 50%; background: currentColor; }
-.spotlight-counter { font-variant-numeric: tabular-nums; color: #dfdced; }
-.spotlight-counter i { font-style: normal; color: #a9a4bb; margin: 0 .12em; }
+.spotlight-counter { font-variant-numeric: tabular-nums; color: hsl(210 40% 91%); }
+.spotlight-counter i { font-style: normal; color: hsl(215 20% 70%); margin: 0 .12em; }
 .spotlight-body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(72px, 23vw, 116px); align-items: center; gap: 1rem; padding: .65rem .2rem .7rem 0; }
-.spotlight-meta { color: #c8c8d7; font-size: .78rem; }
+.spotlight-meta { color: hsl(215 20% 79%); font-size: .78rem; }
 .spotlight-body h2 { margin-top: .4rem; font-size: clamp(1.65rem, 5vw, 2.75rem); line-height: 1.08; font-weight: 650; letter-spacing: -.045em; overflow-wrap: anywhere; }
-.spotlight-poster { aspect-ratio: 2/3; border-radius: 5px; padding: 2px; background: #9e98ad; box-shadow: 0 8px 18px #0005; transform: rotate(3deg); }
+.spotlight-poster { aspect-ratio: 2/3; border-radius: 5px; padding: 2px; background: hsl(210 18% 65%); box-shadow: 0 8px 18px #0005; transform: rotate(3deg); }
 .poster-artwork { width: 100%; height: 100%; position: relative; overflow: hidden; display: grid; place-items: center; border-radius: inherit;
   background: repeating-linear-gradient(145deg,transparent 0 16px,#d1c58b0c 16px 17px),linear-gradient(138deg,#423d2b,#222923 58%,#171b19); color: #b9b194; }
 .poster-artwork img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .poster-placeholder-icon { width: 35%; height: auto; max-width: 44px; }
 .spotlight-arrows { display: flex; align-items: center; gap: .15rem; }
 .spotlight-counter { margin-right: .3rem; white-space: nowrap; }
-.spotlight-arrows button { width: 44px; height: 44px; color: #e1dfef; border-color: transparent; }
+.spotlight-arrows button { width: 44px; height: 44px; color: hsl(210 40% 92%); border-color: transparent; }
 .spotlight-arrows button:hover, .home-search:hover { background-color: #ffffff0d; }
 .spotlight-open { width: 100%; display: flex; align-items: center; gap: .6rem; padding: 0 .7rem 0 .2rem; text-align: left;
   border: 1px solid #70eed44a; border-radius: 15px; background: radial-gradient(ellipse at left, #28524f, transparent 65%), #182727; }

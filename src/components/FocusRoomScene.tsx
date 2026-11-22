@@ -188,20 +188,8 @@ export function FocusRoomScene({ look, running, styleName, time, canUseLamp = fa
     </g>
 
     {/* The light pools on the wall, from the standing lamp just behind the right armrest. */}
-    <ellipse className="room-lamp-glow" cx="451" cy="155" rx="120" ry="148" fill={paint("lamp")}/>
-    <g className="room-standing-lamp" transform="translate(-12 0)" stroke="#39343b" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
-      <ellipse cx="452.5" cy="365" rx="18" ry="4" fill="#39373b"/>
-      <path d="M438.5 364q14 3 28 0" fill="none" stroke="#81756b" strokeWidth="1.2"/>
-      <path d="M451 162h3v200h-3Z" fill="#454047"/>
-      <path d="M452 176v181" fill="none" stroke="#8e8277" strokeWidth=".8"/>
-      <path d="M450 173h5v5h-5Z" fill="#b59a72" stroke="none"/>
-      {/* A smooth linen drum shade, with a thin rim and a warm diffuser. */}
-      <path d="M425 125C425 117 480 117 480 125V166C480 174 425 174 425 166Z" fill={paint("lamp-fabric")}/>
-      <path className="room-shade-light" d="M427 126Q452 132 478 126V165Q452 172 427 165Z" fill="var(--room-lamplight, #f8d99c)" stroke="none" opacity=".7"/>
-      <ellipse cx="452.5" cy="125" rx="27.5" ry="5.7" fill="#cfc3af" stroke="#6f6660" strokeWidth="1.5"/>
-      <path d="M426 166q26 8 53 0" fill="none" stroke="#6f6660" strokeWidth="1.5"/>
-    </g>
-    {/* Leave breathing room around every leaf; the pot sits in front of the stand. */}
+    <ellipse className="room-lamp-glow" cx="451" cy="163" rx="120" ry="148" fill={paint("lamp")}/>
+    {/* Keep every leaf inside the room, with the plant behind the standing lamp. */}
     <g className="room-side-plant" transform="translate(423 260)" stroke="#425e50" strokeWidth="1.7" strokeLinejoin="round" strokeLinecap="round">
       <ellipse cx="30" cy="87" rx="17" ry="3" fill="#2f2b31" opacity=".22" stroke="none"/>
       <path d="M30 70V35m0 26-13-25m13 26 12-22" fill="none"/>
@@ -212,6 +200,19 @@ export function FocusRoomScene({ look, running, styleName, time, canUseLamp = fa
       <path d="M16 65h28l-3 19q-11 5-22 0Z" fill="#a7836d" stroke="#715c54"/>
       <ellipse cx="30" cy="65" rx="14" ry="3" fill="#65574d" stroke="#715c54"/>
       <path d="M21 71l2 10" stroke="#c6a38a" strokeWidth="1.3"/>
+    </g>
+
+    <g className="room-standing-lamp" transform="translate(-12 8)" stroke="#39343b" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
+      <ellipse cx="452.5" cy="365" rx="18" ry="4" fill="#39373b"/>
+      <path d="M438.5 364q14 3 28 0" fill="none" stroke="#81756b" strokeWidth="1.2"/>
+      <path d="M451 162h3v200h-3Z" fill="#454047"/>
+      <path d="M452 176v181" fill="none" stroke="#8e8277" strokeWidth=".8"/>
+      <path d="M450 173h5v5h-5Z" fill="#b59a72" stroke="none"/>
+      {/* A smooth linen drum shade, with a thin rim and a warm diffuser. */}
+      <path d="M425 125C425 117 480 117 480 125V166C480 174 425 174 425 166Z" fill={paint("lamp-fabric")}/>
+      <path className="room-shade-light" d="M427 126Q452 132 478 126V165Q452 172 427 165Z" fill="var(--room-lamplight, #f8d99c)" stroke="none" opacity=".7"/>
+      <ellipse cx="452.5" cy="125" rx="27.5" ry="5.7" fill="#cfc3af" stroke="#6f6660" strokeWidth="1.5"/>
+      <path d="M426 166q26 8 53 0" fill="none" stroke="#6f6660" strokeWidth="1.5"/>
     </g>
 
     {/* Lower the house lights behind the chair, leaving Geek and the snacks readable. */}
@@ -285,7 +286,7 @@ export function FocusRoomScene({ look, running, styleName, time, canUseLamp = fa
       <circle className="room-tv-power" cx="73" cy="401" r="1.6" stroke="none"/>
     </g>
     <rect width="480" height="1178" fill={paint("edge")} pointerEvents="none"/>
-    <g transform="translate(-17 0)"><LampPullCord enabled={canUseLamp} running={running} onToggleFocus={onToggleFocus} /></g>
+    <g transform="translate(-17 8)"><LampPullCord enabled={canUseLamp} running={running} onToggleFocus={onToggleFocus} /></g>
     </g>
   </svg>;
 }
