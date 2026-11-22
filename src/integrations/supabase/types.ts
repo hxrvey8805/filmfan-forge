@@ -496,6 +496,33 @@ export type Database = {
         }
         Relationships: []
       }
+      cinegeek_private_test_grants: {
+        Row: {
+          expires_at: string | null
+          plan: string
+          reason: string
+          revoked: boolean
+          starts_at: string
+          user_id: string
+        }
+        Insert: {
+          expires_at?: string | null
+          plan: string
+          reason: string
+          revoked?: boolean
+          starts_at: string
+          user_id: string
+        }
+        Update: {
+          expires_at?: string | null
+          plan?: string
+          reason?: string
+          revoked?: boolean
+          starts_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       cinegeek_unlocks: {
         Row: {
           earned_at: string
@@ -1574,6 +1601,7 @@ export type Database = {
         Returns: boolean
       }
       spin_cinegeek_reward: { Args: never; Returns: Json }
+      spin_cinegeek_reward_v2: { Args: never; Returns: Json }
       start_cinegeek_game: {
         Args: { p_game: string; p_start: number; p_target: number }
         Returns: Json
