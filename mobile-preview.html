@@ -31,5 +31,6 @@ footer { padding: 4px 20px 10px; text-align: center; color: #a7aaa7; font-size: 
 <footer>Sample library resets on reload. Outfits stay on this device. Live services and purchases are off.</footer>
 <script type="module">
 if (import.meta.env.MODE !== 'mobile-preview') document.querySelector('.stage').textContent = 'Start this preview with npm run preview:mobile.';
+if(new URLSearchParams(location.search).get('sampleCollection')==='full') document.querySelector('iframe').src='/dashboard?tab=play&view=packs&sampleCollection=full';
 document.querySelectorAll('[data-width]').forEach(button=>button.addEventListener('click',()=>{document.querySelector('iframe').style.width=button.dataset.width+'px';document.querySelectorAll('[data-width]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));}));
 </script></body></html>

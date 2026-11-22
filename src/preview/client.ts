@@ -51,8 +51,23 @@ const searchableTitles = [...titles,
   { id: 985, title: "Eraserhead", year: 1977, type: "movie", posterPath: "" },
   { id: 1018, title: "Mulholland Drive", year: 2001, type: "movie", posterPath: "" },
 ];
+const previewCollection=[
+  {person_id:1,person_name:'Andrew Garfield',profile_path:'/5ydZ6TluPtxlz5G8nlWMB7SGmow.jpg'},
+  {person_id:2,person_name:'Jesse Eisenberg',profile_path:'/2ojZrkt5rdkUi857WSeCatxXdGS.jpg'},
+  {person_id:3,person_name:'Jonah Hill',profile_path:'/cymlWttB83MsAGR2EkTgANtjeRH.jpg'},
+  {person_id:4,person_name:'Toni Collette',profile_path:null},
+  {person_id:5,person_name:'John Turturro',profile_path:null},
+  {person_id:6,person_name:'Paul Dano',profile_path:null},
+].slice(0,new URLSearchParams(window.location.search).get('sampleCollection')==='full'?6:3)
+  .map((p,i)=>({...p,id:`preview-card-${i}`,user_id:user.id,person_type:'actor',card_rarity:null}));
+const previewPackPeople:Record<string,Row>={
+  'preview-actor':{id:99,name:'Emma Stone',profile_path:'/ak2Y9wOI3wi2pNQU6OWSvVvWPj5.jpg',rarity:'star'},
+  'preview-director':{id:100,name:'Christopher Nolan',profile_path:null,rarity:'icon'},
+};
 const privacyChoices: Record<string,boolean>={};
 const tables: Record<string, Row[]> = {
+  user_collection:previewCollection,
+  user_packs:['actor','director'].map(type=>({id:`preview-${type}`,user_id:user.id,pack_type:type,is_opened:false})),
   user_titles: titles.map((t, i) => ({ id: `preview-${i}`, user_id: user.id, title_id: t.id, title: t.title,
     type: t.type, year: t.year, poster_path: t.posterPath, list_type: t.list, progress: null })),
   user_stats: [{ user_id: user.id, coins: 250 }],
@@ -142,6 +157,19 @@ export const supabase = {
   },
   from,
   rpc: async (name: string,args:Record<string,unknown>={}) => {
+    if(name==='decide_cinegeek_pack'){
+      const pack=tables.user_packs.find(p=>p.id===args.p_pack&&!p.is_opened);if(!pack)return unavailable();
+      const person=previewPackPeople[String(pack.id)],cards=tables.user_collection;
+      if(args.p_keep){
+        if(cards.some(c=>c.person_id===person.id))return {data:null,error:{message:'Already in your collection'}};
+        const old=cards.find(c=>c.id===args.p_replace&&c.person_type===pack.pack_type);
+        if(args.p_replace&&!old)return unavailable();
+        if(!old&&cards.filter(c=>c.person_type===pack.pack_type).length>=6)return {data:null,error:{message:'Choose a card to replace'}};
+        tables.user_collection=[...cards.filter(c=>c!==old),{id:crypto.randomUUID(),user_id:user.id,person_id:person.id,
+          person_name:person.name,person_type:pack.pack_type,profile_path:person.profile_path,card_rarity:person.rarity}];
+      }
+      pack.is_opened=true;return {data:{decision:args.p_keep?'kept':'skipped'},error:null};
+    }
     if (name === 'move_cinegeek_library_title') {
       const title = args.p_title as {id:number;type:string;title:string;posterPath?:string;year?:number};
       const destination = args.p_destination as LibraryShelfId;
@@ -192,6 +220,10 @@ export const supabase = {
   functions: {
     invoke: async (name: string, options: { body?: Record<string, unknown> } = {}) => {
       const body = options.body ?? {};
+      if(name==='open-pack'){
+        const pack=tables.user_packs.find(p=>p.id===body.packId&&!p.is_opened);
+        return pack?{data:{packType:pack.pack_type,person:previewPackPeople[String(pack.id)]},error:null}:unavailable();
+      }
       if (name === 'game-result') {
         const game=previewGames.get(String(body.gameId));if(!game)return unavailable();
         if(game.won)return {data:{won:true,xp:75},error:null};

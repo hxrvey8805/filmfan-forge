@@ -28,7 +28,7 @@ beforeAll(async()=>{
     '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance']) await pg.exec(migration(name));
   for(const name of ['20251114214139_cac7e901-0afa-4a2d-9233-df3d7be49a29','20251114215942_67f42c53-f7a7-40eb-9c4c-76f082338a1b',
     '20251126204536_add_pack_tier','20261112160000_smart_list_interpreter','20261113200000_pro_xp_collections',
-    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout','20261121150000_game_connection_recheck','20261121170000_daily_skin_rewards'])await pg.exec(migration(name));
+    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout','20261121150000_game_connection_recheck','20261121170000_daily_skin_rewards','20261122220000_six_card_pack_catalogue'])await pg.exec(migration(name));
 });
 
 afterAll(()=>pg.close());
@@ -95,10 +95,10 @@ it('a reveal stays fixed on retries and does not add a card before acceptance',a
  expect((await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows).toHaveLength(1);
  await expect(call('decide_cinegeek_pack',[id,false])).rejects.toThrow('already decided');
 });
-it('five actors and five directors are independent caps; replacement is atomic with no refund',async()=>{
- await wallet();let old='';for(let i=1;i<=5;i++){old=await card(i);await card(10+i,'director');}
- const id=await pack('actor',123);await expect(call('decide_cinegeek_pack',[id,true])).rejects.toThrow('five');
- await call('decide_cinegeek_pack',[id,true,old]);expect((await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows).toHaveLength(10);expect((await access()).xp).toBe(1000);
+it('six actors and six directors are independent caps; replacement is atomic with no refund',async()=>{
+ await wallet();let old='';for(let i=1;i<=6;i++){old=await card(i);await card(10+i,'director');}
+ const id=await pack('actor',123);await expect(call('decide_cinegeek_pack',[id,true])).rejects.toThrow('six');
+ await call('decide_cinegeek_pack',[id,true,old]);expect((await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows).toHaveLength(12);expect((await access()).xp).toBe(1000);
 });
 it('skipping gives no refund and consumes the pack; duplicate acceptance is refused',async()=>{
  await wallet(1000);await card(123);const id=await pack();await expect(call('decide_cinegeek_pack',[id,true])).rejects.toThrow('already in');
@@ -109,16 +109,16 @@ it('replacement cannot delete another user’s card or the other collection',asy
  await expect(call('decide_cinegeek_pack',[id,true,other])).rejects.toThrow('own cards');await expect(call('decide_cinegeek_pack',[id,true,director])).rejects.toThrow('own cards');
  expect((await pg.query('SELECT * FROM user_collection WHERE id=ANY($1::uuid[])',[[other,director]])).rows).toHaveLength(2);
 });
-it('two keep requests cannot make a sixth card',async()=>{
- for(let i=1;i<=4;i++)await card(i);const a=await pack('actor',98),b=await pack('actor',99);
+it('two keep requests cannot make a seventh card',async()=>{
+ for(let i=1;i<=5;i++)await card(i);const a=await pack('actor',98),b=await pack('actor',99);
  const results=await Promise.allSettled([call('decide_cinegeek_pack',[a,true]),call('decide_cinegeek_pack',[b,true])]);
- expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect((await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows).toHaveLength(5);
+ expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect((await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows).toHaveLength(6);
 });
 it('browser clients cannot mint balances, cards, packs or bypass server validation',async()=>{
  for(const table of ['cinegeek_xp','cinegeek_xp_events','cinegeek_unlocks','cinegeek_games','user_stats','user_collection','user_packs']){
    const {rows}=await pg.query<{allowed:boolean}>("SELECT has_table_privilege('authenticated',$1,'INSERT,UPDATE,DELETE') allowed",[table]);expect(rows[0].allowed).toBe(false);
  }
- for(const fn of ['finish_cinegeek_win(uuid,uuid,uuid,boolean)','claim_cinegeek_pack(uuid,uuid,uuid)','store_cinegeek_reveal(uuid,uuid,uuid,jsonb)'])expect((await pg.query<{allowed:boolean}>("SELECT has_function_privilege('authenticated',$1,'EXECUTE') allowed",[fn])).rows[0].allowed).toBe(false);
+ for(const fn of ['finish_cinegeek_win(uuid,uuid,uuid,boolean)','claim_cinegeek_pack(uuid,uuid,uuid)','store_cinegeek_pack_pick(uuid,uuid,uuid,jsonb)','store_cinegeek_reveal(uuid,uuid,uuid,jsonb)'])expect((await pg.query<{allowed:boolean}>("SELECT has_function_privilege('authenticated',$1,'EXECUTE') allowed",[fn])).rows[0].allowed).toBe(false);
 });
 it('Smart Lists refuse Free even when a cached interpretation exists; both paid plans can reserve',async()=>{
  const hash='a'.repeat(64);expect(await call('reserve_smart_list_interpretation',[user,hash,randomUUID()],'service_role')).toEqual({status:'pro_required'});
@@ -272,4 +272,30 @@ it('new spin requires an eligible Pro win and cannot be invoked anonymously',asy
  await pro();await expect(call('spin_cinegeek_reward_v2')).rejects.toThrow('first game');
  await expect(call('spin_cinegeek_reward_v2',[],'anon')).rejects.toThrow('permission');
  expect((await access()).unlockedSkins).toEqual([]);
+});
+
+// A draw is saved before fetching the public profile. Neither expiry nor retry rerolls it.
+it('persists the chosen name through an expired lease, rejects a substituted reveal and keeps its category',async()=>{
+ const id=(await pg.query<{id:string}>("INSERT INTO user_packs(user_id,pack_type) VALUES($1,'actor') RETURNING id",[user])).rows[0].id;
+ const token=randomUUID(),pick={name:'Emma Stone',packType:'actor',rarity:'star',version:'cinegeek-cast-1'};
+ await call('claim_cinegeek_pack',[user,id,token],'service_role');
+ await expect(call('store_cinegeek_pack_pick',[user,id,randomUUID(),JSON.stringify(pick)],'service_role')).rejects.toThrow('expired');
+ expect(await call('store_cinegeek_pack_pick',[user,id,token,JSON.stringify(pick)],'service_role')).toEqual(pick);
+ expect(await call('store_cinegeek_pack_pick',[user,id,token,JSON.stringify({...pick,name:'Tom Hanks',rarity:'icon'})],'service_role')).toEqual(pick);
+ await pg.query("UPDATE user_packs SET reveal_until=now()-interval '1 second' WHERE id=$1",[id]);
+ const retry=randomUUID();expect((await call('claim_cinegeek_pack',[user,id,retry],'service_role')).pick).toEqual(pick);
+ const person={id:54693,name:pick.name,rarity:pick.rarity,catalogue_version:pick.version,profile_path:null};
+ await expect(call('store_cinegeek_reveal',[user,id,retry,JSON.stringify({...person,name:'Someone else'})],'service_role')).rejects.toThrow('saved draw');
+ await expect(call('store_cinegeek_reveal',[user,id,retry,JSON.stringify({...person,rarity:'icon'})],'service_role')).rejects.toThrow('saved draw');
+ await call('store_cinegeek_reveal',[user,id,retry,JSON.stringify(person)],'service_role');
+ await call('decide_cinegeek_pack',[id,true]);
+ expect((await pg.query('SELECT person_name,card_rarity,catalogue_version FROM user_collection WHERE user_id=$1',[user])).rows).toEqual([{person_name:'Emma Stone',card_rarity:'star',catalogue_version:'cinegeek-cast-1'}]);
+});
+it('the table guard itself permits the sixth but refuses the seventh in either collection',async()=>{
+ for(const type of ['actor','director']){
+   const offset=type==='actor'?0:100;
+   for(let i=1;i<=6;i++)await card(offset+i,type);
+   await expect(card(offset+7,type)).rejects.toThrow('Collection limit');
+ }
+ expect((await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows).toHaveLength(12);
 });
