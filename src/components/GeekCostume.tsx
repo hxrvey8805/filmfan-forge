@@ -96,8 +96,8 @@ export function GeekJacketDetails({ look, lounging = false }: { look: Outfit; lo
       </g>;
     case "classic":
       return <g>
-        <path d="m47 80 2 8m12-6v7" fill="none" stroke="#faf4ff" strokeWidth="2" />
-        <g transform="rotate(-10 71 88)" strokeWidth="1.1">
+        <path d="M48.5 80q.1 2.6 1 5.3M65 79.8q.1 2.1-.7 4.4" fill="none" stroke="#faf4ff" strokeWidth="1.7" />
+        <g transform="translate(1.8 1.8) rotate(-10 71 88)" strokeWidth="1.1">
           <rect x="65" y="86" width="12" height="6" rx="1.4" fill="#ffd12d" />
           <g className="costume-tilt clapper-lid">
             <rect x="65" y="83" width="12" height="3.3" rx=".8" fill="#ffdc65" />
