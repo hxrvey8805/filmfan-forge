@@ -276,7 +276,7 @@ export function FocusRoomScene({ look, running, styleName, time, canStart = fals
       <circle className="room-tv-power" cx="73" cy="401" r="1.6" stroke="none"/>
     </g>
     <rect width="480" height="480" fill={paint("edge")} pointerEvents="none"/>
-    <g transform="translate(-12 0)"><LampPullCord enabled={canStart && !running} onStart={onStart} /></g>
+    <g transform="translate(-12 0)"><LampPullCord enabled={canStart && !running} running={running} onStart={onStart} /></g>
     </g>
   </svg>;
 }

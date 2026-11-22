@@ -1,9 +1,14 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useContext, useEffect, useRef, useState, type PointerEvent } from 'react';
+import { GeekViewer, useViewerPreference } from '@/hooks/use-viewer-preference';
 
 const pullThreshold = 24; // CSS pixels: a deliberate downward gesture at every room size.
 
 type Drag = { id: number; x: number; y: number; scale: number };
-export function LampPullCord({ enabled, onStart }: { enabled: boolean; onStart?: () => void }) {
+export function LampPullCord({ enabled, running = false, onStart }: { enabled: boolean; running?: boolean; onStart?: () => void }) {
+  const viewer = useContext(GeekViewer);
+  const hint = useViewerPreference<'new' | 'used'>('focus-lamp-hint', 'new', value => value === 'used' ? 'used' : null);
+  const pendingOwner = useRef<{ viewer: string | null } | null>(null);
+  const showHint = hint.value !== 'used';
   const [pull, setPull] = useState(0);
   const drag = useRef<Drag | null>(null);
   const suppressClick = useRef(false);
@@ -11,12 +16,21 @@ export function LampPullCord({ enabled, onStart }: { enabled: boolean; onStart?:
   useEffect(() => {
     drag.current = null;
     setPull(0);
-    if (enabled) activated.current = false;
-  }, [enabled]);
+    if (enabled) { activated.current = false; pendingOwner.current = null; }
+  }, [enabled, viewer]);
+  useEffect(() => {
+    // Keep the guide after a failed/cancelled start. Persist only once the cord's
+    // own request actually starts Focus, for the same account on this device.
+    if (running && pendingOwner.current && pendingOwner.current.viewer === viewer && hint.ready) {
+      pendingOwner.current = null;
+      hint.choose('used');
+    }
+  }, [running, viewer, hint.ready, hint.choose]);
 
   function start() {
     if (!enabled || !onStart || activated.current) return;
     activated.current = true;
+    pendingOwner.current = { viewer };
     onStart();
   }
   function begin(event: PointerEvent<HTMLButtonElement>) {
@@ -54,9 +68,9 @@ export function LampPullCord({ enabled, onStart }: { enabled: boolean; onStart?:
   return <g className="room-lamp-cord" data-pulling={pull > 0 ? 'true' : undefined}>
     <g aria-hidden="true" pointerEvents="none" className="room-cord-art">
       <path d={`M447 170v${19 + pull}`} fill="none" stroke="#61474b" strokeWidth="1.4" />
-      {enabled && <circle className="room-cord-glow" cx="447" cy={191 + pull} r="9" fill="#ffe1a0" opacity=".16" />}
+      {enabled && showHint && <circle className="room-cord-glow" cx="447" cy={191 + pull} r="9" fill="#ffe1a0" opacity=".16" />}
       <circle cx="447" cy={191 + pull} r={enabled ? 3.4 : 2.3} fill="#d9b17d" stroke="#61474b" strokeWidth="1.6" />
-      {enabled && pull === 0 && <g className="room-cord-hint">
+      {enabled && showHint && pull === 0 && <g className="room-cord-hint">
         <path d="M426 212q14 0 18-13m-4 2 4-3 1 5" fill="none" stroke="#f5d7a5" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
         <rect x="336" y="201" width="91" height="24" rx="12" fill="#292330" fillOpacity=".88" stroke="#f5d7a5" strokeOpacity=".24" />
         <text x="381.5" y="216.5" textAnchor="middle" fontSize="10" fontWeight="550" fill="#f5dfb7">Pull to start</text>
