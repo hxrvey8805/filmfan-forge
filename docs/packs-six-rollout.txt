@@ -17,7 +17,7 @@ The previous implementation sampled TMDB popularity pages; directors could be ov
 Draw integrity
 - Crypto uint32 randomness with rejection sampling: category roll then uniform name.
 - A service-only RPC saves the versioned name/category before TMDB access. Network errors, lease expiry, concurrent requests and reopen cannot select another person.
-- TMDB search exact normalized name plus actual combined acting/directing credit verifies the selected person. Ambiguous names and failed lookups stop safely; never reroll to a different category/person. Missing images use initials.
+- Each frozen name maps to a reviewed TMDB identity. Details must match the ID and normalized name or documented alias, then actual combined acting/directing credits must verify the role. Same-name search collisions cannot stall a valid pack. Failed identity/credit checks never reroll. Missing images use initials.
 - Client cannot mint or modify draws/cards/XP. Wallet locks serialize decisions; table trigger also enforces six.
 
 Validation completed locally
@@ -30,7 +30,7 @@ Validation completed locally
 Rollout order
 1. Back up affected pack/collection state and confirm prior XP/tier migrations.
 2. Apply 20261122220000_six_card_pack_catalogue.sql once. Existing grants and trigger bindings are retained; only the new store-pick function adds service-only access.
-3. Before enabling the changed open-pack endpoint, run resolvePackPerson against all 80 frozen entries using the authorized server TMDB credential. This has NOT been exercised live locally; fixtures and response validation were tested. Resolve any ambiguous/unavailable identity before release, without changing persisted v1 draws.
+3. Before enabling the changed open-pack endpoint, run resolvePackPerson against all 80 frozen entries using the authorized server TMDB credential. The first live name-search check rejected 18 same-name collisions. The reviewed ID mapping corrects that gate; rerun all 80 details/credit checks before release without changing persisted v1 draws.
 4. Deploy open-pack with _shared/pack-catalogue.ts and pack-service.ts. Check saved draw survives provider failure and existing reveal is unchanged with a disposable test pack.
 5. Verify keep, skip, sixth card, seventh-card replacement and cross-account denial live; then release the matching client.
 6. The separately staged exclusive library-shelves migration is still a distinct pending release item; do not silently omit it from the eventual combined rollout.
