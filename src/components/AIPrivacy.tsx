@@ -5,6 +5,8 @@ import {useViewerSession} from '@/hooks/use-viewer-session';
 import {AI_DISCLOSURES,AI_NOTICE_VERSION,parseAIChoices,type AIChoices,type AIFeature} from '@/lib/privacy';
 import {Dialog,DialogContent,DialogDescription,DialogTitle} from './ui/dialog';
 import {Button} from './ui/button';
+import {ChevronDown} from 'lucide-react';
+import './ai-privacy.css';
 // New RPCs are runtime-validated until generated database types are refreshed.
 type PrivacyRpc=(name:string,args?:Record<string,unknown>)=>Promise<{data:unknown;error:unknown}>;
 const rpc:PrivacyRpc=(name,args)=>(supabase.rpc as unknown as PrivacyRpc)(name,args);
@@ -18,6 +20,7 @@ export function AIPrivacyProvider({children}:{children:ReactNode}){
  const [error,setError]=useState(''),[revision,setRevision]=useState(0),[feature,setFeature]=useState<AIFeature|null>(null),[busy,setBusy]=useState(false);
  const current=useRef(owner);current.current=owner;
  const pending=useRef<{owner:string;feature:AIFeature;resolve:(ok:boolean)=>void}|null>(null);
+ const heading=useRef<HTMLHeadingElement>(null);
  const ready=state.owner===owner && state.ready,choices=state.owner===owner?state.choices:{};
  useEffect(()=>{
   let alive=true;pending.current?.resolve(false);pending.current=null;setFeature(null);setBusy(false);setError('');
@@ -51,13 +54,26 @@ export function AIPrivacyProvider({children}:{children:ReactNode}){
  const disclosure=feature?AI_DISCLOSURES[feature]:null;
  return <Context.Provider value={{choices,ready,error,ensure,withdraw:f=>save(f,false),reload:()=>setRevision(v=>v+1)}}>
   {children}
-  <Dialog open={!!feature} onOpenChange={open=>{if(!open)close();}}><DialogContent className="privacy-consent" onEscapeKeyDown={e=>{if(busy)e.preventDefault();}} onPointerDownOutside={e=>{if(busy)e.preventDefault();}}>
-   <DialogTitle>A quick privacy check</DialogTitle><DialogDescription>Choose whether to use {disclosure?.title}. You can change this in Profile → Account & privacy.</DialogDescription>
-   {disclosure&&<><p><strong>Shared with {disclosure.recipient}</strong></p><p>{disclosure.data}</p><p>{disclosure.purpose}</p>
-    <p className="text-sm text-muted-foreground">We don’t add your email, password or Apple payment details to AI prompts. Anything personal you type is part of your message. Providers may retain requests under their policies.</p>
-    <Link className="text-primary underline" to="/privacy" onClick={close}>Read the privacy notice</Link>
-    {error&&<p role="alert">{error}</p>}
-    <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={busy} onClick={close}>Not now</Button><Button disabled={busy} onClick={()=>void allow()}>{busy?'Saving…':'Allow and continue'}</Button></div>
+  <Dialog open={!!feature} onOpenChange={open=>{if(!open)close();}}><DialogContent className="privacy-consent"
+   onOpenAutoFocus={e=>{e.preventDefault();heading.current?.focus();}}
+   onEscapeKeyDown={e=>{if(busy)e.preventDefault();}} onPointerDownOutside={e=>{if(busy)e.preventDefault();}}>
+   <header className="privacy-consent-header">
+    <img className="privacy-consent-mark" src="/cinegeek-mark.svg" width="60" height="60" alt="" />
+    <p className="privacy-consent-eyebrow">{disclosure?.title}</p>
+    <DialogTitle ref={heading} tabIndex={-1} className="privacy-consent-title">{disclosure?.heading}</DialogTitle>
+   </header>
+   <DialogDescription className="privacy-consent-summary">{disclosure?.summary} <strong>{disclosure?.recipient}</strong>.</DialogDescription>
+   {disclosure&&<>
+    <details className="privacy-consent-details" key={feature}>
+     <summary>Privacy details <ChevronDown size={15} aria-hidden="true" /></summary>
+     <div><p>{disclosure.data}</p><p>{disclosure.purpose}</p>
+      <p>We don’t add your email, password or Apple payment details to AI prompts. Anything personal you type is part of your message. Providers may retain requests under their policies.</p>
+      <Link to="/privacy" onClick={close}>Read the privacy notice</Link>
+     </div>
+    </details>
+    <p className="privacy-consent-remember">We’ll remember your choice.<span>Change it in Profile → Account & privacy.</span></p>
+    {error&&<p className="privacy-consent-error" role="alert">{error}</p>}
+    <div className="privacy-consent-actions"><Button className="privacy-consent-allow" disabled={busy} onClick={()=>void allow()}>{busy?'Saving…':'Allow and continue'}</Button><Button className="privacy-consent-decline" variant="ghost" disabled={busy} onClick={close}>Not now</Button></div>
    </>}
   </DialogContent></Dialog>
  </Context.Provider>;
