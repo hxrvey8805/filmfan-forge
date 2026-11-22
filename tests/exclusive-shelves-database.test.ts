@@ -38,67 +38,76 @@ it('cleans legacy duplicates, keeps Watching/progress and Favourites; can rerun'
   await pg.exec(rule);
   expect(await shelves(legacy)).toEqual(['favourite','watching']);
 });
-it.each([['watchlist','watching'],['watching','watchlist']])('adding to %s then %s moves the active title and retains progress', async (from,to) => {
-  await add(from, 42);
-  await add(to);
-  expect(await shelves()).toEqual([to]);
-  expect((await rows()).find(row => row.list_type === to)?.progress).toBe(42);
+const move = (from:string|null, to:string, type='movie', user=owner, data:Record<string,unknown>={}) => pg.transaction(async tx => {
+  await tx.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[user]);
+  await tx.exec('SET LOCAL ROLE authenticated');
+  return (await tx.query<{result:{id:string}}>('SELECT move_cinegeek_library_title($1,$2,$3) AS result',
+    [JSON.stringify({id:1,type,title:'A title',posterPath:'',...data}),to,from])).rows[0].result;
 });
-it('allows the same numerical movie and TV ID in separate active shelves and in the same shelf', async () => {
-  await add('watchlist', 7, 'movie'); await add('watching', 13, 'tv');
-  await add('watching', null, 'movie');
-  expect((await rows()).map(row => [row.type,row.list_type,row.progress])).toEqual([
-    ['movie','watching',7], ['tv','watching',13],
-  ]);
-});
-it('supports updates from an optional shelf into Watching while removing Watched', async () => {
-  await add('watched', 25); await add('favourite');
-  await pg.query("UPDATE user_titles SET list_type='watching' WHERE user_id=$1 AND list_type='favourite'", [owner]);
-  expect(await shelves()).toEqual(['watching']);
-  expect((await rows()).find(row => row.list_type === 'watching')?.progress).toBe(25);
-});
-it('keeps Favourites alongside Watching, then alongside Watched, with no duplicate within either shelf', async () => {
-  await add('watching', 0); await add('favourite');
-  for (const shelf of ['watching','favourite']) await expect(add(shelf)).rejects.toThrow('duplicate key');
-  expect(await shelves()).toEqual(['favourite','watching']);
-  expect((await rows()).find(row => row.list_type === 'watching')?.progress).toBe(0);
-  await add('watched');
-  expect(await shelves()).toEqual(['favourite','watched']);
-  await expect(add('watched')).rejects.toThrow('duplicate key');
-});
-it.each(['watching','watched','favourite'])('never allows Watchlist alongside %s, in either direction', async shelf => {
-  await add('watchlist', 15); await add(shelf);
-  expect(await shelves()).toEqual([shelf]);
-  await add('watchlist');
-  expect(await shelves()).toEqual(['watchlist']);
-  expect((await rows())[0].progress).toBe(15);
-});
-it('returning to Watchlist removes both Watched and Favourites, keeping status progress', async () => {
-  await add('watched',80); await add('favourite',3); await add('watchlist');
-  expect(await shelves()).toEqual(['watchlist']); expect((await rows())[0].progress).toBe(80);
-});
-it('rolls back the entire move if the destination write fails', async () => {
-  await add('watchlist', 60);
-  const before = await rows();
-  await expect(pg.query(`INSERT INTO user_titles(user_id,title_id,title,type,poster_path,list_type)
-    VALUES($1,1,NULL,'movie','','watching')`, [owner])).rejects.toThrow('not-null');
+it.each([
+  ['watchlist','watching'],['watching','watchlist'],['watchlist','watched'],['watched','watchlist'],
+  ['watchlist','favourite'],['favourite','watchlist'],['watching','watched'],['watched','watching'],
+])('blocks normal additions from %s to %s without changing any existing row', async (from,to) => {
+  await add(from,42); const before=await rows();
+  await expect(add(to)).rejects.toThrow('duplicate key');
   expect(await rows()).toEqual(before);
 });
-it('applies the rule under RLS and leaves other accounts untouched', async () => {
-  const other = randomUUID(); await pg.query('INSERT INTO auth.users VALUES($1)', [other]);
-  await add('watchlist', 10); await add('watchlist', 20, 'movie', other);
-  await pg.transaction(async tx => {
-    await tx.query("SELECT set_config('request.jwt.claim.sub',$1,true)", [owner]);
-    await tx.exec('SET LOCAL ROLE authenticated');
-    await tx.query(`INSERT INTO user_titles(user_id,title_id,title,type,poster_path,list_type)
-      VALUES($1,1,'A title','movie','','watching')`, [owner]);
-  });
-  expect(await shelves()).toEqual(['watching']); expect(await shelves(other)).toEqual(['watchlist']);
-  await expect(pg.transaction(async tx => {
-    await tx.query("SELECT set_config('request.jwt.claim.sub',$1,true)", [owner]);
-    await tx.exec('SET LOCAL ROLE authenticated');
-    await tx.query(`INSERT INTO user_titles(user_id,title_id,title,type,poster_path,list_type)
-      VALUES($1,1,'A title','movie','','watching')`, [other]);
-  })).rejects.toThrow('row-level security');
+it('allows adding elsewhere only after removal, without an implicit move', async () => {
+  await add('watchlist');
+  await pg.query('DELETE FROM user_titles WHERE user_id=$1',[owner]);
+  await add('watching'); expect(await shelves()).toEqual(['watching']);
+});
+it('explicit moves preserve progress and Favourites, are retry safe and allow a return to Watchlist', async () => {
+  await add('watchlist',42);
+  const first=await move('watchlist','watching');
+  expect(await move('watchlist','watching')).toEqual(first);
+  expect(await shelves()).toEqual(['watching']);
+  await add('favourite');
+  await move('watching','watched');
+  expect(await shelves()).toEqual(['favourite','watched']);
+  expect((await rows()).find(row=>row.list_type==='watched')?.progress).toBe(42);
+  await move('favourite','watchlist');
+  expect(await shelves()).toEqual(['watchlist']); expect((await rows())[0].progress).toBe(42);
+});
+it('allows Favourites alongside Watching or Watched, but not duplicate copies on one shelf', async () => {
+  await add('watching',0); await add('favourite');
+  for(const shelf of ['watching','favourite'])await expect(add(shelf)).rejects.toThrow('duplicate key');
+  expect(await shelves()).toEqual(['favourite','watching']);
+  await move('watching','watched');
+  expect(await shelves()).toEqual(['favourite','watched']);
+  expect((await rows()).find(row=>row.list_type==='watched')?.progress).toBe(0);
+});
+it('keeps movie/TV IDs separate and leaves other accounts untouched', async () => {
+  const other=randomUUID();await pg.query('INSERT INTO auth.users VALUES($1)',[other]);
+  await add('watchlist',7);await add('watching',13,'tv');await add('watchlist',20,'movie',other);
+  await move('watchlist','watching');
+  expect((await rows()).map(row=>[row.type,row.list_type,row.progress])).toEqual([
+    ['movie','watching',7],['tv','watching',13],
+  ]);
   expect(await shelves(other)).toEqual(['watchlist']);
+});
+it('uses authenticated ownership, rejects missing source records, invalid destinations and anonymous moves', async () => {
+  await add('watchlist',25);
+  const other=randomUUID();await pg.query('INSERT INTO auth.users VALUES($1)',[other]);
+  await expect(move('watchlist','watching','movie',other)).rejects.toThrow('changed elsewhere');
+  await expect(move('watchlist','invalid')).rejects.toThrow('Invalid library shelf');
+  await expect(pg.transaction(async tx=>{
+    await tx.exec('SET LOCAL ROLE anon');
+    return tx.query("SELECT move_cinegeek_library_title($1,'watching','watchlist')",[JSON.stringify({id:1,type:'movie'})]);
+  })).rejects.toThrow('permission denied');
+  expect(await shelves()).toEqual(['watchlist']);
+  await expect(pg.transaction(async tx=>{
+    await tx.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[other]);await tx.exec('SET LOCAL ROLE authenticated');
+    return tx.query("INSERT INTO user_titles(user_id,title_id,title,type,poster_path,list_type) VALUES($1,2,'Other','movie','','watchlist')",[owner]);
+  })).rejects.toThrow('row-level security');
+});
+it('moves an explicitly selected custom-list title without requiring a server-side source row', async () => {
+  await move(null,'watching'); expect(await shelves()).toEqual(['watching']);
+  await move(null,'favourite'); expect(await shelves()).toEqual(['favourite','watching']);
+});
+it('rolls back removal if an explicit move cannot finish', async () => {
+  await add('watchlist',60); const before=await rows();
+  await pg.exec("ALTER TABLE user_titles ADD CONSTRAINT fixture_reject_watching CHECK (list_type <> 'watching') NOT VALID");
+  try {await expect(move('watchlist','watching')).rejects.toThrow('fixture_reject_watching');expect(await rows()).toEqual(before);}
+  finally {await pg.exec('ALTER TABLE user_titles DROP CONSTRAINT fixture_reject_watching');}
 });

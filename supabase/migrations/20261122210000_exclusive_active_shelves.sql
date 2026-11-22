@@ -35,42 +35,78 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_titles_watchlist_favourite_unique
   ON public.user_titles(user_id, type, title_id)
   WHERE list_type IN ('watchlist', 'favourite');
 
-CREATE OR REPLACE FUNCTION public.enforce_exclusive_active_shelf()
-RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+-- Ordinary inserts never remove an existing title. Only the explicit Move
+-- action uses this atomic operation; conflicting additions hit the indexes.
+DROP TRIGGER IF EXISTS user_titles_exclusive_active_shelf ON public.user_titles;
+DROP FUNCTION IF EXISTS public.enforce_exclusive_active_shelf();
+CREATE OR REPLACE FUNCTION public.move_cinegeek_library_title(
+  p_title jsonb, p_destination text, p_source text DEFAULT NULL
+)
+RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
 DECLARE
+  owner uuid := auth.uid();
+  media_id integer;
+  media_type text;
+  item public.user_titles%ROWTYPE;
+  existing_id uuid;
   other_progress integer;
   conflicts text[];
 BEGIN
-  conflicts := CASE NEW.list_type
+  IF owner IS NULL THEN RAISE EXCEPTION 'Sign in to move a title'; END IF;
+  IF p_destination IS NULL OR p_destination NOT IN ('watchlist','watching','watched','favourite')
+    OR (p_source IS NOT NULL AND p_source NOT IN ('watchlist','watching','watched','favourite')) THEN
+    RAISE EXCEPTION 'Invalid library shelf';
+  END IF;
+  media_id := (p_title->>'id')::integer;
+  media_type := p_title->>'type';
+  IF media_id IS NULL OR media_id <= 0 OR media_type IS NULL OR media_type NOT IN ('movie','tv') THEN
+    RAISE EXCEPTION 'Invalid title';
+  END IF;
+  conflicts := CASE p_destination
     WHEN 'watchlist' THEN ARRAY['watching','watched','favourite']
     WHEN 'watching' THEN ARRAY['watchlist','watched']
     WHEN 'watched' THEN ARRAY['watchlist','watching']
     WHEN 'favourite' THEN ARRAY['watchlist']
     ELSE ARRAY[]::text[] END;
-  -- Serialize competing changes for this account/title; the unique index is
-  -- also a hard guard against simultaneous clients and older app versions.
+  -- Serialize explicit moves. The indexes also guard competing normal adds.
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
-    NEW.user_id::text || ':' || NEW.type || ':' || NEW.title_id::text, 0));
+    owner::text || ':' || media_type || ':' || media_id::text, 0));
+  SELECT id INTO existing_id FROM public.user_titles
+    WHERE user_id = owner AND type = media_type AND title_id = media_id AND list_type = p_destination;
+  IF FOUND THEN RETURN jsonb_build_object('id',existing_id); END IF;
+
+  -- Shelf moves require a real source owned by the signed-in viewer. A null
+  -- source is an explicit move from a device-local My List.
+  SELECT * INTO item FROM public.user_titles
+  WHERE user_id = owner AND type = media_type AND title_id = media_id
+    AND (p_source IS NULL OR list_type = p_source)
+  ORDER BY CASE list_type WHEN 'watching' THEN 1 WHEN 'watched' THEN 2
+    WHEN 'watchlist' THEN 3 ELSE 4 END LIMIT 1 FOR UPDATE;
+  IF NOT FOUND THEN
+    IF p_source IS NOT NULL THEN RAISE EXCEPTION 'This title changed elsewhere. Reopen your library.'; END IF;
+    IF COALESCE(length(btrim(p_title->>'title')),0) = 0 THEN RAISE EXCEPTION 'Invalid title'; END IF;
+    item.user_id := owner;
+    item.title_id := media_id;
+    item.type := media_type;
+    item.title := p_title->>'title';
+    item.poster_path := COALESCE(p_title->>'posterPath','');
+    item.year := (p_title->>'year')::integer;
+    item.created_at := now();
+  END IF;
   SELECT progress INTO other_progress FROM public.user_titles
-  WHERE user_id = NEW.user_id AND type = NEW.type AND title_id = NEW.title_id
-    AND list_type = ANY(conflicts) AND id <> NEW.id
+  WHERE user_id = owner AND type = media_type AND title_id = media_id
+    AND list_type = ANY(conflicts) AND progress IS NOT NULL
   ORDER BY CASE list_type WHEN 'watching' THEN 1 WHEN 'watched' THEN 2
     WHEN 'watchlist' THEN 3 ELSE 4 END LIMIT 1;
-  -- Carry active viewing progress into a newly added/moved shelf record.
-  IF TG_OP = 'INSERT' THEN
-    NEW.progress := COALESCE(other_progress, NEW.progress);
-  ELSIF OLD.list_type NOT IN ('watchlist', 'watching') THEN
-    NEW.progress := COALESCE(other_progress, NEW.progress);
-  END IF;
+  item.progress := COALESCE(other_progress,item.progress);
   DELETE FROM public.user_titles
-  WHERE user_id = NEW.user_id AND type = NEW.type AND title_id = NEW.title_id
-    AND list_type = ANY(conflicts) AND id <> NEW.id;
-  RETURN NEW;
+    WHERE user_id = owner AND type = media_type AND title_id = media_id AND list_type = ANY(conflicts);
+  item.id := gen_random_uuid();
+  item.list_type := p_destination;
+  INSERT INTO public.user_titles SELECT (item).*;
+  RETURN jsonb_build_object('id',item.id);
 END;
 $$;
-REVOKE ALL ON FUNCTION public.enforce_exclusive_active_shelf() FROM PUBLIC;
-DROP TRIGGER IF EXISTS user_titles_exclusive_active_shelf ON public.user_titles;
-CREATE TRIGGER user_titles_exclusive_active_shelf
-  BEFORE INSERT OR UPDATE OF user_id, type, title_id, list_type ON public.user_titles
-  FOR EACH ROW EXECUTE FUNCTION public.enforce_exclusive_active_shelf();
+REVOKE ALL ON FUNCTION public.move_cinegeek_library_title(jsonb,text,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.move_cinegeek_library_title(jsonb,text,text) TO authenticated;
 COMMIT;

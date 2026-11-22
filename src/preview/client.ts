@@ -2,6 +2,7 @@
 // explicit mobile-preview mode. It never imports a real client or uses fetch.
 import { previewActorConnect } from "./actor-connect";
 import {gamePath,verifyGamePath} from "../../supabase/functions/_shared/game-verification";
+import { SHELF_CONFLICTS, type LibraryShelfId } from '../lib/library-shelves';
 let samplePlan="free", sampleReward="xp", previewSpinEarned=false, previewSpinUsed=false;
 const previewSkins=new Set(['jedi']);
 let previewSpinPrize:Record<string,unknown>|null=null;
@@ -74,15 +75,9 @@ function from(table: string) {
         const previous = operation === "update" ? all.find(item => item.id === row.id) : undefined;
         if (table === "user_titles") {
           const sameTitle = (item: Row) => item.user_id === row.user_id && item.type === row.type && item.title_id === row.title_id;
-          const conflicts: Record<string,string[]> = {watchlist:['watching','watched','favourite'],
-            watching:['watchlist','watched'],watched:['watchlist','watching'],favourite:['watchlist']};
           const conflicting = (item: Row) => sameTitle(item) && item.id !== row.id
-            && (conflicts[String(row.list_type)] ?? []).includes(String(item.list_type));
-          const priority = ['watching','watched','watchlist','favourite'];
-          const other = next.filter(conflicting).sort((a,b) => priority.indexOf(String(a.list_type)) - priority.indexOf(String(b.list_type)))[0];
-          if (!previous || !['watchlist','watching'].includes(String(previous.list_type))) row.progress = other?.progress ?? row.progress;
-          next = next.filter(item => !conflicting(item));
-          if (next.some(item => item.id !== row.id && sameTitle(item) && item.list_type === row.list_type)) {
+            && (SHELF_CONFLICTS[row.list_type as LibraryShelfId] ?? []).includes(item.list_type as LibraryShelfId);
+          if (next.some(conflicting) || next.some(item => item.id !== row.id && sameTitle(item) && item.list_type === row.list_type)) {
             return { data: [] as Row[], error: { code: "23505", message: "This title is already in that list." } };
           }
         }
@@ -147,6 +142,25 @@ export const supabase = {
   },
   from,
   rpc: async (name: string,args:Record<string,unknown>={}) => {
+    if (name === 'move_cinegeek_library_title') {
+      const title = args.p_title as {id:number;type:string;title:string;posterPath?:string;year?:number};
+      const destination = args.p_destination as LibraryShelfId;
+      if (!currentSession() || !SHELF_CONFLICTS[destination] || !title || title.id <= 0 || !['movie','tv'].includes(title.type)) return unavailable();
+      const same = (row:Row) => row.user_id === user.id && row.title_id === title.id && row.type === title.type;
+      const own = tables.user_titles.filter(same);
+      const existing = own.find(row => row.list_type === destination);
+      if (existing) return {data:{id:existing.id},error:null};
+      const priority = ['watching','watched','watchlist','favourite'];
+      own.sort((a,b) => priority.indexOf(String(a.list_type)) - priority.indexOf(String(b.list_type)));
+      const source = args.p_source == null ? own[0] : own.find(row => row.list_type === args.p_source);
+      if (args.p_source != null && !source) return unavailable();
+      const conflicts = (row:Row) => SHELF_CONFLICTS[destination].includes(row.list_type as LibraryShelfId);
+      const progress = own.find(row => conflicts(row) && row.progress != null)?.progress ?? source?.progress;
+      const row = {...(source ?? {user_id:user.id,title_id:title.id,type:title.type,title:title.title,poster_path:title.posterPath ?? '',year:title.year}),
+        id:crypto.randomUUID(),list_type:destination,progress};
+      tables.user_titles = [...tables.user_titles.filter(item => !(same(item) && conflicts(item))),row];
+      return {data:{id:row.id},error:null};
+    }
     // Local design samples only. Never sets a live entitlement or calls a provider.
     const selected=new URLSearchParams(window.location.search).get('samplePlan');
     if(selected==='free'||selected==='monthly'||selected==='annual')samplePlan=selected;

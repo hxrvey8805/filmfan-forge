@@ -60,7 +60,7 @@ it("does not open the menu for a swipe; a quick tap still opens the title", asyn
 });
 
 it("opens destinations directly from three dots and moves only the chosen record, preserving progress", async () => {
-  await preview.from("user_titles").insert({...movie,user_id:account,list_type:"watching"});
+  await preview.from("user_titles").update({list_type:"watching"}).eq("title_id",movie.title_id).eq("type","movie");
   await preview.from("user_titles").insert([{ ...movie, type:"tv", user_id:account, title:"Series with same ID" },
     { ...movie, user_id:account, list_type:"favourite" }]);
   await home("Watching"); const menu = options();
@@ -107,7 +107,7 @@ it("keeps the source title if the personal list cannot be saved", async () => {
 vi.mock("@/components/AIPrivacy",()=>({useAIPrivacy:()=>({ensure:async()=>true,reload:()=>{}})}));
 
 it("removes only the selected shelf copy after confirmation", async () => {
-  await preview.from("user_titles").insert({...movie,user_id:account,list_type:"watching"});
+  await preview.from("user_titles").update({list_type:"watching"}).eq("title_id",movie.title_id).eq("type","movie");
   await preview.from("user_titles").insert({...movie,user_id:account,list_type:"favourite"});
   await home("Watching"); const menu = options();
   fireEvent.click(within(menu).getByRole("button",{name:"Remove from list"}));

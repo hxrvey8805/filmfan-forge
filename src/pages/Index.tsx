@@ -14,6 +14,8 @@ import CustomFilterDialog from "@/components/CustomFilterDialog";
 import type { LibraryShelf } from "@/lib/list-sources";
 import { HomeLists } from "@/components/HomeLists";
 import { titleKey } from "@/lib/home-lists";
+import { addLibraryTitle, moveLibraryTitle, LibraryConflictError } from "@/lib/library-title-service";
+import { SHELF_LABELS } from "@/lib/library-shelves";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -175,90 +177,24 @@ const Index = () => {
     }
   };
 
-  const handleAddToFavourites = async (title: Title) => {
-    if (favourites.find(item => titleKey(item) === titleKey(title))) {
-      toast.info(`"${title.title}" is already in your Favourites`);
-      return;
-    }
+  const addToShelf = async (title: Title, destination: ShelfId) => {
+    if (moving.current) return;
+    moving.current = true;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
-        poster_path: title.posterPath, year: title.year, list_type: "favourite",
-      });
-      if (error) throw error;
+      if (!user || user.id !== accountId) return;
+      await addLibraryTitle(user.id, title, destination);
       await loadUserTitles();
-      toast.success(`Added "${title.title}" to Favourites`);
+      toast.success(`Added “${title.title}” to ${SHELF_LABELS[destination]}`);
     } catch (error) {
-      console.error("Error adding to favourites:", error);
-      toast.error("Failed to add to Favourites");
-    }
+      if (error instanceof LibraryConflictError) toast.info(error.message);
+      else toast.error(`Couldn’t add to ${SHELF_LABELS[destination]}. Please try again.`);
+    } finally { moving.current = false; }
   };
-
-  const handleAddToWatchList = async (title: Title) => {
-    if (watchList.find(item => titleKey(item) === titleKey(title))) {
-      toast.info(`"${title.title}" is already in your Watch List`);
-      return;
-    }
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
-        poster_path: title.posterPath, year: title.year, list_type: "watchlist",
-      });
-      if (error) throw error;
-      // The database replaces conflicting shelves atomically, retaining progress.
-      await loadUserTitles();
-      toast.success(`${currentlyWatching.some(item => titleKey(item) === titleKey(title)) ? "Moved" : "Added"} "${title.title}" to Watch List`);
-    } catch (error) {
-      console.error("Error adding to watchlist:", error);
-      toast.error("Failed to add to Watch List");
-    }
-  };
-
-  const handleAddToCurrentlyWatching = async (title: Title) => {
-    if (currentlyWatching.find(item => titleKey(item) === titleKey(title))) {
-      toast.info(`"${title.title}" is already in Currently Watching`);
-      return;
-    }
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
-        poster_path: title.posterPath, year: title.year, list_type: "watching",
-      });
-      if (error) throw error;
-      await loadUserTitles();
-      toast.success(`${watchList.some(item => titleKey(item) === titleKey(title)) ? "Moved" : "Added"} "${title.title}" to Currently Watching`);
-    } catch (error) {
-      console.error("Error adding to watching:", error);
-      toast.error("Failed to add to Currently Watching");
-    }
-  };
-
-  const handleAddToWatched = async (title: Title) => {
-    if (watched.find(item => titleKey(item) === titleKey(title))) {
-      toast.info(`"${title.title}" is already in your Watched list`);
-      return;
-    }
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { error } = await supabase.from("user_titles").insert({
-        user_id: user.id, title_id: title.id, title: title.title, type: title.type,
-        poster_path: title.posterPath, year: title.year, list_type: "watched",
-      });
-      if (error) throw error;
-      await loadUserTitles();
-      toast.success(`Added "${title.title}" to Watched`);
-    } catch (error) {
-      console.error("Error adding to watched:", error);
-      toast.error("Failed to add to Watched");
-    }
-  };
+  const handleAddToFavourites = (title: Title) => addToShelf(title, "favourite");
+  const handleAddToWatchList = (title: Title) => addToShelf(title, "watchlist");
+  const handleAddToCurrentlyWatching = (title: Title) => addToShelf(title, "watching");
+  const handleAddToWatched = (title: Title) => addToShelf(title, "watched");
 
   function openMove(source: string, title: Title, anchor: HTMLElement) {
     if (moving.current || !accountId) return;
@@ -296,9 +232,7 @@ const Index = () => {
       const destination = shelf?.id.slice("shelf:".length) as ShelfId | undefined;
       if (!libraryShelves.some(s => s.id === "shelf:" + source)) {
         if (destination) {
-          const {error} = await supabase.from("user_titles").insert({user_id:user.id, title_id:title.id, title:title.title,
-            type:title.type, poster_path:title.posterPath, year:title.year, list_type:destination});
-          if (error) throw error;
+          await moveLibraryTitle(title, destination, null);
           savedOnDevice = true;
         }
         const key = homeListKey(user.id);
@@ -315,9 +249,7 @@ const Index = () => {
       const result = target.personal
         ? await table.delete().eq("user_id", user.id).eq("title_id", title.id).eq("type", title.type)
           .eq("list_type", source).select("id").maybeSingle()
-        : await table.insert({ user_id: user.id, title_id: title.id, title: title.title,
-          type: title.type, poster_path: title.posterPath, year: title.year, progress: title.progress,
-          list_type: destination! }).select("id").maybeSingle();
+        : { data: await moveLibraryTitle(title, destination!, source as ShelfId), error: null };
       if (result.error) throw result.error;
       if (!result.data) {
         await loadUserTitles();
