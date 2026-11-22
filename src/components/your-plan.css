@@ -1,0 +1,62 @@
+.your-plan{display:grid;gap:18px;scroll-margin-top:96px;min-width:0}
+.plan-page-title{font-size:28px;font-weight:700;letter-spacing:-.045em;line-height:1.2;margin:0 2px 3px}
+.plan-membership{padding:23px;border-radius:23px;border:1px solid #ffffff14;background:linear-gradient(135deg,#25262b,#191b20);overflow:hidden}
+.plan-membership-pro{border-color:#ebc66b29;background:radial-gradient(ellipse at 100% 0%,#ebc66b19,transparent 70%),linear-gradient(135deg,#28262a,#191b20)}
+.plan-membership-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.plan-eyebrow{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.14em;color:#aca6a0;margin-bottom:7px}
+.plan-membership h3{font-size:29px;font-weight:650;line-height:1.2;letter-spacing:-.035em}
+.plan-emblem{display:grid;place-items:center;width:48px;height:48px;flex-shrink:0;border:1px solid #eac76930;border-radius:15px;background:#ebc66b0a;color:#f1cf72}
+.plan-emblem svg{width:24px;height:24px;stroke-width:1.5}
+.plan-membership-caption{font-size:13px;color:#b4b1b8;margin-top:10px;line-height:1.5}
+.plan-question-balance{border-top:1px solid #ffffff12;margin-top:22px;padding-top:19px}
+.plan-balance-heading{display:flex;justify-content:space-between;align-items:center;color:#a5c9c3}
+.plan-balance-heading h3{color:#dddbe1;font-size:13px;font-weight:550;letter-spacing:0}
+.plan-balance-total{display:flex;align-items:baseline;gap:10px;margin-top:8px}
+.plan-balance-total strong{font-size:48px;line-height:1.15;font-weight:650;letter-spacing:-.055em;font-variant-numeric:tabular-nums}
+.plan-balance-total>span{font-size:13px;color:#a9a6b0}
+.plan-allowance-track{height:4px;background:#ffffff0d;border-radius:5px;margin:16px 0 10px;overflow:hidden}
+.plan-allowance-track>span{display:block;height:100%;background:#89cbbd;border-radius:inherit}
+.plan-balance-breakdown{font-size:12px;color:#cac6d0;line-height:1.6;margin-top:8px}
+.plan-allowance-date{font-size:11px;color:#a29eaa;margin-top:4px;line-height:1.6}
+.plan-muted{color:#aaa7b2;font-size:13px;line-height:1.6;margin-top:12px}
+.plan-details-group{border:1px solid #ffffff10;border-radius:18px;background:#ffffff02;overflow:hidden}
+.plan-details-group>.plan-disclosure+.plan-disclosure{border-top:1px solid #ffffff0c}
+.plan-disclosure>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:58px;padding:16px 18px;cursor:pointer;font-size:13px;font-weight:550;color:#dfdde5}
+.plan-disclosure>summary::-webkit-details-marker{display:none}
+.plan-disclosure>summary>svg{color:#9993a3;flex-shrink:0;transition:transform .15s}
+.plan-disclosure[open]>summary>svg{transform:rotate(180deg)}
+.plan-disclosure-body{padding:0 18px 18px;color:#aaa7b2;font-size:12px;line-height:1.7}
+.plan-benefits{list-style:none;display:grid;gap:10px}
+.plan-benefits li{display:flex;gap:9px;align-items:flex-start}
+.plan-benefits svg{flex-shrink:0;color:#a6c5bb;margin-top:3px}
+.plan-badges{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
+.plan-badges span{padding:4px 9px;border-radius:6px;background:#ffffff08;font-size:11px;text-transform:capitalize}
+.plan-question-rules{display:grid;gap:10px}
+.plan-comparison{border:1px solid #ffffff10;border-radius:18px;overflow:hidden}
+.plan-comparison-body{padding:0 12px 12px}
+.plan-comparison-intro{color:#aaa7b2;font-size:12px;line-height:1.65;padding:0 6px;margin-bottom:16px;max-width:35em}
+.plan-options{display:grid;gap:12px}
+.plan-option{padding:18px;border:1px solid #ffffff10;border-radius:15px;background:#ffffff02}
+.plan-option-annual{border-color:#f0c86255;background:linear-gradient(135deg,#f0c8620d,#f0c86202)}
+.plan-option-heading{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.plan-option-heading h3{font-size:14px;font-weight:600}
+.plan-option-heading>span{font-size:9px;letter-spacing:.04em;font-weight:700;padding:4px 7px;border-radius:5px;color:#f0cf78;background:#f0c86212}
+.plan-price{display:flex;align-items:baseline;gap:6px;margin-top:13px;flex-wrap:wrap}
+.plan-price strong{font-size:36px;letter-spacing:-.045em;line-height:1.2;font-weight:700}
+.plan-price>span{font-size:12px;color:#aca7b1}
+.plan-price-note{font-size:11px;color:#aaa7b2;line-height:1.7;margin-top:5px}
+.plan-price-note strong{font-weight:550;color:#d6d2da;white-space:normal}
+.plan-option-extra{font-size:12px;color:#b9b4bf;line-height:1.6;margin-top:12px}
+.plan-option>button{width:100%;margin-top:16px;min-height:44px;border-radius:10px;font-size:12px}
+.plan-feedback:empty{display:none}
+.plan-feedback{scroll-margin-top:96px;font-size:13px;line-height:1.6}
+.plan-feedback>p{padding:14px 16px;border:1px solid #f0c86233;border-radius:14px;background:#f0c86208}
+.plan-management{display:grid;gap:0;border-top:1px solid #ffffff0d;padding-top:6px}
+.plan-management>button{display:flex;justify-content:space-between;gap:8px;padding:14px 6px;min-height:48px;text-align:left;color:#d0ccd8;font-size:13px}
+.plan-management>button:disabled{color:#85818c}
+.plan-management>button>svg{color:#96909f;flex-shrink:0}
+.plan-sandbox-note{font-size:11px;line-height:1.6;color:#ccb878}
+.plan-purchase-note{font-size:11px;line-height:1.7;text-align:center;color:#9994a2;padding:0 10px}
+.your-plan summary:focus-visible,.your-plan button:focus-visible{outline:2px solid #ffcf43;outline-offset:-3px;border-radius:12px}
+@media(min-width:520px){.plan-options{grid-template-columns:1fr 1fr}.plan-price strong{font-size:32px}}
+@media(prefers-reduced-motion:reduce){.plan-disclosure>summary>svg{transition:none}}

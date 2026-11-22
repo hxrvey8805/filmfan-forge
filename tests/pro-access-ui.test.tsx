@@ -19,8 +19,10 @@ it.each(['free','monthly','annual'] as Plan[])('%s shows accurate entitlements a
  const a=planFixture(plan);
  render(<MemoryRouter><ProAccessContext.Provider value={a}><YourPlan allowance={{mode:'monthly',plan,included:plan==='free'?0:15,limit:plan==='free'?0:15,purchased:2,renewsAt:plan==='free'?null:'2026-12-13T00:00:00Z'}}/></ProAccessContext.Provider></MemoryRouter>);
  expect(screen.getByRole('heading',{name:'Your Plan'})).toBeTruthy();expect(screen.getByText(/2 purchased/)).toBeTruthy();
+ if(plan!=='free')fireEvent.click(screen.getByText('Compare plans'));
  expect(screen.getAllByRole('button',{name:'Purchases coming soon'}).every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
- expect(screen.getByText('2,000 XP')).toBeTruthy();expect(screen.getByText('Level 4')).toBeTruthy();
+ expect(screen.queryByText('2,000 XP')).toBeNull();expect(screen.queryByText('Level 4')).toBeNull();
+ expect(screen.getByText(plan==='free'?'2':'17')).toBeTruthy();
  expect(screen.getByText(/£79.99/)).toBeTruthy();expect(screen.getByText(/£6.67/)).toBeTruthy();
 });
 it('Free retains the animated Focus room but cannot wear a saved paid skin',()=>{
