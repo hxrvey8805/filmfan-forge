@@ -1,4 +1,13 @@
-# Approved PR #28 rollout
+# Approved PR #32 rollout — blocked at read-only identity gate
+
+- [x] Confirm synced HEAD `6e36d794d9b6d1bb7dbe84b9bea151f548432afe` contains merge `1f8ea4d64a61e80bb158ff3f31e8285c45fc871e`; runtime source, docs and tests match tested `381bdf94835746d9f38c5d21afc0eb8ee3db2928`. Only generated schema types differ.
+- [x] Exact cleanup predicate finds two Watchlist rows: MobLand and Vinland Saga, both with Watching retained; no additional conflict found. No cleanup performed.
+- [x] Execute reviewed `resolvePackPerson` for all 80 v1 entries with existing private server TMDB credential: 62 PASS, 18 FAIL (identity uniqueness gate). No substitution or reroll.
+- [ ] Identity correction requires a separately reviewed release; stop before either migration or open-pack deployment.
+- [ ] After prerequisites pass, apply both exact migrations once in order, deploy only open-pack, and run rollback-only live checks. No migration, deployment, live rewards, publishing or settings changes occurred in this request.
+- Prior PR tasks below are archived, not resumed.
+
+# Archived PR #28 rollout
 
 - [x] Synced merge 493a1f0085bc97dd930e505f690d7b276f829a30 and tested 657f2bc6b818c597149b91206ccf6e48cf332725 have identical tree 52c576fed06ec5c2c93003a1b8b20f4898c385ad; exact SQL SHA-256 matches 9ed93781dffff3da2b25914abe44631ace4c893603aceffb5eb395bd006baef8.
 - [x] Read-only preflight: v2/version/hash absent; legacy authenticated-only RPC intact, production sales false, approved AI caps and private grant intact.
