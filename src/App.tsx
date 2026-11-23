@@ -1,14 +1,13 @@
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Install from "./pages/Install";
 import Auth from "./pages/Auth";
 import Companion from "./pages/Companion";
 import NotFound from "./pages/NotFound";
-import {useSyncExternalStore} from "react";
 import { AppSession } from "./components/AppSession";
 import Onboarding from "./pages/Onboarding";
 import { NewAccountGate } from "./components/NewAccountGate";
@@ -16,21 +15,17 @@ import { NewAccountGate } from "./components/NewAccountGate";
 import { ProAccessProvider } from "./hooks/use-pro-access";
 
 import {AIPrivacyProvider} from './components/AIPrivacy';
-import {recovery} from './lib/password-recovery';
+import {RecoveryBoundary} from './components/RecoveryBoundary';
 import ResetPassword from './pages/ResetPassword';
 import AccountPrivacy from './pages/AccountPrivacy';
 import {PrivacyNotice,SupportPage} from './pages/PublicInformation';
-function RecoveryRedirect(){
- const state=useSyncExternalStore(recovery.subscribe,recovery.snapshot),location=useLocation();
- return state.intent && ['/', '/auth', '/dashboard'].includes(location.pathname)?<Navigate to="/reset-password" replace/>:null;
-}
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <BrowserRouter><RecoveryRedirect/><Routes>
+      <BrowserRouter><RecoveryBoundary><Routes>
         <Route path="/reset-password" element={<ResetPassword/>}/>
         <Route path="/privacy" element={<PrivacyNotice/>}/>
         <Route path="/support" element={<SupportPage/>}/>
@@ -47,7 +42,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes></NewAccountGate>
-      </AIPrivacyProvider></ProAccessProvider></AppSession>}/></Routes></BrowserRouter>
+      </AIPrivacyProvider></ProAccessProvider></AppSession>}/></Routes></RecoveryBoundary></BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
