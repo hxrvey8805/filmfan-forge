@@ -1,0 +1,29 @@
+{
+  "release": "PR32/build34 with reviewed PR33 identity correction",
+  "source_commit": "79fe9bcdaa62f211d830380c20d9978435772f5c",
+  "reviewed_merge": "9eed5b019d28fa3785a8a4ce51104ece27683c25",
+  "tested_head": "ee37cf9eb30a931753eb329cb0334b4c48b7f291",
+  "source_verification": "All five transitive local files match tested head byte-for-byte; no differences in functions or configuration; working tree clean before receipt edits.",
+  "deployment_input": {"function_names": ["open-pack"]},
+  "deployment_result": "Successfully deployed edge functions: open-pack",
+  "submitted_package_sha256": "53ff7e02f439daa4471e304d0b540d54da4fff9deafa8b135b51f34e5b474605",
+  "hash_scope": "Deployment-tool receipt covers files and settings, not index.ts alone; packaging algorithm not exposed.",
+  "file_sha256": {
+    "supabase/functions/open-pack/index.ts": "a6ea408af5b6dc25bb8b8a3905a20cb342d6289bfb3787a4261bf452c2cd3f37",
+    "supabase/functions/_shared/economy-http.ts": "e3a8a4a34365f925f5df974f77b2759ae5f935c180b0216be23aed209bafee85",
+    "supabase/functions/_shared/pack-catalogue.ts": "36a06b43a2e89cd46348c7f46ded7629ae95e75ced38e5ea0463bfef8a9655f9",
+    "supabase/functions/_shared/pack-identities.ts": "bfe07aba91d98b0831fc86568d0ed80eb2cfa4f2f4f6704f4e3c8ed2e91d7ea8",
+    "supabase/functions/_shared/pack-service.ts": "9f3605a40b98516256cebd07e9752a5e6c292f059f3bba08cabf4f5f656ad579"
+  },
+  "authentication": "Existing verify_jwt=false preserved; economyUser validates bearer session using auth.getUser.",
+  "active_status": "Serving HTTP requests after successful deployment; no named active status or numeric revision exposed by deployment tool. Analytics returned no matching records and function logs returned no logs.",
+  "active_revision": null,
+  "deployment_time": null,
+  "http_observations": [
+    {"method": "POST", "authorization": "absent", "body_sent": {}, "status": 401, "response": {"error": "Your pack is safe. Please try revealing it again shortly."}, "observed_at": "2026-11-23T07:55:51.479728+00:00"},
+    {"method": "GET", "authorization": "absent", "status": 405, "response": {"error": "Method not allowed"}, "observed_at": "2026-11-23T07:55:51.561603+00:00"}
+  ],
+  "migrations": "Owner reports both exact migrations applied and journalled with backup/permissions verification; local SQL file hashes match supplied hashes. No migration reapplied or SQL executed in this deployment request.",
+  "limitations": "No independent live bundle hash readback, numeric revision or exact deployment timestamp exposed. Rollback-only database behaviour tests remain owner-run before TestFlight distribution; no authenticated pack reveal/reward was invoked.",
+  "scope": "Only open-pack deployed. Receipt/task-record edits only; no implementation or authentication configuration edits, other deployments, frontend publication, purchases, credentials, AI, budget/settings changes, pack or XP consumption."
+}

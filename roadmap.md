@@ -1,8 +1,14 @@
-# Approved PR #32 / build 34 — PR #33 read-only identity recheck
+# Approved PR #32 / build 34 — open-pack deployment
+
+- [x] Owner reports both reviewed migrations applied and journalled with backup/permissions verification; do not reapply.
+- [x] Confirm reviewed PR #33 dependencies match tested head; deploy only open-pack with unchanged authentication settings. Deployment succeeded; unsigned POST observed 401 and GET observed 405. Receipt: `docs/operations/build34-open-pack-deployment.json`. Numeric revision and exact deployment time not exposed; live serving verified by HTTP responses.
+- Owner separately runs rollback-only database behaviour tests before TestFlight distribution; no pack/XP consumption or frontend publication authorized here.
+
+## Completed PR #33 read-only identity recheck
 
 - [x] Merged PR #33 `9eed5b019d28fa3785a8a4ce51104ece27683c25` matches tested `ee37cf9eb30a931753eb329cb0334b4c48b7f291`, tree `aa7d1db032fc23424e5e4a0e69f999ded052fb15`; unmodified corrected resolver passes all 80 entries. Saved `docs/operations/build34-identity-results.json` with only type/name/id/result.
 - [x] Both migration versions and new RPCs/columns remain absent. Exact cleanup predicate still matches only MobLand and Vinland Saga Watchlist duplicates, Watching retained; neither duplicate nor keeper currently has non-null recorded progress (clarification of prior receipt, not a new conflict). Production sales=false, enabled=true; AI enabled, $5 overall/$0.35 question/$3 account-month, committed $1.193650, no halt, no daily cap, 64 calls unchanged. No database writes or live rewards.
-- Owner will apply exact reviewed SQL separately; no migration, deployment or publication authorized by this request.
+- Owner subsequently applied exact reviewed SQL separately and authorized only the open-pack deployment recorded above.
 
 ## Prior PR #32 preflight
 
