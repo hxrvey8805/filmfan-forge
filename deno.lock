@@ -38,6 +38,7 @@
     "packageJson": {
       "dependencies": [
         "npm:@capacitor/android@8.6.0",
+        "npm:@capacitor/app@8.1.2",
         "npm:@capacitor/cli@8.6.0",
         "npm:@capacitor/core@8.6.0",
         "npm:@capacitor/ios@8.6.0",
