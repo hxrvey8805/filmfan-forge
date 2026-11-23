@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import { authNavigationPattern } from "./src/lib/auth-navigation";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode, command }) => ({
@@ -44,6 +45,7 @@ export default defineConfig(({ mode, command }) => ({
         ],
       },
       workbox: {
+        navigateFallbackDenylist: [authNavigationPattern],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
         runtimeCaching: [
           {

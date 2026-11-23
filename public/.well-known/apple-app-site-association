@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["RAG9TBP6L8.app.cinegeek.mobile"],
+        "components": [{ "/": "/reset-password", "comment": "CineGeek password recovery only" }]
+      }
+    ]
+  }
+}
