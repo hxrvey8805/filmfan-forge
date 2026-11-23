@@ -1,0 +1,482 @@
+[
+  {
+    "type": "actor",
+    "name": "John Turturro",
+    "id": 1241,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Paul Dano",
+    "id": 17142,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Jessie Buckley",
+    "id": 1498158,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Riz Ahmed",
+    "id": 53240,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Steven Yeun",
+    "id": 215055,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "LaKeith Stanfield",
+    "id": 1200864,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Toni Collette",
+    "id": 3051,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Kirsten Dunst",
+    "id": 205,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Lupita Nyong’o",
+    "id": 1267329,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Rebecca Ferguson",
+    "id": 933238,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Dev Patel",
+    "id": 76788,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Barry Keoghan",
+    "id": 1290466,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Florence Pugh",
+    "id": 1373737,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Andrew Scott",
+    "id": 125660,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Gugu Mbatha-Raw",
+    "id": 1216606,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Walton Goggins",
+    "id": 27740,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Christian Bale",
+    "id": 3894,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Jake Gyllenhaal",
+    "id": 131,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Scarlett Johansson",
+    "id": 1245,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Brad Pitt",
+    "id": 287,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Emma Stone",
+    "id": 54693,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Cillian Murphy",
+    "id": 2037,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Amy Adams",
+    "id": 9273,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Viola Davis",
+    "id": 19492,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Joaquin Phoenix",
+    "id": 73421,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Ryan Gosling",
+    "id": 30614,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Samuel L. Jackson",
+    "id": 2231,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Michelle Yeoh",
+    "id": 1620,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Kate Winslet",
+    "id": 204,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Matt Damon",
+    "id": 1892,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Oscar Isaac",
+    "id": 25072,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Javier Bardem",
+    "id": 3810,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Daniel Day-Lewis",
+    "id": 11856,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Robert De Niro",
+    "id": 380,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Al Pacino",
+    "id": 1158,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Denzel Washington",
+    "id": 5292,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Leonardo DiCaprio",
+    "id": 6193,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Meryl Streep",
+    "id": 5064,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Tom Hanks",
+    "id": 31,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Cate Blanchett",
+    "id": 112,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Anthony Hopkins",
+    "id": 4173,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Morgan Freeman",
+    "id": 192,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Tom Cruise",
+    "id": 500,
+    "result": "PASS"
+  },
+  {
+    "type": "actor",
+    "name": "Nicole Kidman",
+    "id": 2227,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Jordan Peele",
+    "id": 291263,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Ari Aster",
+    "id": 1145520,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Robert Eggers",
+    "id": 138781,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Céline Sciamma",
+    "id": 68813,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Sean Baker",
+    "id": 118415,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Chloé Zhao",
+    "id": 1395183,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Charlotte Wells",
+    "id": 1904110,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Justine Triet",
+    "id": 1175620,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Alex Garland",
+    "id": 2036,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Taika Waititi",
+    "id": 55934,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Lulu Wang",
+    "id": 1371324,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Emerald Fennell",
+    "id": 1252934,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Denis Villeneuve",
+    "id": 137427,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "David Fincher",
+    "id": 7467,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Paul Thomas Anderson",
+    "id": 4762,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Wes Anderson",
+    "id": 5655,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Bong Joon-ho",
+    "id": 21684,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Guillermo del Toro",
+    "id": 10828,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Peter Jackson",
+    "id": 108,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Spike Lee",
+    "id": 5281,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Alfonso Cuarón",
+    "id": 11218,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Joel Coen",
+    "id": 1223,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Ethan Coen",
+    "id": 1224,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Greta Gerwig",
+    "id": 45400,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Steven Spielberg",
+    "id": 488,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Martin Scorsese",
+    "id": 1032,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Stanley Kubrick",
+    "id": 240,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Alfred Hitchcock",
+    "id": 2636,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Quentin Tarantino",
+    "id": 138,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Christopher Nolan",
+    "id": 525,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Akira Kurosawa",
+    "id": 5026,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Francis Ford Coppola",
+    "id": 1776,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "David Lynch",
+    "id": 5602,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Ridley Scott",
+    "id": 578,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "James Cameron",
+    "id": 2710,
+    "result": "PASS"
+  },
+  {
+    "type": "director",
+    "name": "Hayao Miyazaki",
+    "id": 608,
+    "result": "PASS"
+  }
+]

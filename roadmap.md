@@ -1,10 +1,16 @@
-# Approved PR #32 rollout — blocked at read-only identity gate
+# Approved PR #32 / build 34 — PR #33 read-only identity recheck
+
+- [x] Merged PR #33 `9eed5b019d28fa3785a8a4ce51104ece27683c25` matches tested `ee37cf9eb30a931753eb329cb0334b4c48b7f291`, tree `aa7d1db032fc23424e5e4a0e69f999ded052fb15`; unmodified corrected resolver passes all 80 entries. Saved `docs/operations/build34-identity-results.json` with only type/name/id/result.
+- [x] Both migration versions and new RPCs/columns remain absent. Exact cleanup predicate still matches only MobLand and Vinland Saga Watchlist duplicates, Watching retained; neither duplicate nor keeper currently has non-null recorded progress (clarification of prior receipt, not a new conflict). Production sales=false, enabled=true; AI enabled, $5 overall/$0.35 question/$3 account-month, committed $1.193650, no halt, no daily cap, 64 calls unchanged. No database writes or live rewards.
+- Owner will apply exact reviewed SQL separately; no migration, deployment or publication authorized by this request.
+
+## Prior PR #32 preflight
 
 - [x] Confirm synced HEAD `6e36d794d9b6d1bb7dbe84b9bea151f548432afe` contains merge `1f8ea4d64a61e80bb158ff3f31e8285c45fc871e`; runtime source, docs and tests match tested `381bdf94835746d9f38c5d21afc0eb8ee3db2928`. Only generated schema types differ.
 - [x] Exact cleanup predicate finds two Watchlist rows: MobLand and Vinland Saga, both with Watching retained; no additional conflict found. No cleanup performed.
 - [x] Execute reviewed `resolvePackPerson` for all 80 v1 entries with existing private server TMDB credential: 62 PASS, 18 FAIL (identity uniqueness gate). No substitution or reroll.
-- [ ] Identity correction requires a separately reviewed release; stop before either migration or open-pack deployment.
-- [ ] After prerequisites pass, apply both exact migrations once in order, deploy only open-pack, and run rollback-only live checks. No migration, deployment, live rewards, publishing or settings changes occurred in this request.
+- [x] Prior identity gate superseded by reviewed PR #33: all 80 corrected resolver checks pass.
+- Later rollout remains held for owner SQL application and separate authorization; neither migration nor open-pack deployment was performed during this read-only recheck.
 - Prior PR tasks below are archived, not resumed.
 
 # Archived PR #28 rollout
