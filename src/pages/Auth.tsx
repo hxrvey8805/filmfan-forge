@@ -10,7 +10,7 @@ import { ContentLoading } from "@/components/ContentLoading";
 import { useViewerSession } from "@/hooks/use-viewer-session";
 import { needsOnboarding, ONBOARDING_KEY } from "@/lib/onboarding";
 import "./auth.css";
-import {passwordResetURL} from "@/lib/password-recovery";
+import {requestPasswordReset} from "@/lib/password-recovery";
 
 const isPreview = import.meta.env.MODE === "mobile-preview";
 // Email links open in a browser outside the native app.
@@ -102,7 +102,7 @@ function AuthForm({ isLogin, email, setEmail }: {
     setFeedback(null);
     setBusy("reset");
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(address, { redirectTo: passwordResetURL() });
+      const { error } = await requestPasswordReset(address);
       if (error) throw error;
       setFeedback({ kind: "info", place: "form", text: `If there’s an account for ${address}, check your inbox for a password reset link.` });
     } catch (error) {
