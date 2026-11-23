@@ -1107,6 +1107,8 @@ export type Database = {
       }
       user_collection: {
         Row: {
+          card_rarity: string | null
+          catalogue_version: string | null
           collected_at: string
           id: string
           person_id: number
@@ -1116,6 +1118,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          card_rarity?: string | null
+          catalogue_version?: string | null
           collected_at?: string
           id?: string
           person_id: number
@@ -1125,6 +1129,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          card_rarity?: string | null
+          catalogue_version?: string | null
           collected_at?: string
           id?: string
           person_id?: number
@@ -1145,6 +1151,7 @@ export type Database = {
           pack_tier: string
           pack_type: string
           replaced_card_id: string | null
+          reveal_pick: Json | null
           reveal_token: string | null
           reveal_until: string | null
           revealed_person: Json | null
@@ -1159,6 +1166,7 @@ export type Database = {
           pack_tier?: string
           pack_type: string
           replaced_card_id?: string | null
+          reveal_pick?: Json | null
           reveal_token?: string | null
           reveal_until?: string | null
           revealed_person?: Json | null
@@ -1173,6 +1181,7 @@ export type Database = {
           pack_tier?: string
           pack_type?: string
           replaced_card_id?: string | null
+          reveal_pick?: Json | null
           reveal_token?: string | null
           reveal_until?: string | null
           revealed_person?: Json | null
@@ -1530,6 +1539,10 @@ export type Database = {
           tmdb_id: number
         }[]
       }
+      move_cinegeek_library_title: {
+        Args: { p_destination: string; p_source?: string; p_title: Json }
+        Returns: Json
+      }
       record_companion_answer: {
         Args: { p_charge: boolean; p_conversation: Json; p_user_id: string }
         Returns: Json
@@ -1604,6 +1617,10 @@ export type Database = {
       spin_cinegeek_reward_v2: { Args: never; Returns: Json }
       start_cinegeek_game: {
         Args: { p_game: string; p_start: number; p_target: number }
+        Returns: Json
+      }
+      store_cinegeek_pack_pick: {
+        Args: { p_pack: string; p_pick: Json; p_token: string; p_user: string }
         Returns: Json
       }
       store_cinegeek_reveal: {
