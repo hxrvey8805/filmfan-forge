@@ -1,4 +1,11 @@
-# Approved PR #32 / build 34 — open-pack deployment
+# Approved PR #36 — companion-only deployment
+
+- [x] Synced merge and tested head share tree 401bf555ba65e9caa87720df15491e73c802126b; all 56 transitive local files match; reviewed speech routing, receipt splitting and structured error cleanup inspected.
+- [x] 259 focused local tests passed. Read-only purchase/cap gates passed before and after; no global budget halt.
+- [x] Deploy only spoiler-free-companion with existing authentication settings; tool confirmed success, unsigned POST returned 401. Saved docs/operations/companion-speech-deployment.txt.
+- Live revision readback, numeric version/deployment ID/time are not exposed; requested revision confirmed in submitted source only. Authenticated AI execution and native TestFlight update were not performed; no live AI calls authorized.
+
+# Archived PR #32 / build 34 — open-pack deployment
 
 - [x] Owner reports both reviewed migrations applied and journalled with backup/permissions verification; do not reapply.
 - [x] Confirm reviewed PR #33 dependencies match tested head; deploy only open-pack with unchanged authentication settings. Deployment succeeded; unsigned POST observed 401 and GET observed 405. Receipt: `docs/operations/build34-open-pack-deployment.json`. Numeric revision and exact deployment time not exposed; live serving verified by HTTP responses.

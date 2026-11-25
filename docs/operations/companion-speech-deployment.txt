@@ -1,0 +1,52 @@
+PR #36 companion-only deployment — 2026-11-25 UTC
+
+Source: merged b4a05b33347fa2c5c8b0cb1158616799e1fe3e2a; tested
+7c3635ddfbdb1a3ce441aaf921e72f04d8b43abb. Both trees are identical:
+401bf555ba65e9caa87720df15491e73c802126b. Working tree was clean.
+All 56 transitive local function/import files match tested source byte-for-byte.
+No runtime source or configuration edits occurred.
+
+Source inspection confirms targeted speech/conversation/proposal summaries
+take the ordinary question route; chronological recaps retain their boundaries.
+Complete selected source-line ranges split only at original line boundaries:
+700 characters per receipt, eight per paragraph; oversized single lines and
+overlong legacy quotes fail closed. Independent checks remain mandatory.
+Structured question_answer_unverified errors end the allowance before returning
+503 and do not save rejected drafts as context-gap answers or recap chapters.
+
+Tests: 259 passed across 10 files using:
+bun run test:companion -- tests/watch-flow.test.ts tests/watch-diagnostics.test.ts tests/story-discussion.test.ts tests/companion.test.ts tests/companion-ui.test.tsx tests/use-companion.test.tsx tests/companion-database.test.ts tests/companion-response.test.ts tests/question-allowance-ui.test.tsx tests/question-focus.test.ts
+Additional local watch-focus and question-allowance tests passed (5 and 42).
+All local; no live AI questions. Existing advisory output left untouched.
+
+Deployment input: {"function_names":["spoiler-free-companion"]}
+Result: Successfully deployed edge functions: spoiler-free-companion
+Submitted package SHA-256 (files/settings; not index.ts):
+7ba65c938fcdae42be940cdc796539e0251f54640e2531f1cf76e72d3dec48c7
+index.ts SHA-256 (exact bytes, Python hashlib.sha256):
+8d81ed6a8004b0d4a404fd1cec82fba35fbd3ab2932529954a95c31251281a8b
+Existing verify_jwt=false preserved; handler still requires auth.getUser.
+Source WATCH_CHECK_REVISION: watch-checks-2026-11-25-speech-retry-v1.
+Active revision string is NOT independently read back from the live runtime.
+Deployment ID, numeric version and exact deployment time: not exposed.
+Supported analytics lookup returned []; revision-filtered function logs returned
+no logs. No live source-download/status tool is exposed by the available tools.
+
+Live HTTP observation at 2026-11-25T00:49:01.191318+00:00:
+unsigned POST with {} returned 401, {"error":"Please log in."}.
+This verifies live rejection/serving only, not authenticated speech execution.
+
+Read-only gates identical before and after deployment:
+production enabled=true, sales_enabled=false;
+overall AI enabled=true, cap 5000000 micro-USD ($5), committed 1261027,
+halted_reason=NULL (no global budget halt; remaining $3.738973);
+usage enabled=true, question cap 350000 ($0.35), account calendar-month cap
+3000000 ($3), daily cap NULL, provider-call limit 64.
+No individual authenticated account allowance or live answer was exercised.
+
+Only spoiler-free-companion deployed. No migrations, secrets, policies,
+settings, budgets, models, source redesign, frontend publication, purchases,
+other functions, packs, skins or grants changed. Older tasks not resumed.
+TestFlight upload/update and 208 native regression tests were user-reported,
+not performed here; no native distribution claimed. Live authenticated speech
+and retry verification remain owner checks; this release used no live AI call.
