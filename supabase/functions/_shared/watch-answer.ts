@@ -1,6 +1,7 @@
 import type { JsonGenerator } from './answer.ts';
 import type { AnswerFormat } from './answer-schema.ts';
 import type { CheckedResponse } from './companion-response.ts';
+import { CompanionAnswerError } from './companion-answer-error.ts';
 import { safeHistory, type Conversation, type ViewingPosition } from './companion.ts';
 import { storyDiscussion } from './story-discussion.ts';
 import { recallSearchQuestion } from './story-recall.ts';
@@ -113,10 +114,18 @@ export async function selectWatchSources(question:string,plan:QuestionScope,sour
 
 async function explain(question:string,plan:QuestionScope,sources:WatchSource[],generate:JsonGenerator,referenceQuestion?:string,observe?:WatchObserver):Promise<CheckedResponse|null> {
   const p=plan.boundary;
+  let noSupportedPoints=false,validationFailed=false;
+  const observeAttempt:WatchObserver=event=>{
+    if(event.stage==='writer_invalid' && event.reason==='no_points')noSupportedPoints=true;
+    else if(['context_rejected','writer_invalid','writer_rejected','review_invalid','review_rejected'].includes(event.stage))validationFailed=true;
+    watchDiagnostic(observe,event);
+  };
   const result=await storyDiscussion({question:recallSearchQuestion(question,p),mediaType:p.mediaType,
     boundary:{season:p.seasonNumber??0,episode:p.episodeNumber??0,seconds:p.seconds},
-    request:{intent:plan.intent,target:plan.window,...(referenceQuestion?{referenceQuestion}:{}),...(plan.coverageIncomplete?{coverageIncomplete:true}:{})},sources:sources.map(sourcePacket)},generate,observe);
-  if(!result)return null;
+    request:{intent:plan.intent,target:plan.window,...(referenceQuestion?{referenceQuestion}:{}),...(plan.coverageIncomplete?{coverageIncomplete:true}:{})},sources:sources.map(sourcePacket)},generate,observeAttempt);
+  // An explicit lack of supported facts is a coverage gap. A rejected draft
+  // followed by no points still must not be relabelled as missing context.
+  if(!result)return noSupportedPoints && !validationFailed ? missingWatchContext(question,plan) : null;
   const normal=(s:string)=>s.normalize('NFKC').replace(/[‘’]/g,"'").replace(/\s+/g,' ').trim().toLowerCase();
   const evidence=result.sourceIds.map(id=>{
     const source=sources.find(s=>s.id===id)!;
@@ -133,6 +142,10 @@ async function explain(question:string,plan:QuestionScope,sources:WatchSource[],
 
 export async function watchAnswer(question:string,plan:QuestionScope,sources:WatchSource[],generate:JsonGenerator,referenceQuestion?:string,observe?:WatchObserver):Promise<CheckedResponse> {
   const gap=(reason:Extract<WatchDiagnostic,{stage:'answer_gap'}>['reason'])=>{watchDiagnostic(observe,{stage:'answer_gap',reason});return missingWatchContext(question,plan);};
+  const unverified=(reason:'selection_rejected'|'explanation_rejected'):never=>{
+    watchDiagnostic(observe,{stage:'answer_gap',reason});
+    throw new CompanionAnswerError();
+  };
   watchDiagnostic(observe,{stage:'sources_ready',sources:sources.length,episodes:new Set(sources.map(s=>`${s.season}:${s.episode}`)).size});
   if(plan.clarification)return {answer:plan.clarification,evidence:[],limited:true};
   if(ambiguousQuestion(question,referenceQuestion))return {answer:'Which person and moment do you mean?',evidence:[],limited:true};
@@ -149,7 +162,7 @@ export async function watchAnswer(question:string,plan:QuestionScope,sources:Wat
       const first=Math.min(...group.map(s=>s.start)),last=Math.max(...group.map(s=>s.end));
       const partPlan={...plan,window:{...plan.window,start:Math.max(plan.window.start,first),end:Math.min(plan.window.end,last)}};
       const part=await explain(question,partPlan,group,generate,undefined,observe);
-      if(!part)return gap('explanation_rejected');
+      if(!part)return unverified('explanation_rejected');
       const span=last-first;
       if(span>180 && group.length>=3) {
         // Independent chronology coverage check: every populated third must
@@ -165,6 +178,7 @@ export async function watchAnswer(question:string,plan:QuestionScope,sources:Wat
   if(plan.intent==='scene' && !sources.some(s=>s.season===(plan.window.season??0) && s.episode===(plan.window.episode??0) &&
     s.start<=plan.window.end && s.end>=Math.max(plan.window.start,plan.window.end-120)))return gap('no_scene');
   const selected=await selectWatchSources(question,plan,sources,generate,referenceQuestion,observe);
-  if(!selected?.length)return gap('no_selection');
-  return await explain(question,plan,selected,generate,referenceQuestion,observe) ?? gap('explanation_rejected');
+  if(selected===null)return unverified('selection_rejected');
+  if(!selected.length)return gap('no_selection');
+  return await explain(question,plan,selected,generate,referenceQuestion,observe) ?? unverified('explanation_rejected');
 }

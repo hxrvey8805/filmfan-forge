@@ -32,7 +32,13 @@ export function questionScope(question: string, position: ViewingPosition): Ques
   }
   const rangeLike = /\bwhat happened (?:between|from|in the (?:last|previous))\b/.test(q);
   const characterArc=/\b(?:catch me up on|recap|summari[sz]e)\s+(?!(?:the |this |whole |entire |last |previous |season |episode |movie |film |show |series |everything |all |what ))[a-z][a-z' -]*\b(?:story|storyline|journey)\b/.test(q);
-  const intent = characterArc ? 'answer' : questionIntent(q) === 'recap' || rangeLike || /\bremind me what happened\b/.test(q) ? 'recap' : questionIntent(q) === 'scene' ? 'scene' : 'answer';
+  // Summarising a speech asks about that subject, not every event since 00:00.
+  // Keep explicit episode/series/time-range recaps on the chronological route.
+  const chronologicalRecap = wholeShowRecap(q) || rangeLike ||
+    /\b(?:recap|summari[sz]e|summary of)\s+(?:(?:the|this|whole|entire|current)\s+)*(?:episode|season|movie|film|show|series|everything|s\d+\s*e\d+|last|previous|past|between|from|\d+)\b/.test(q);
+  const subjectSummary = !chronologicalRecap && /\b(?:recap|summari[sz]e|summary)\b/.test(q) &&
+    /\b(?:speech|monologue|conversation|discussion|exchange|argument|explanation|letter|message|plan|proposal)\b/.test(q);
+  const intent = characterArc || subjectSummary ? 'answer' : questionIntent(q) === 'recap' || rangeLike || /\bremind me what happened\b/.test(q) ? 'recap' : questionIntent(q) === 'scene' ? 'scene' : 'answer';
   const plan: QuestionScope = {intent,boundary,earlierStory:position.mediaType === 'tv' && intent === 'answer' && allowsEarlierStory(q),
     window:{season:position.seasonNumber ?? null,episode:position.episodeNumber ?? null,start:0,end:boundary.seconds}};
   const invalid = (message: string) => ({...plan,clarification:message});

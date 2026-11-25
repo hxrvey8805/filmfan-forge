@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dial
 import { Button } from "./ui/button";
 import { questionAllowanceLabel, type QuestionAllowance } from '@/lib/question-allowance';
 import { useProAccess } from '@/hooks/use-pro-access';
+import { CompanionAnswerError } from '../../supabase/functions/_shared/companion-answer-error';
 
 export function RoomPositionEditor({ seconds, maxMinutes, onSave, onClose, onReturnFocus }: {
   seconds: number; maxMinutes: number; onSave: (seconds: number) => void; onClose: () => void; onReturnFocus: () => void;
@@ -56,6 +57,7 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
   const [replyId, setReplyId] = useState<string>();
   const sending = useRef(false);
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState<{question:string; timestamp:string}>();
   const transcript = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
@@ -73,7 +75,7 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
     allowance?.mode === 'unavailable' ? 'Your question balance is temporarily unavailable.' :
     monthly ? 'You’ve used your available questions.' : 'Private beta questions used for today.';
   const latest = messages[0]?.id;
-  // Resolve from the same timestamp-filtered history as the full transcript.
+  // Resolve from the same episode history as the full transcript.
   const inlineReply = messages.find(message => message.id === replyId);
   useEffect(() => {
     const box = transcript.current;
@@ -100,10 +102,11 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
     sending.current = true;
     if (!expanded) input.current?.blur();
     setReplyId(undefined);
-    setError(""); setPending(text); setDraft("");
+    setError(""); setRetry(undefined); setPending(text); setDraft("");
     try { setReplyId(await onAsk(text)); }
     catch (cause) {
       setError(cause instanceof Error ? cause.message : "Couldn’t send your question. Try again.");
+      if (cause instanceof CompanionAnswerError) setRetry({question:text,timestamp});
       setDraft(text);
     } finally { sending.current = false; setPending(""); }
   }
@@ -146,6 +149,8 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
       </div>
       <form aria-label="Ask Geek" onSubmit={e => { e.preventDefault(); void send(); }}>
         {error && <p role="alert" className="room-chat-error">{error}</p>}
+        {retry && retry.timestamp === timestamp && retry.question === draft.trim() && <Button type="submit" variant="outline" size="sm"
+          className="mb-2" disabled={!valid || loading || !!pending || chatLocked}>Try again</Button>}
         <div className="room-compose" data-locked={chatLocked}><textarea ref={input} rows={1} maxLength={2000} aria-label="Your question" enterKeyHint="send"
           aria-describedby={chatLocked ? accessNoteId : undefined}
           placeholder={chatLocked ? 'Geek chat is locked' : 'Ask Geek about this moment…'} value={draft} disabled={Boolean(pending) || chatLocked}

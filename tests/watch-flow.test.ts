@@ -14,6 +14,15 @@ const row=(p=movie,changes:Partial<SubtitleRecord>={}):SubtitleRecord=>({id:'r',
 const conversation=(changes:Partial<Conversation>={}):Conversation=>({id:'c',title_id:456,media_type:'tv',season_number:3,episode_number:2,position_seconds:20,companion_version:3,question:'Why did Mira suggest sharing the rent?',answer:'DO_NOT_REUSE_THIS_MODEL_ANSWER',context:'',timestamp:'00:00:20',created_at:'2026-11-11T00:00:00Z',answer_status:'answered',evidence:[{id:'r',label:'r',start:10,end:16,season:3,episode:2}],...changes});
 
 describe('fresh scope and explicit recap windows',()=>{
+  it.each(['Can you summarise kats speech to cooper?', 'Summarize Mira’s conversation with Sam.',
+    'Give me a summary of the argument.', 'Recap the proposal.'])('keeps a subject summary focused instead of recapping the whole episode: %s',q=>{
+    expect(questionScope(q,tv)).toMatchObject({intent:'answer',earlierStory:true,boundary:tv});
+    expect(questionScope(q,tv).collection).toBeUndefined();
+  });
+  it.each(['Recap the whole show, including the speech.', 'Summarise this episode and the argument.',
+    'Recap the last ten minutes, including the conversation.'])('preserves an explicit chronological recap: %s',q=>{
+    expect(questionScope(q,tv).intent).toBe('recap');
+  });
   it.each(['Recap everything so far.','Summarise the movie so far.','Catch me up.'])('%s covers the prefix',q=>expect(questionScope(q,movie).window).toMatchObject({start:0,end:2520}));
   it.each(['Recap the last ten minutes.','What happened in the previous 10 minutes?','Summarise the past 600 seconds.'])('%s covers the requested duration',q=>expect(questionScope(q,movie)).toMatchObject({intent:'recap',window:{start:1920,end:2520}}));
   it.each(['What happened between 10:00 and 25:00?','Recap from 10 to 25 minutes.','Summarise between ten and twenty minutes.'])('%s parses earlier ranges',q=>expect(questionScope(q,movie).window).toMatchObject({start:600,end:q.includes('twenty')?1200:1500}));
@@ -116,6 +125,39 @@ describe('one explanation route and bounded semantic selection',()=>{
     expect(result.answer).toContain('visual context');expect(result.answer).not.toContain('weapon');
     expect(result.limited).toBe(true);expect(gen).not.toHaveBeenCalled();
   });
+  it.each(['Why did Mira suggest sharing?', 'Summarise Mira’s speech.', 'Recap the last two minutes.'])('does not mislabel a rejected answer as missing context: %s',async q=>{
+    const plan=questionScope(q,movie),sources=watchSources(plan,[row()],[]);
+    const gen=vi.fn().mockResolvedValue({points:[{text:'REJECTED_DRAFT',support:[{id:'FORGED_SOURCE',firstLine:1,lastLine:1}]}]});
+    await expect(watchAnswer(q,plan,sources,gen)).rejects.toMatchObject({code:'question_answer_unverified',
+      message:expect.stringContaining('couldn’t verify a reliable answer')});
+    expect(gen).toHaveBeenCalledTimes(2); // Existing repair bound, no extra retry loop.
+  });
+  it('keeps a real source gap separate from a failed answer attempt',async()=>{
+    const q='Why did Mira suggest sharing?',gen=vi.fn();
+    const result=await watchAnswer(q,questionScope(q,movie),[],gen);
+    expect(result).toMatchObject({limited:true,evidence:[],answer:expect.stringContaining('missing reliable context')});
+    expect(gen).not.toHaveBeenCalled();
+  });
+  it('does not encourage a retry when the writer finds no supported facts and no check has failed',async()=>{
+    const q='Why did Mira suggest sharing?',plan=questionScope(q,movie),sources=watchSources(plan,[row()],[]);
+    const result=await watchAnswer(q,plan,sources,vi.fn().mockResolvedValue({points:[]}));
+    expect(result).toMatchObject({limited:true,evidence:[],answer:expect.stringContaining('missing reliable context')});
+  });
+  it('keeps a valid empty source selection separate from malformed selection',async()=>{
+    const plan=questionScope('Why?',movie),base=watchSources(plan,[row()],[])[0];
+    const sources=Array.from({length:20},(_,i)=>({...base,id:'S'+i,text:'A'.repeat(1100)}));
+    const result=await watchAnswer('Why?',plan,sources,vi.fn().mockResolvedValue({ids:[]}));
+    expect(result).toMatchObject({limited:true,evidence:[],answer:expect.stringContaining('missing reliable context')});
+  });
+  it('withholds a rejected identity without passing it to the retry message',async()=>{
+    const q='Summarise Mira’s speech.',plan=questionScope(q,movie),sources=watchSources(plan,[row()],[]);
+    const support=[{id:sources[0].id,firstLine:1,lastLine:1}];
+    const gen=vi.fn().mockResolvedValueOnce({points:[{text:'REJECTED_IDENTITY',support}]}).mockResolvedValueOnce({
+      boundarySafe:true,fit:'direct',checks:[{index:0,supported:false,issue:'identity',attribution:'uncertain',support}]
+    }).mockResolvedValueOnce({points:[]});
+    await expect(watchAnswer(q,plan,sources,gen)).rejects.toMatchObject({code:'question_answer_unverified',
+      message:expect.not.stringMatching(/REJECTED_IDENTITY|missing.*context/)});
+  });
   it('does not silently sample a recap larger than the supported batch limit',async()=>{
     const plan=questionScope('Recap.',movie),base=watchSources(plan,[row()],[])[0];
     const sources=Array.from({length:200},(_,i)=>({...base,id:'S'+i,text:'A'.repeat(1100)}));const gen=vi.fn();
@@ -173,10 +215,12 @@ describe('source pagination and recap cache isolation',()=>{
   });
   it('does not put user wording into a shared episode chapter',async()=>{
     const p={...tv,seasonNumber:1,episodeNumber:2,seconds:0};
-    const inputs:string[]=[];const gen=vi.fn(async(_s:string,u:string)=>{inputs.push(u);return {points:[]};});
+    const inputs:string[]=[];const gen=vi.fn(async(_s:string,u:string)=>{inputs.push(u);return {invalid:'not an answer'};});
     const store={current:vi.fn(async(at:ViewingPosition)=>({records:[row(at)],notes:[]})),earlier:vi.fn(),seasons:vi.fn(),chapter:vi.fn().mockResolvedValue(null),saveChapter:vi.fn()};
-    await answerWatchRequest('Recap episode one. PRIVATE_USER_WORDING',p,[],gen,store);
+    await expect(answerWatchRequest('Recap episode one. PRIVATE_USER_WORDING',p,[],gen,store))
+      .rejects.toMatchObject({code:'question_answer_unverified'});
     expect(inputs.length).toBeGreaterThan(0);expect(inputs.join(' ')).not.toContain('PRIVATE_USER_WORDING');
+    expect(store.saveChapter).not.toHaveBeenCalled(); // Never cache a rejected answer as a coverage gap.
   });
   it('finishes a multi-episode recap when earlier chapters have missing coverage',async()=>{
     const p={...tv,seasonNumber:1,episodeNumber:4,seconds:0};

@@ -1,0 +1,80 @@
+Companion speech summaries and episode chat — local candidate, not deployed
+
+Observed issue
+The latest speech-summary request found eight source passages. Its first draft
+failed identity review; the second failed receipt_length validation. That log
+category does not distinguish a too-short receipt from an overlong one, and the
+original rejected drafts were not retained. The generic context-gap response
+alone did not establish absent captions.
+
+The question parser separately classified a named speech summary as a whole
+current-prefix recap. That route adds a chronological recap instruction and
+does not retrieve earlier identifying context.
+
+Changes
+- Targeted speech/conversation/proposal summaries use the ordinary question
+  route. Explicit chronological episode, series and time-range recaps retain
+  their existing route and boundary rules.
+- Valid source line ranges longer than one receipt are split at original line
+  boundaries. No source text is truncated or rewritten. Each receipt stays at
+  most 700 characters; the total stays at most eight per paragraph. Oversized
+  single lines and legacy overlong quotations still fail closed. Independent
+  identity, attribution, factual and spoiler review remains mandatory.
+- At the user's express request, saved chat display is scoped to account,
+  title and episode, independently of the current playhead. Each message keeps
+  its original timestamp. Retired answers and evidence beyond a message's own
+  original cutoff remain hidden. The server's timestamp-scoped safeHistory,
+  reference resolution, source selection and new-question payload are unchanged.
+
+History investigation
+Nine S1E5 Dead-End Job rows remain saved. The existing display filter returned
+zero at 00:00, one at 05:00/25:06, and all nine at 25:07. The user confirmed all
+old messages returned on the phone at 25:07. This was filtering, not deletion.
+The new display behaviour removes that timestamp dependency without reusing
+later answers as evidence for earlier questions.
+
+Verification
+- 187 focused checks passed in the final history/summary/UI test run.
+- 73 additional speech-grounding, diagnostic and earlier-source checks passed
+  during this investigation.
+- Three saved, independently reviewed temp-jobs/rewind/episode-switch answers
+  remained byte-for-byte identical in offline replay. Invalid legacy citations
+  remained rejected. These replays are not fresh live-model tests.
+- TypeScript, targeted ESLint and native web build passed. Existing bundle-size,
+  mixed-import and browser-data-age advisories remain.
+- One fresh real-model check of the exact reported question against the eight
+  exported current-episode sources passed on its first writer/reviewer attempt.
+  All sources ended at or before 08:27. Cost $0.027992 within the existing $10
+  private test cap. This check did not exercise the complete deployed retrieval
+  path or earlier-episode fetching. Production AI settings were not changed.
+
+Release state
+Local code only. No backend deployment, TestFlight upload, data mutation,
+purchase activation or budget increase was made. A deployed end-to-end check
+is still required before claiming the phone's failure is fixed.
+Private receipts: .cinegeek-private/companion-question-2026-11-24 (workspace root).
+
+Failure messaging follow-up — 25 November
+- Missing sources, a valid empty relevance selection, or a writer returning no
+  supported points without any failed check retain the context-gap response.
+- Invalid selection, receipt/format failures and rejected factual/spoiler checks
+  instead raise question_answer_unverified. A rejected draft followed by empty
+  points does not become a claim that context is missing.
+- The endpoint closes the attempt without charging a question before returning
+  that failure. It does not save it as a missing-context answer or recap chapter.
+  Provider costs still count against the unchanged spending controls.
+- Copy: "I couldn’t verify a reliable answer this time. You can try again or make
+  your question more specific. No question used."
+- The composer restores the question and offers an explicit Try again button
+  only for that failure. No automatic repeat calls. Retry uses a fresh request ID
+  after the closed attempt; uncertain network failures retain their ID to prevent
+  duplicate charging. Editing the draft or changing timestamp hides the old
+  retry action; the existing account/title/episode room key isolates other chats.
+- Model, prompts, source scope, review requirements and repair limits unchanged.
+  Retry is an option, not a promise of success. Old saved fallback rows remain as
+  recorded; there is no database migration or history rewrite.
+- Final local run: 259 checks across watch flow/diagnostics, story discussion,
+  companion boundaries/UI, history and the real local allowance database passed.
+  TypeScript, targeted ESLint, diff whitespace check and native web build passed.
+  Existing test-mock refs/router advisories and build advisories remain. No paid
+  AI calls, backend deployment or TestFlight upload for this follow-up.

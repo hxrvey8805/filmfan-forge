@@ -74,21 +74,35 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     const result: Receipt[] = [];
     for (const r of value) {
       if (!record(r) || typeof r.id !== 'string' || !byId.has(r.id)) return fail('receipt_source');
-      let quote: string;
+      let quotes: string[];
       if ('firstLine' in r || 'lastLine' in r) {
         const lines=byId.get(r.id)!.text.split('\n');
         if ('quote' in r) return fail('receipt_mixed_format');
         if (!Number.isInteger(r.firstLine) || !Number.isInteger(r.lastLine) ||
           Number(r.firstLine)<1 || Number(r.lastLine)<Number(r.firstLine) || Number(r.lastLine)>lines.length) return fail('receipt_range');
-        quote=lines.slice(Number(r.firstLine)-1,Number(r.lastLine)).join('\n');
+        // Preserve the complete selected evidence when a model chooses a long
+        // valid span. Split only on original line boundaries; never truncate,
+        // paraphrase, add context, or bypass the independent semantic review.
+        quotes=[];
+        let span:string[]=[],characters=0;
+        for(const line of lines.slice(Number(r.firstLine)-1,Number(r.lastLine))) {
+          if(line.length>700)return fail('receipt_length');
+          if(span.length && characters+1+line.length>700){quotes.push(span.join('\n'));span=[];characters=0;}
+          characters+=(span.length?1:0)+line.length;
+          span.push(line);
+        }
+        quotes.push(span.join('\n'));
       } else {
         // Exact legacy receipts remain valid for stored evaluations/callers.
         if(typeof r.quote!=='string')return fail('receipt_missing_quote');
-        quote=r.quote;
+        quotes=[r.quote];
       }
-      if(normal(quote).length<4 || quote.length>700)return fail('receipt_length');
-      if(!normal(byId.get(r.id)!.text).includes(normal(quote)))return fail('receipt_mismatch');
-      result.push({id:r.id,quote});
+      if(result.length+quotes.length>8)return fail('receipt_count');
+      for(const quote of quotes) {
+        if(normal(quote).length<4 || quote.length>700)return fail('receipt_length');
+        if(!normal(byId.get(r.id)!.text).includes(normal(quote)))return fail('receipt_mismatch');
+        result.push({id:r.id,quote});
+      }
     }
     return result;
   };
@@ -96,9 +110,9 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     {status:'answered',claims:[{text:point.text,evidenceIds:point.support.map(r => r.id)}]},
     ctx.sources.map(s => ({id:s.id,text:s.text,start:0,end:s.end,season:s.season,episode:s.episode})));
   let feedback: Exclude<Issue,'none'>[] = [];
-  let attributionWarnings: Receipt[] = [];
+  const attributionWarnings: Receipt[] = [];
   let actionWarnings: string[] = [];
-  let contextCandidates: {word:string;sourceIds:string[]}[] = [];
+  const contextCandidates: {word:string;sourceIds:string[]}[] = [];
   let citationRetry: {points: Point[]} | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     const repairingReceipts = !!citationRetry;

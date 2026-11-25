@@ -57,7 +57,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('companion history and in-flight responses', () => {
-  it('keeps a story reminder with earlier-episode sources in its own viewing position', async () => {
+  it('keeps a story reminder on rewind but only in its own episode', async () => {
     const dark: ViewingPosition = {tmdbId:70523,mediaType:'tv',seasonNumber:3,episodeNumber:1,seconds:3382};
     const remembered = row({title_id:70523,season_number:3,episode_number:1,position_seconds:3382,
       question:'Remind me why caterina is in the past again', answer:'Katharina went into the caves to bring Mikkel home.',
@@ -67,9 +67,9 @@ describe('companion history and in-flight responses', () => {
     const hook = await mount(dark);
     expect(hook.result.current.messages.map(message => message.answer)).toEqual([remembered.answer]);
     hook.rerender({position:{...dark,seconds:3381},enabled:true});
-    expect(hook.result.current.messages).toEqual([]);
+    expect(hook.result.current.messages.map(message => message.answer)).toEqual([remembered.answer]);
     await flush();
-    expect(hook.result.current.messages).toEqual([]);
+    expect(hook.result.current.messages.map(message => message.answer)).toEqual([remembered.answer]);
     hook.rerender({position:{...dark,episodeNumber:2},enabled:true});
     await flush();
     expect(hook.result.current.messages).toEqual([]);
@@ -101,26 +101,45 @@ describe('companion history and in-flight responses', () => {
     const hook = await mount();
     act(() => { mock.authChange?.(event, { user: { id: 'user-1' } }); });
     await flush();
-    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe','future']);
     act(() => { mock.authChange?.('SIGNED_OUT', null); });
     expect(hook.result.current.messages).toEqual([]);
   });
-  it('applies title/episode/cutoff in the query and filters later rows again in the browser', async () => {
+  it('loads same-episode history independently of the current timestamp', async () => {
     mock.load.mockResolvedValue({ data: [row(), row({ id: 'future', position_seconds: 61 })], error: null });
     const hook = await mount();
     expect(mock.load).toHaveBeenCalledWith({ user_id: 'user-1', title_id: 1, media_type: 'tv',
-      companion_version: 3, season_number: 1, episode_number: 2, 'position_seconds<=': 60 });
-    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+      companion_version: 3, season_number: 1, episode_number: 2 });
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe','future']);
   });
-  it('hides later answers immediately on rewind, before the new history request resolves', async () => {
+  it('retains existing messages on rewind without repeatedly reloading the episode', async () => {
     mock.load.mockResolvedValue({ data: [row(), row({ id: 'later', position_seconds: 50 })], error: null });
     const hook = await mount();
     expect(hook.result.current.messages).toHaveLength(2);
     mock.load.mockReturnValue(new Promise(() => {}));
     hook.rerender({ position: { ...position, seconds: 30 }, enabled: true });
-    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe','later']);
     hook.rerender({ position: { ...position, seconds: 0 }, enabled: true });
-    expect(hook.result.current.messages).toEqual([]);
+    expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe','later']);
+    await flush();
+    expect(mock.load).toHaveBeenCalledTimes(1);
+  });
+  it('still hides a saved row whose sources exceed its own original timestamp',async()=>{
+    mock.load.mockResolvedValue({data:[row({id:'invalid',position_seconds:20,evidence:[
+      {id:'cue',label:'cue',season:1,episode:2,start:10,end:21}]}),row({id:'valid-later',position_seconds:50})],error:null});
+    const hook=await mount({...position,seconds:0});
+    expect(hook.result.current.messages.map(item=>item.id)).toEqual(['valid-later']);
+  });
+  it('sends the rewound question at its actual timestamp without sending visible later answers',async()=>{
+    mock.load.mockResolvedValue({data:[row({id:'later',position_seconds:50,answer:'LATER_ANSWER'})],error:null});
+    const hook=await mount();
+    hook.rerender({position:{...position,seconds:10},enabled:true});
+    mock.invoke.mockResolvedValue({data:{conversation:row({position_seconds:10})},error:null});
+    await act(async()=>{await hook.result.current.ask('Why?','00:00:10');});
+    const body=mock.invoke.mock.calls[0][1].body;
+    expect(body).toMatchObject({seconds:10,timestamp:'00:00:10',episodeNumber:2});
+    expect(JSON.stringify(body)).not.toContain('LATER_ANSWER');
+    expect(body).not.toHaveProperty('previousQA');
   });
   it('does not apply an old episode history response after switching to an earlier episode', async () => {
     const old = deferred<unknown>();
@@ -173,6 +192,19 @@ describe('companion history and in-flight responses', () => {
     expect(retryBody).not.toHaveProperty('previousQA');
     expect(retryBody).toMatchObject({ timestamp: '00:01:00', seconds: 60, episodeNumber: 2, question: 'Why?' });
     expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
+  });
+  it('retries an ended validation failure explicitly with a fresh ID and the same timestamp', async () => {
+    const hook=await mount();
+    mock.invoke.mockResolvedValueOnce({error:{context:{json:async()=>({code:'question_answer_unverified',error:'Do not surface arbitrary server text'})}}});
+    await act(async()=>{await expect(hook.result.current.ask('Summarise her speech.','00:01:00')).rejects.toMatchObject({
+      name:'CompanionAnswerError',message:expect.stringContaining('No question used.')});});
+    expect(hook.result.current.messages).toEqual([]);expect(mock.invoke).toHaveBeenCalledOnce();
+    mock.invoke.mockResolvedValueOnce({data:{conversation:row()},error:null});
+    await act(async()=>{await hook.result.current.ask('Summarise her speech.','00:01:00');});
+    const [first,retry]=mock.invoke.mock.calls.map(call=>call[1].body);
+    expect(retry.requestId).not.toBe(first.requestId);
+    expect({...retry,requestId:first.requestId}).toEqual(first);
+    expect(retry).toMatchObject({seconds:60,episodeNumber:2});
   });
   it('refreshes a second companion view from the same saved history', async () => {
     const page = await mount();

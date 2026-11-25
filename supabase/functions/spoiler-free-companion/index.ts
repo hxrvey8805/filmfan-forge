@@ -4,6 +4,7 @@ import { traceWatchGenerator, WATCH_CHECK_REVISION, type WatchObserver } from '.
 import { referenceRequest } from '../_shared/watch-answer.ts';
 import { episodeRevision, priorEpisodes, seriesRecap } from '../_shared/series-recap.ts';
 import type { CheckedResponse } from '../_shared/companion-response.ts';
+import { CompanionAnswerError } from '../_shared/companion-answer-error.ts';
 import { cutGroup, wholeShowRecap, storyRecallRequest } from '../_shared/cut-scope.ts';
 import { earlierEpisode, earlierStoryDialogue, recallRelevance, recallSearchQuestion, storyRecallAnswer, type StoryNote } from '../_shared/story-recall.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -350,6 +351,9 @@ serve(async req => {
     }
     if (error instanceof RecapPreparing) return json({status:'preparing_recap'}, 202);
     if (error instanceof QuestionAllowanceError) return json({error:error.message,code:error.code},error.status);
+    // The failed attempt has ended above without using an answer allowance.
+    // Do not save a validation failure as a missing-context conversation.
+    if (error instanceof CompanionAnswerError) return json({error:error.message,code:error.code},503);
     console.error('Companion request failed');
     return json({ error: error instanceof Error ? error.message : 'Unable to answer right now. Please try again.',
       ...(allowance?.active ? {code:'question_request_closed'} : {}) }, 503);

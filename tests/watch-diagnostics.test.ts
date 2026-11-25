@@ -67,10 +67,10 @@ describe('diagnosing rejected explanations without logging story content',()=>{
       cues:[{start:i*60,end:i*60+10,text:'PRIVATE SOURCE '+('One location for a temporary job. '.repeat(20))}]}));
     const events:WatchDiagnostic[]=[];
     const gen=vi.fn().mockResolvedValue({ids:['NOT_A_SOURCE']});
-    const result=await answerWatchRequest('What jobs?',p,[],gen,{current:async()=>({records:rows,notes:[]}),earlier:async()=>({records:[],notes:[]}),seasons:async()=>[]},e=>events.push(e));
-    expect(result.limited).toBe(true);
+    await expect(answerWatchRequest('What jobs?',p,[],gen,{current:async()=>({records:rows,notes:[]}),earlier:async()=>({records:[],notes:[]}),seasons:async()=>[]},e=>events.push(e)))
+      .rejects.toMatchObject({code:'question_answer_unverified'});
     expect(events).toContainEqual({stage:'selection_invalid',reason:'batch_selection'});
-    expect(events.at(-1)).toEqual({stage:'answer_gap',reason:'no_selection'});
+    expect(events.at(-1)).toEqual({stage:'answer_gap',reason:'selection_rejected'});
     expect(JSON.stringify(events)).not.toMatch(/PRIVATE|NOT_A_SOURCE/);
   });
 });
