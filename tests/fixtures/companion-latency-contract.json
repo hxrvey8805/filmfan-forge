@@ -1,0 +1,408 @@
+{
+  "broad-question": {
+    "result": {
+      "answer": "They discuss sharing the rent.\n\nThey discuss sharing the rent.\n\nThey discuss sharing the rent.",
+      "evidence": [
+        {
+          "id": "E0",
+          "label": "Caption",
+          "start": 0,
+          "end": 10,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 1,
+              "lineIds": [
+                "S0:1",
+                "S0:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E2",
+          "label": "Caption",
+          "start": 40,
+          "end": 50,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 2,
+              "lineIds": [
+                "S2:1",
+                "S2:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E3",
+          "label": "Caption",
+          "start": 60,
+          "end": 70,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 3,
+              "lineIds": [
+                "S3:1",
+                "S3:32"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "requestHashes": [
+      "45f521f34e844a43acc2562b4fd09673810ef024eb53e36aad7f9bb0ecba8d25",
+      "aaa02735e8711bc43d0a5f957efca6c4dc539b17ae203e21fe8d6fa679a20f58",
+      "7cd65dce5da1f47e175d5f7c14dbe91c0017cf387c69693b61dc47c9c45aa52b",
+      "0380d7b60dec2215238e55f7c34dfd5ac84f82bad9fce6fe577d39966fc3c940",
+      "bb3630ed1b36ab2918aa3e46134069db3e643345e337edbe7ead79b833b82d89",
+      "43f919b81e99558eeea60d3e2aa1cef3cbc07ecce415a8f210fc445f6ff5c87a",
+      "294a4869dc3de1a287b9ee5ed4e3baa5ad6a11904e77b1c639d1e4d2ce423412",
+      "1ba185d276657bc840333b2fbb059b6e14dd96602d0c13a5654fc8cff5353f19",
+      "1efce0109a378d099aa644b05925da2281255b116570cae65e34434b0d15d8aa"
+    ]
+  },
+  "misspelt-name": {
+    "result": {
+      "answer": "They discuss sharing the rent.\n\nThey discuss sharing the rent.\n\nThey discuss sharing the rent.",
+      "evidence": [
+        {
+          "id": "E0",
+          "label": "Caption",
+          "start": 0,
+          "end": 10,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 1,
+              "lineIds": [
+                "S0:1",
+                "S0:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E2",
+          "label": "Caption",
+          "start": 40,
+          "end": 50,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 2,
+              "lineIds": [
+                "S2:1",
+                "S2:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E3",
+          "label": "Caption",
+          "start": 60,
+          "end": 70,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 3,
+              "lineIds": [
+                "S3:1",
+                "S3:32"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "requestHashes": [
+      "99f9875ebff7b9234b5e09d11b6e5c02fd719eb436e3b6ebca5a11f65b0a5395",
+      "bab434b67f0a74840ed738e3bd60390fbeb862d578152b0122683d99642805bf",
+      "aa67f9f0ea32ff40e300559a6831563c14d4fb7d74c5b7070c0b7225be96759c",
+      "407d9c3deee40b88953f4db6c67e00fe1e3a4251bd696686ac55093c5efc316f",
+      "a5423ca4e2a32c63168ddde33926c1e4b027ae5ad77c4e4ff215922496eb5ef3",
+      "7764c70d0796a5aab020f1f6b7f3227e0b0fa365ac38f4783a85c226451587cb",
+      "fddecd8687cb85ac704105236628c05376d983fbc126d3c14697d995d5120a0d",
+      "5fe6733cfd98da2b0a01612d0d016ee6fba740596b09702b780638642d7375da",
+      "410cf9516704102dc5af0a9cf4273449912de22859b56375a50956760075846b"
+    ]
+  },
+  "rewind": {
+    "result": {
+      "answer": "They discuss sharing the rent.\n\nThey discuss sharing the rent.\n\nThey discuss sharing the rent.",
+      "evidence": [
+        {
+          "id": "E0",
+          "label": "Caption",
+          "start": 0,
+          "end": 10,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 1,
+              "lineIds": [
+                "S0:1",
+                "S0:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E2",
+          "label": "Caption",
+          "start": 40,
+          "end": 50,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 2,
+              "lineIds": [
+                "S2:1",
+                "S2:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E3",
+          "label": "Caption",
+          "start": 60,
+          "end": 70,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 3,
+              "lineIds": [
+                "S3:1",
+                "S3:32"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "requestHashes": [
+      "230f4b43e730e6f650e45af97d21b0b0a3a08b314082cfd3e9a37ff05407dae8",
+      "789041351dd6a0867bb71e41fec996b30e722291d26d487f4b34578a33f45916",
+      "7ca52aa12d146914deb452504c297ef45fe795cdcc706894c8297a0e53cd262e",
+      "260b6b1382664badccc9cebfd067b1806c65401c2f9abf3ca1e325f3e93bbeff",
+      "ae952c30a449bb5ccb8d6a15195dc5829e824bd77911bd3ed69071f34c09bbd5",
+      "e12cc03765d16d933821e613c6bee819dde77d2682e65373d5578fac94f36db1",
+      "8307144f2781ad55f2322f1ab8fee8c0e8f6e0f90701f0c7d5be52a7b9cdbd72",
+      "993a0130cfd373ae3f4587d2b056d09672a5eef51204b99733c82e0fd6dbbc5a"
+    ]
+  },
+  "episode-switch": {
+    "result": {
+      "answer": "They discuss sharing the rent.\n\nThey discuss sharing the rent.\n\nThey discuss sharing the rent.",
+      "evidence": [
+        {
+          "id": "E0",
+          "label": "Caption",
+          "start": 0,
+          "end": 10,
+          "season": 1,
+          "episode": 2,
+          "citations": [
+            {
+              "paragraph": 1,
+              "lineIds": [
+                "S0:1",
+                "S0:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E2",
+          "label": "Caption",
+          "start": 40,
+          "end": 50,
+          "season": 1,
+          "episode": 2,
+          "citations": [
+            {
+              "paragraph": 2,
+              "lineIds": [
+                "S2:1",
+                "S2:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E3",
+          "label": "Caption",
+          "start": 60,
+          "end": 70,
+          "season": 1,
+          "episode": 2,
+          "citations": [
+            {
+              "paragraph": 3,
+              "lineIds": [
+                "S3:1",
+                "S3:32"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "requestHashes": [
+      "45f521f34e844a43acc2562b4fd09673810ef024eb53e36aad7f9bb0ecba8d25",
+      "f1395aef22b8ec7b3cfd2c9db7f0ed91fac71cc4d195c2010b3c7d8b95e3e080",
+      "f14a3d3e93b4ac47815271332b8ed7f8776fe7a8afc85d402062f89785f72f85",
+      "60d44e7f7271687286834400a9c5d6fb9d8bb11f113da35b4505db6ea933284f",
+      "468be062368c3e5298a2fb3705ed8cbc2927e9a82b742e75f0856dfed0f2f7ae",
+      "bba558764086ece48cf26a3e4e4452e93297c3f43b2ff7bd3fb03060cec161fa",
+      "6bd96e186ed0479b2a6d46b597311e69b6247365ab6d9b77c7e5af040d141d8b",
+      "8ba5c8e11d3122fcc1274d6da792d841919dafaf4dc4b14885214937f0d2b18f",
+      "940ef3fa46802b95e933818cda529bf9241ca5d2c9653e909204b19c3896255b"
+    ]
+  },
+  "recap-range": {
+    "result": {
+      "answer": "They discuss sharing the rent.\n\nThey discuss sharing the rent.\n\nThey discuss sharing the rent.",
+      "evidence": [
+        {
+          "id": "E0",
+          "label": "Caption",
+          "start": 0,
+          "end": 10,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 1,
+              "lineIds": [
+                "S0:1",
+                "S0:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E6",
+          "label": "Caption",
+          "start": 120,
+          "end": 130,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 2,
+              "lineIds": [
+                "S6:1",
+                "S6:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E11",
+          "label": "Caption",
+          "start": 220,
+          "end": 230,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 3,
+              "lineIds": [
+                "S11:1",
+                "S11:32"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "requestHashes": [
+      "d1b1a0b9a83ada73b718f8b324a898b6b714ed2d9c5db8a2c756534964cb7c09",
+      "fa37206236f365a97c2c828eb9f3b14eaef4dbfa0a0a205b93d67236466e8bb4"
+    ]
+  },
+  "speech": {
+    "result": {
+      "answer": "They discuss sharing the rent.\n\nThey discuss sharing the rent.\n\nThey discuss sharing the rent.",
+      "evidence": [
+        {
+          "id": "E0",
+          "label": "Caption",
+          "start": 0,
+          "end": 10,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 1,
+              "lineIds": [
+                "S0:1",
+                "S0:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E2",
+          "label": "Caption",
+          "start": 40,
+          "end": 50,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 2,
+              "lineIds": [
+                "S2:1",
+                "S2:32"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "E3",
+          "label": "Caption",
+          "start": 60,
+          "end": 70,
+          "season": 1,
+          "episode": 7,
+          "citations": [
+            {
+              "paragraph": 3,
+              "lineIds": [
+                "S3:1",
+                "S3:32"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "requestHashes": [
+      "456b052e37892d5f9bd9cedfea347804fc05446d3842650c93aab0f43f89cfff",
+      "f0151c406dff5273214d3c3b4804e3538b7823a95d785be7927a8c1e19326b11",
+      "dc4665cc1bba025770d992ca2eedddbacaf0239fd474e2828a2d1b18e316f9ca",
+      "bec989770bd4f1067c374e903e4ec9f008e686fa72dce14c6d7d024daef65c12",
+      "1bac579bac2b0c3a6105ca1e9d21c931ae6430861bf5a9702b990588390b0385",
+      "2d4ee6f341fa7894e0c039532605eaa385832d5d30aa94e0ae49c6aaba18050a",
+      "3fcfac9984819905da8add50cfd9a4355bbd04a545bd0d4f576d4f81a35939b8",
+      "8221ffca01f5f50134b23200270386a0cd8a62cdd0a1f9d6007f0eb5999c4e92",
+      "bd9b631154158600a5d236f63e62d4fd89be703ee0e6d244c7bb8398b024d4c3"
+    ]
+  }
+}

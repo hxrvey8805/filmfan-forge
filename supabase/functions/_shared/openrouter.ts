@@ -1,4 +1,5 @@
 import { captionCards } from './caption-cards.ts';
+import {assertCallWindow,modelCallSignal} from './companion-work.ts';
 import { ProviderUnavailable } from './provider-unavailable.ts';
 import { storyWire, exchangeWire, unpackExchangeDraft } from './story-wire.ts';
 import type { JsonGenerator } from './answer.ts';
@@ -15,8 +16,7 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch, 
   // Keep all model calls within one budget, leaving time for subtitle import.
   const deadline = Date.now() + 90000;
   const generate: JsonGenerator = async (system, user, maxTokens, purpose, format) => {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) throw new ProviderUnavailable(failureMessage);
+    assertCallWindow(deadline);
     // The pinned provider's native story schemas have returned invalid fields
     // and repeated suffixes until truncation. Use ordinary JSON for story
     // responses and describe the response object explicitly. The source/state
@@ -76,17 +76,18 @@ export function openRouterGenerator(key: string, request: typeof fetch = fetch, 
         }),
         // Verification can take longer than drafting. Share the existing
         // total budget instead of aborting a valid second call at 45 seconds.
-        signal: AbortSignal.timeout(remainingMs),
+        signal: modelCallSignal(deadline),
       };
       response = await request('https://openrouter.ai/api/v1/chat/completions', options);
       // One retry for a transient gateway failure, inside the same deadline
       // and on the same route (a paid attempt must reserve again). Never retry quota/auth/filter or
       // malformed-completion failures, and never publish an unchecked draft.
-      if ([502, 503, 504].includes(response.status) && deadline - Date.now() > 8000) {
+      if ([502, 503, 504].includes(response.status)) {
+        assertCallWindow(deadline);
         console.error('OpenRouter transient failure', { status: response.status, model: route === 'sol' ? 'openai/gpt-6.1-sol' : model });
         await response.body?.cancel();
         response = await request('https://openrouter.ai/api/v1/chat/completions', {
-          ...options, signal: AbortSignal.timeout(deadline - Date.now()),
+          ...options, signal: modelCallSignal(deadline),
         });
       }
     } catch (error) {

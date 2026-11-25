@@ -1,4 +1,6 @@
 import { readPaged } from '../_shared/paged-data.ts';
+import {CompanionWorkDeferred} from '../_shared/companion-work.ts';
+import {databaseWatchCheckpoints,resumeWatchGenerator} from '../_shared/watch-checkpoints.ts';
 import { answerWatchRequest, WATCH_RECAP_REVISION } from '../_shared/watch-service.ts';
 import { traceWatchGenerator, WATCH_CHECK_REVISION, type WatchObserver } from '../_shared/watch-diagnostics.ts';
 import { referenceRequest } from '../_shared/watch-answer.ts';
@@ -134,6 +136,7 @@ serve(async req => {
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   let allowance: Awaited<ReturnType<typeof beginQuestionAllowance>> | undefined;
+  let resumable=false;
   try {
     const authorization = req.headers.get('Authorization');
     if (!authorization) return json({ error: 'Please log in.' }, 401);
@@ -199,7 +202,8 @@ serve(async req => {
       title_id:tmdbId, media_type:mediaType, season_number:position.seasonNumber??null,
       episode_number:position.episodeNumber??null, position_seconds:seconds,
       question:question.trim(), companion_version:answerVersion,
-    }, Deno.env.get('COMPANION_AI_PROVIDER'));
+    }, Deno.env.get('COMPANION_AI_PROVIDER'),release.answerOptions.captionDiscussion);
+    resumable=allowance.active && body.recapProtocol===1 && release.answerOptions.captionDiscussion;
     let evidence: Evidence[] = [];
     let coverage: EvidenceCoverage | undefined;
     let notes: PreparedSceneNote[] = [];
@@ -210,22 +214,28 @@ serve(async req => {
       let activeGenerator: JsonGenerator | undefined;
       // Source preparation must not consume the model's response deadline.
       const observe:WatchObserver=event=>console.info('Companion watch check',{requestId:id,revision:WATCH_CHECK_REVISION,...event});
-      const generate=traceWatchGenerator((...args)=>(activeGenerator ??= companionGenerator(name => Deno.env.get(name), fetch,
+      const fresh=traceWatchGenerator((...args)=>(activeGenerator ??= companionGenerator(name => Deno.env.get(name), fetch,
         allowance!.budget))(...args),observe);
+      const generate=resumable?resumeWatchGenerator(fresh,databaseWatchCheckpoints((name,args)=>db.rpc(name,args),user.id,id,allowance.attempt)):fresh;
       const readData = async (pos: ViewingPosition, earlier = false) => {
         if (!earlier && !cutGroup(pos) && pos.seconds > 0) await ensureCurrentSubtitles(db, pos);
-        let query = earlier
+        const query = earlier
           ? db.from('subtitle_chunks').select(columns).eq('tmdb_id',pos.tmdbId).eq('media_type','tv').eq('ingestion_version',SUBTITLE_VERSION)
             .or(`season_number.lt.${pos.seasonNumber},and(season_number.eq.${pos.seasonNumber},episode_number.lt.${pos.episodeNumber})`)
           : currentChunks(db,pos).lte('start_seconds',pos.seconds);
-        const rows = await readPaged(query.order('season_number',{ascending:true}).order('episode_number',{ascending:true}).order('start_seconds',{ascending:true}).order('id',{ascending:true}),5000);
-        const batches=await Promise.all(release.noteTables.map(async table=>{
+        const results=await Promise.allSettled([
+          readPaged(query.order('season_number',{ascending:true}).order('episode_number',{ascending:true}).order('start_seconds',{ascending:true}).order('id',{ascending:true}),5000),
+          Promise.all(release.noteTables.map(async table=>{
           let query=db.from(table).select('note').eq('tmdb_id',pos.tmdbId).eq('media_type',pos.mediaType);
           if(earlier)query=query.or(`season_number.lt.${pos.seasonNumber},and(season_number.eq.${pos.seasonNumber},episode_number.lt.${pos.episodeNumber})`);
           else {query=query.lte('reveal_seconds',pos.seconds); if(pos.mediaType==='tv')query=query.eq('season_number',pos.seasonNumber!).eq('episode_number',pos.episodeNumber!);else query=query.is('season_number',null).is('episode_number',null);}
           const result=await readPaged(query.order('reveal_seconds',{ascending:true}).order('id',{ascending:true}),1000);
           return {notes:result.rows.map(row=>row.note as ReviewedSceneNote),incomplete:result.incomplete};
-        }));
+        })),
+        ] as const);
+        for(const result of results)if(result.status==='rejected')throw result.reason;
+        const rows=(results[0] as PromiseFulfilledResult<{rows:unknown[];incomplete:boolean}>).value;
+        const batches=(results[1] as PromiseFulfilledResult<{notes:ReviewedSceneNote[];incomplete:boolean}[]>).value;
         return {records:rows.rows as unknown as SubtitleRecord[],notes:batches.flatMap(b=>b.notes),incomplete:rows.incomplete||batches.some(b=>b.incomplete)};
       };
       const chapterKeys=(pos:ViewingPosition)=>({tmdb_id:tmdbId,season_number:pos.seasonNumber!,episode_number:pos.episodeNumber!,
@@ -340,7 +350,8 @@ serve(async req => {
     return json({ ...savedData, answer: savedData.conversation.answer,
       status: savedData.conversation.answer_status, evidence: savedData.conversation.evidence, boundary: position });
   } catch (error) {
-    try { await allowance?.end(error instanceof RecapPreparing); }
+    const continuing=error instanceof RecapPreparing || resumable && error instanceof CompanionWorkDeferred;
+    try { await allowance?.end(continuing); }
     catch (cleanupError) {
       if (cleanupError instanceof QuestionAllowanceError) return json({error:cleanupError.message,code:cleanupError.code},cleanupError.status);
       return json({error:'Your question could not be completed. Please try again shortly.'},503);
@@ -349,7 +360,7 @@ serve(async req => {
       const stopped = new QuestionAllowanceError('question_budget_unavailable',503);
       return json({error:stopped.message,code:stopped.code},stopped.status);
     }
-    if (error instanceof RecapPreparing) return json({status:'preparing_recap'}, 202);
+    if (continuing) return json({status:'preparing_recap',stage:error instanceof CompanionWorkDeferred?'checking_answer':'preparing_context'}, 202);
     if (error instanceof QuestionAllowanceError) return json({error:error.message,code:error.code},error.status);
     // The failed attempt has ended above without using an answer allowance.
     // Do not save a validation failure as a missing-context conversation.

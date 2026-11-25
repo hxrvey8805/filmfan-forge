@@ -41,6 +41,7 @@ interface ChatProps {
   expanded: boolean; onExpand: (open: boolean) => void;
   timestamp: string; valid: boolean; onEditPosition: () => void; positionButton: RefObject<HTMLButtonElement>;
   messages: CompanionMessage[]; historyError: string | null; loading: boolean;
+  loadingMessage?:string;
   onAsk: (text: string) => Promise<string | undefined>;
   remainingFree: number | null; coins?: number; onStore: () => void;
   onViewPlan?: () => void;
@@ -49,7 +50,7 @@ interface ChatProps {
 const compactTime = (time: string) => time.replace(/^00:(?=\d\d:\d\d$)/, "");
 
 export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, onEditPosition, positionButton, messages,
-  historyError, loading, onAsk, remainingFree, onStore, onViewPlan, allowance }: ChatProps) {
+  historyError, loading, loadingMessage='Geek is thinking…', onAsk, remainingFree, onStore, onViewPlan, allowance }: ChatProps) {
   const access = useProAccess();
   const accessNoteId = useId();
   const [draft, setDraft] = useState("");
@@ -129,10 +130,10 @@ export function RoomChat({ focusAction, expanded, onExpand, timestamp, valid, on
         <div className="room-geek"><small><CineGeekFrames aria-hidden="true" />Geek</small><CompanionAnswer message={message}/></div>
       </article>)}
       {pending && <div className="room-exchange"><div className="room-you"><small>You · {compactTime(timestamp)}</small><p>{pending}</p></div>
-        <p role="status" className="room-typing">Geek is thinking…</p></div>}
+        <p role="status" className="room-typing">{loadingMessage}</p></div>}
     </div>}
     <div className="room-dock">
-      {!expanded && pending && <p role="status" className="room-inline-pending"><CineGeekFrames aria-hidden="true"/>Geek is thinking…</p>}
+      {!expanded && pending && <p role="status" className="room-inline-pending"><CineGeekFrames aria-hidden="true"/>{loadingMessage}</p>}
       {!expanded && inlineReply && <article className="room-inline-reply" aria-label="Geek’s reply">
         <div className="room-inline-heading"><span><CineGeekFrames aria-hidden="true"/>Geek</span>
           <button type="button" aria-label="Dismiss reply" onClick={() => { setReplyId(undefined); openButton.current?.focus(); }}><X size={15}/></button>

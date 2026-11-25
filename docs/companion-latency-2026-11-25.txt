@@ -1,0 +1,99 @@
+Companion latency and continuation — reviewed local candidate
+
+Problem and resulting behaviour
+A season recap spent 36.46 seconds writing and 52.22 seconds checking its first
+draft. The check rejected speaker attribution. The old shared 90-second deadline
+then admitted a repair with about one second left. OpenRouter records that repair
+as cancelled (499, 936ms). No answer allowance was charged. Its unknown provider
+cost remains conservatively reserved and caused the existing global budget halt.
+
+This change refuses deadline-starved calls before dispatch, saves completed model
+responses privately within the same question, and resumes with a new worker using
+the same request ID and spending ledger. Replayed drafts remain untrusted: every
+original parsing, citation, factual and spoiler gate still runs. Independent
+source searches run two at a time and merge in original order. Independent
+current/earlier subtitle, reviewed-note and catalog reads also run together.
+
+Unchanged quality and financial controls
+- Same model and OpenAI route, full writer/reviewer reasoning, prompts, source
+  packets, context limits, eligible episodes, timestamp boundaries and repairs.
+- No unchecked streaming, shorter answers, weaker attribution/spoiler reviews,
+  extra truncation or cross-question answer reuse.
+- Same $5 global, $0.35/question and $3/account/month caps. Overlapping reservations
+  wait for settlement instead of temporarily exhausting the question budget.
+  Genuine over-budget or uncertain-cost results still stop work.
+- Every concurrent provider call settles before releasing/pausing its lease.
+  Invalid source selection stops scheduling further batches and drains active work.
+- All purchase settings and question allowances remain unchanged.
+
+Private work journal
+The migration adds service-only RPCs and a table with RLS and no direct client or
+service-role table grants. Access verifies user, question, attempt, active lease
+and absence of a budget block. Keys hash exact generator arguments plus a revision
+and occurrence number. Change the journal revision whenever model/provider or
+settings/parsing outside the arguments change. A changed question, source packet,
+timestamp or episode cannot replay a different input.
+
+Only completed/settled JSON responses are saved, at most 128 KiB each and 256
+entries per question. These can include rejected drafts and are never published
+as evidence. Entries expire after one hour, with expired rows removed on the next
+work-journal load. Charged/released questions delete them immediately; deletion
+of their parent request/account cascades. No new external service receives them.
+
+The client keeps the existing preparing_recap protocol and shows a checking or
+context-preparation message. It stops automatically scheduling after 12
+continuations or after 180 seconds observed at a continuation boundary. An
+explicit retry uses the same question ID while its existing lease remains valid.
+An active call is not cancelled at 180 seconds; its existing server deadline
+still applies. Rewinding, switching episode/account or leaving the screen stops
+the old continuation and prevents its answer appearing in the new view.
+
+Evidence and limits
+- 1,461 automated checks passed across all 95 test files (two test workers).
+- Six golden fixtures captured from unchanged commit 7c3635d compare all generator
+  inputs and final answers: broad question, misspelling, speech, range recap,
+  rewind and episode switch. All match exactly with controlled model outputs.
+- A replay of the observed 36.46s/52.22s rejection resumes the correction with
+  identical prompts and final reviewed output, with no repeated paid writer/check.
+- The six observed independent selection durations total 21.54 seconds serially
+  and 10.87 seconds with two workers: 10.67 seconds saved in timing replay.
+  This is not a measured production improvement. Provider contention, budget
+  holds and network times can reduce the saving. Slow writers/reviewers remain.
+- The 10-second admission floor prevents the observed last-second dispatch; it
+  does not guarantee every admitted model call will finish before its deadline.
+  Transport failure after dispatch remains fail-closed with uncertain cost held.
+- UI tests cover progress, bounded continuation, same request ID, no draft display,
+  and stopping old work on rewind/episode switch.
+- Real local database tests cover overlapping holds, caps, uncertain settlement,
+  checkpoint access/expiry/cleanup and stale attempt isolation.
+- TypeScript, Deno endpoint typecheck, targeted lint, web and native web builds
+  passed. Existing bundle-size/browser-data advisories remain.
+- An unconstrained full test run overloaded the Mac. Two-worker reruns exposed
+  four pre-existing fixture/environment problems, reproduced against untouched
+  HEAD. Tests now reflect the already-shipped same-episode history and room group
+  semantics, and the preview test uses jsdom. No product changes for those fixes.
+- No paid AI calls were made for this change. These checks establish equivalent
+  requests and processing; stochastic live answers are not guaranteed verbatim.
+
+Rollout order (not yet performed)
+1. Review/merge this isolated candidate. Apply the single migration, then deploy
+   spoiler-free-companion. Confirm watch-checks-2026-11-25-latency-v1 is active.
+2. Verify service-only journal permissions and unchanged spending/purchase settings.
+3. Review the existing transport halt with the saved provider evidence. The
+   provider's generation lookup returns 404 for the cancelled request; that is
+   not proof of zero billing. Retain its entire $0.137837 unknown hold. A separate
+   guarded operator recovery must be reviewed before resuming live calls; do not
+   refund that hold or auto-clear other/future halts. Re-read state and stop if
+   it differs.
+4. Release a client build if approved (latest installed TestFlight remains 37).
+   Existing protocol-1 clients can continue server work; the new progress text
+   and bounded UI loop require the updated client.
+5. Within an approved test allowance, measure the complete speech and season-recap
+   paths live, including source loading, all model calls and retries. Check rewind,
+   episode switch, answer quality and no question charged on failure. Record
+   actual time/cost; do not present replay savings as live measurements.
+
+No production deployment, halt reset, purchase activation or TestFlight upload
+has been performed by this local change. Private diagnostic evidence and the
+original baseline are in .cinegeek-private/companion-latency-2026-11-25 at the
+workspace root; they must not be uploaded into the application repository.

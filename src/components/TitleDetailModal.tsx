@@ -104,7 +104,7 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
   const [inputValid, setTimestampValid] = useState(true);
   const timestampValid = inputValid && point.seconds <= maxRuntime * 60;
   const position = title.type === "movie" || point.episodeNumber !== undefined ? point : null;
-  const { ask, messages, isLoading, historyError } = useCompanion(position, open && timestampValid);
+  const { ask, messages, isLoading, loadingMessage, historyError } = useCompanion(position, open && timestampValid);
 
   // Fetch seasons for TV shows
   useEffect(() => {
@@ -344,7 +344,7 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
           </Card>
         </div>}>
           {focusAction => <RoomChat focusAction={focusAction} key={`${episodeLabel}:${point.seconds}`} expanded={chatOpen} onExpand={setChatOpen}
-            timestamp={timestamp} valid={timestampValid} messages={messages} loading={isLoading}
+            timestamp={timestamp} valid={timestampValid} messages={messages} loading={isLoading} loadingMessage={loadingMessage}
             historyError={historyError} onAsk={handleAskQuestion} positionButton={positionButton}
             onEditPosition={() => setEditingTime(true)} remainingFree={remainingFree} allowance={allowance}
             onViewPlan={() => { onOpenChange(false); navigate("/dashboard?tab=profile#your-plan"); }}
