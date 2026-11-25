@@ -72,13 +72,13 @@ describe('earlier episode preparation and completeness',()=>{
  });
  it('does not prepare earlier episodes for an explicit current-only question or scene',async()=>{
   for(const q of ['What happened here?', 'Why is he here? Only this episode.']) {
-   const f=fixture();await answerWatchRequest(q,p,[],vi.fn(async()=>null),f.store);
+   const f=fixture();await answerWatchRequest(q,p,[],vi.fn(async()=>({points:[]})),f.store);
    expect(f.store.earlier).not.toHaveBeenCalled();expect(f.preparations).toEqual([5]);
   }
  });
  it('passes an incomplete flag to the writer and marks a partial list as limited',async()=>{
   const f=fixture([row(2),row(3),row(4)], [1]),packets:any[]=[];
-  const gen=vi.fn(async(_system:string,user:string)=>{const packet=JSON.parse(user);packets.push(packet);return null;});
+  const gen=vi.fn(async(_system:string,user:string)=>{const packet=JSON.parse(user);packets.push(packet);return {points:[]};});
   const result=await answerWatchRequest('What were the other jobs?',p,[],gen,f.store);
   expect(packets[0].request.coverageIncomplete).toBe(true);expect(result.limited).toBe(true);expect(result.answer).toContain('S1E1');
  });

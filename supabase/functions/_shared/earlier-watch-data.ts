@@ -10,9 +10,13 @@ export type StoryCoverage = { missing: EpisodeScope[]; catalogComplete: boolean 
 // Prepare sources before any interpretation. Two cold episodes per request
 // reuse the existing preparation protocol; cached episodes cost no downloads.
 export async function earlierWatchData(p: ViewingPosition, store: WatchStore): Promise<WatchData & { coverage: StoryCoverage }> {
-  const cached = await store.earlier(p);
+  const initial=await Promise.allSettled([
+    store.earlier(p),p.seasonNumber!>1?store.seasons(p):Promise.resolve([]),store.unavailable?.(p)??Promise.resolve([]),
+  ] as const);
+  for(const result of initial)if(result.status==='rejected')throw result.reason;
+  const cached=(initial[0] as PromiseFulfilledResult<WatchData>).value;
   const data = { ...cached, records: [...cached.records], notes: [...cached.notes] };
-  const catalog = p.seasonNumber! > 1 ? await store.seasons(p) : [];
+  const catalog=(initial[1] as PromiseFulfilledResult<{season:number;count:number}[]>).value;
   const expected: EpisodeScope[] = [];
   let catalogComplete = true;
   for (let season = 1; season <= p.seasonNumber!; season++) {
@@ -24,7 +28,7 @@ export async function earlierWatchData(p: ViewingPosition, store: WatchStore): P
     if (expected.length + count > 100) { catalogComplete = false; break; }
     for (let episode = 1; episode <= count; episode++) expected.push({ season, episode });
   }
-  const unavailable = new Set((await store.unavailable?.(p) ?? []).map(key));
+  const unavailable = new Set((initial[2] as PromiseFulfilledResult<EpisodeScope[]>).value.map(key));
   const missing: EpisodeScope[] = [];
   let cold = 0, progress = 0;
   for (const episode of expected) {

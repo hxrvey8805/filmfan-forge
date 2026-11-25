@@ -1,4 +1,5 @@
 import { openRouterGenerator } from './openrouter.ts';
+import {assertDispatchWindow} from './companion-work.ts';
 import { ProviderUnavailable } from './provider-unavailable.ts';
 import { SOL_ENDPOINT, SOL_MODEL, SOL_RESOLVED_MODEL, solBody, solReservationMicroUsd, type SolBudget } from './sol-budget.ts';
 
@@ -14,8 +15,19 @@ export function solBudgetedFetch(budget: SolBudget, network: typeof fetch = fetc
     const body = solBody(JSON.parse(options.body));
     const reservation = solReservationMicroUsd(body);
     const callId = crypto.randomUUID();
+    assertDispatchWindow(options.signal);
     try { if (!await budget.reserve(callId, reservation)) throw unavailable(); }
     catch { stopped = true; throw unavailable(); }
+    try {
+      if(stopped)throw unavailable();
+      assertDispatchWindow(options.signal);
+    } catch(error) {
+      // No provider request was dispatched: zero cost is known, unlike a
+      // timeout after fetch. Release only this call's unused reservation.
+      try { await budget.settle(callId,0,null,null); }
+      catch { stopped=true;throw unavailable(); }
+      throw error;
+    }
     let response: Response;
     try { response = await network(url, { ...options, body: JSON.stringify(body) }); }
     catch {

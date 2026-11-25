@@ -15,6 +15,7 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
   const [userId, setUserId] = useState<string | null>(null);
   const [history, setHistory] = useState<{ scope: string; rows: CompanionMessage[] }>({ scope: '', rows: [] });
   const [isLoading, setLoading] = useState(false);
+  const [loadingMessage,setLoadingMessage]=useState('Geek is thinking…');
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const asking = useRef(false);
@@ -71,14 +72,21 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
     if (pendingRequest.current?.key !== requestKey) pendingRequest.current = { key: requestKey, id: crypto.randomUUID() };
     asking.current = true;
     setLoading(true);
+    setLoadingMessage('Geek is thinking…');
     try {
       if (!await privacy.ensure('companion')) return { cancelled: true };
       if (currentView.current !== requestView) return { stale: true };
       const body = { ...position, recapProtocol: 1, timestamp, question: question.trim(), requestId: pendingRequest.current.id };
       const invoke = () => supabase.functions.invoke('spoiler-free-companion', { body });
+      const started=Date.now();
       let { data, error } = await invoke();
+      let continuations=0;
       while (!error && data?.status === 'preparing_recap') {
         if (currentView.current !== requestView) return { stale: true };
+        setLoadingMessage(data.stage==='checking_answer'?'Geek is finishing the answer checks…':'Geek is preparing the story context…');
+        // Keep the same request and spending ledger if the user retries.
+        // Never leave an unbounded preparation loop running on the phone.
+        if(++continuations>12||Date.now()-started>180000)throw new Error('This is taking longer than expected. Send the same question to continue from saved progress. No question used.');
         await new Promise(resolve => setTimeout(resolve, 500));
         if (currentView.current !== requestView) return { stale: true };
         ({ data, error } = await invoke());
@@ -108,7 +116,7 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
     } finally { asking.current = false; setLoading(false); }
   };
 
-  return { ask, isLoading, historyError,
+  return { ask, isLoading, loadingMessage, historyError,
     // Reopening/rewinding an episode keeps the user's already-saved chat.
     // Each row's evidence still has to respect that row's ORIGINAL cutoff.
     // This display ceiling never enters ask(), source retrieval or AI memory.

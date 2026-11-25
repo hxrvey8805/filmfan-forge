@@ -138,7 +138,7 @@ describe('OpenRouter companion transport', () => {
       const generate = openRouterGenerator('test-key', request);
       await generate('System', 'First draft', 900);
       vi.setSystemTime(new Date('2026-10-15T10:01:31Z'));
-      await expect(generate('Check', 'Must not publish without verification', 900)).rejects.toThrow('Unable to generate');
+      await expect(generate('Check', 'Must not publish without verification', 900)).rejects.toThrow('more time');
       expect(request).toHaveBeenCalledOnce();
     } finally { vi.useRealTimers(); }
   });

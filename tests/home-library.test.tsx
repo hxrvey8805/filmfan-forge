@@ -89,14 +89,15 @@ it('keeps Focus watching and sends the chosen cutoff after ten minutes and a que
     tap('Watching at 15:07');
     tap('Rewind 10 seconds');
     tap('Set time');
-    expect(screen.queryByText(saved.question)).toBeNull();
-    expect(screen.queryByText(saved.answer)).toBeNull();
+    // Saved chat belongs to the episode; rewinding only changes new requests.
+    expect(screen.getByText(saved.question)).toBeTruthy();
+    expect(screen.getByText(saved.answer)).toBeTruthy();
   } finally {
     await preview.from('ai_conversations').delete().eq('id', saved.id);
   }
 });
 
-it('restores a rewound bookmark from Home and only shows eligible saved answers', async ({ onTestFinished }) => {
+it('restores a rewound bookmark from Home and keeps saved answers within their episode', async ({ onTestFinished }) => {
   // jsdom has no scrolling layout. Radix scrolls the selected option into view when opening.
   if (!HTMLElement.prototype.scrollIntoView) {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: () => {} });
@@ -124,7 +125,7 @@ it('restores a rewound bookmark from Home and only shows eligible saved answers'
     expect(await screen.findByText('Later in this episode.')).toBeTruthy();
     tap('Watching at 10:00'); edit('04:12'); tap('Set time');
     tap('Watching at 04:12'); edit('10:00'); tap('Cancel');
-    expect(screen.queryByText('Later in this episode.')).toBeNull();
+    expect(screen.getByText('Later in this episode.')).toBeTruthy();
     expect(screen.queryByText('Only in episode two.')).toBeNull();
     tap('Back to viewing setup'); tap('Back to your titles');
     expect(await screen.findByText('Resume · S1 E1 · 00:04:12')).toBeTruthy();
@@ -135,7 +136,7 @@ it('restores a rewound bookmark from Home and only shows eligible saved answers'
     expect((screen.getByLabelText('Your position') as HTMLInputElement).value).toBe('00:04:12');
     enterChat();
     expect(await screen.findByText('Already seen in episode one.')).toBeTruthy();
-    expect(screen.queryByText('Later in this episode.')).toBeNull();
+    expect(screen.getByText('Later in this episode.')).toBeTruthy();
     expect(screen.queryByText('Only in episode two.')).toBeNull();
     const selectEpisode = async (n: number) => {
       tap('Back to viewing setup');
@@ -154,7 +155,7 @@ it('restores a rewound bookmark from Home and only shows eligible saved answers'
     edit('04:12');
     enterChat();
     expect(await screen.findByText('Already seen in episode one.')).toBeTruthy();
-    expect(screen.queryByText('Later in this episode.')).toBeNull();
+    expect(screen.getByText('Later in this episode.')).toBeTruthy();
     expect(screen.queryByText('Only in episode two.')).toBeNull();
   } finally {
     await preview.from('ai_conversations').delete().eq('user_id', viewer).eq('title_id', title);

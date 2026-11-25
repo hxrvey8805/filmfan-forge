@@ -1,4 +1,5 @@
 import { databaseSolBudget, type BudgetRpc, type SolBudget } from './sol-budget.ts';
+import {parallelBudget} from './parallel-budget.ts';
 
 export class QuestionAllowanceError extends Error {
   constructor(public code: string, public status = 409) {
@@ -15,7 +16,7 @@ export class QuestionAllowanceError extends Error {
 // This gate surrounds the evaluated pipeline; it never changes prompts,
 // evidence, model settings or the independent spoiler/factual review.
 export async function beginQuestionAllowance(rpc: BudgetRpc, userId: string, requestId: string,
-  scope: Record<string, unknown>, provider: string | undefined) {
+  scope: Record<string, unknown>, provider: string | undefined, parallelCalls=false) {
   const attempt = crypto.randomUUID();
   const result = await rpc('begin_companion_question', {
     p_user_id: userId, p_request_id: requestId, p_attempt: attempt, p_scope: scope,
@@ -42,7 +43,8 @@ export async function beginQuestionAllowance(rpc: BudgetRpc, userId: string, req
     throw new QuestionAllowanceError('question_budget_unavailable', 503);
   }
   const legacy = databaseSolBudget(rpc, userId, requestId);
-  const budget: SolBudget = !active ? legacy : {
+  const budget: SolBudget = !active ? legacy : parallelCalls ? parallelBudget(rpc,
+    {p_user_id:userId,p_request_id:requestId,p_attempt:attempt},legacy.settle,()=>{blocked=true;}) : {
     async reserve(callId, microUsd) {
       const held = await rpc('reserve_companion_question_call', {
         p_call_id: callId, p_user_id: userId, p_request_id: requestId, p_attempt: attempt, p_micro_usd: microUsd,
@@ -54,7 +56,7 @@ export async function beginQuestionAllowance(rpc: BudgetRpc, userId: string, req
     settle: legacy.settle,
   };
   return {
-    active, budget, end,
+    active, attempt, budget, end,
     get budgetBlocked() { return blocked; },
     async finish(conversation: Record<string, unknown>, charge: boolean) {
       if (blocked) throw new QuestionAllowanceError('question_budget_unavailable', 503);

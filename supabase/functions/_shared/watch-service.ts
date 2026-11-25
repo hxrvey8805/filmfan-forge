@@ -1,11 +1,12 @@
 import type { JsonGenerator } from './answer.ts';
+import {orderedWork} from './ordered-work.ts';
 import { companionVersionFor, type Conversation, type SubtitleRecord, type ViewingPosition } from './companion.ts';
 import type { CheckedResponse } from './companion-response.ts';
 import type { ReviewedSceneNote } from './reviewed-scenes.ts';
 import { questionScope, recapWindows } from './question-scope.ts';
 import { watchSources } from './watch-context.ts';
 import { safeReferenceQuestion, watchAnswer } from './watch-answer.ts';
-import { earlierWatchData, storyCoverageMessage } from './earlier-watch-data.ts';
+import { earlierWatchData, storyCoverageMessage, type StoryCoverage } from './earlier-watch-data.ts';
 import type { WatchObserver } from './watch-diagnostics.ts';
 
 export type WatchData={records:SubtitleRecord[];notes:ReviewedSceneNote[];incomplete?:boolean};
@@ -24,11 +25,17 @@ export async function answerWatchRequest(question:string,p:ViewingPosition,histo
   const reference=safeReferenceQuestion(question,history,boundary);
   if(plan.clarification)return watchAnswer(question,plan,[],generate,reference,observe);
   if(plan.intent!=='recap') {
-    const current=await store.current(boundary);
-    const previous=plan.earlierStory?await earlierWatchData(boundary,store):{records:[],notes:[],incomplete:false,coverage:undefined};
+    // These are independent episode ranges. Drain both before pausing so an
+    // old import cannot outlive the question lease or a viewing-point switch.
+    const loads:(()=>Promise<WatchData&{coverage?:StoryCoverage}>)[]=[
+      ()=>store.current(boundary),
+      ()=>plan.earlierStory?earlierWatchData(boundary,store):Promise.resolve({records:[],notes:[],incomplete:false}),
+    ];
+    const [current,previous]=await orderedWork(loads,2,load=>load());
+    const previousCoverage=previous.coverage;
     const incomplete=!!current.incomplete || !!previous.incomplete;
     const result=await watchAnswer(question,{...plan,coverageIncomplete:incomplete},watchSources(plan,[...previous.records,...current.records],[...previous.notes,...current.notes]),generate,reference,observe);
-    if(incomplete)return {...result,answer:result.answer+'\n\n'+(previous.coverage && previous.incomplete ? storyCoverageMessage(previous.coverage) : 'My available story coverage is incomplete for this request.'),limited:true};
+    if(incomplete)return {...result,answer:result.answer+'\n\n'+(previousCoverage && previous.incomplete ? storyCoverageMessage(previousCoverage) : 'My available story coverage is incomplete for this request.'),limited:true};
     return result;
   }
   const needsCatalog=!!plan.collection && boundary.mediaType==='tv' && (boundary.seasonNumber!>1 && !(plan.collection==='season' && plan.season===boundary.seasonNumber));

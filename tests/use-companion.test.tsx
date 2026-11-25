@@ -193,6 +193,48 @@ describe('companion history and in-flight responses', () => {
     expect(retryBody).toMatchObject({ timestamp: '00:01:00', seconds: 60, episodeNumber: 2, question: 'Why?' });
     expect(hook.result.current.messages.map(item => item.id)).toEqual(['safe']);
   });
+  it('continues saved checking work with the same question and displays no unchecked draft',async()=>{
+    const pending=deferred<unknown>();
+    mock.invoke.mockResolvedValueOnce({data:{status:'preparing_recap',stage:'checking_answer'},error:null})
+      .mockReturnValueOnce(pending.promise);
+    const hook=await mount();
+    let request!:ReturnType<typeof hook.result.current.ask>;
+    await act(async()=>{request=hook.result.current.ask('Why?','00:01:00');});
+    expect(hook.result.current.loadingMessage).toBe('Geek is finishing the answer checks…');
+    expect(hook.result.current.messages).toEqual([]);
+    await act(async()=>{await vi.advanceTimersByTimeAsync(500);});
+    expect(mock.invoke.mock.calls[1][1].body).toEqual(mock.invoke.mock.calls[0][1].body);
+    await act(async()=>{pending.resolve({data:{conversation:row()},error:null});await request;});
+    expect(hook.result.current.isLoading).toBe(false);
+    expect(hook.result.current.messages).toHaveLength(1);
+  });
+  it.each(['rewind','episode'])('stops saved-work continuation after a %s and starts a separate question',async change=>{
+    mock.invoke.mockResolvedValueOnce({data:{status:'preparing_recap',stage:'checking_answer'},error:null});
+    const hook=await mount();let request!:ReturnType<typeof hook.result.current.ask>;
+    await act(async()=>{request=hook.result.current.ask('Why?','00:01:00');});
+    const changed={...position,...(change==='rewind'?{seconds:10}:{episodeNumber:1})};
+    hook.rerender({position:changed,enabled:true});
+    await act(async()=>{await vi.advanceTimersByTimeAsync(500);expect((await request).stale).toBe(true);});
+    expect(mock.invoke).toHaveBeenCalledTimes(1);
+    mock.invoke.mockResolvedValueOnce({data:{conversation:row({episode_number:changed.episodeNumber,position_seconds:changed.seconds})},error:null});
+    await act(async()=>{await hook.result.current.ask('Why?',change==='rewind'?'00:00:10':'00:01:00');});
+    const [first,next]=mock.invoke.mock.calls.map(call=>call[1].body);
+    expect(next.requestId).not.toBe(first.requestId);
+    expect(next).toMatchObject({seconds:changed.seconds,episodeNumber:changed.episodeNumber});
+  });
+  it('bounds preparation loops and preserves the same request for an explicit retry',async()=>{
+    mock.invoke.mockResolvedValue({data:{status:'preparing_recap',stage:'checking_answer'},error:null});
+    const hook=await mount();let outcome!:Promise<unknown>;
+    await act(async()=>{outcome=hook.result.current.ask('Why?','00:01:00').catch(error=>error);});
+    await act(async()=>{await vi.advanceTimersByTimeAsync(6500);});
+    expect(await outcome).toMatchObject({message:expect.stringContaining('continue from saved progress')});
+    expect(mock.invoke).toHaveBeenCalledTimes(13);
+    expect(hook.result.current.isLoading).toBe(false);
+    const original=mock.invoke.mock.calls[0][1].body;
+    mock.invoke.mockResolvedValueOnce({data:{conversation:row()},error:null});
+    await act(async()=>{await hook.result.current.ask('Why?','00:01:00');});
+    expect(mock.invoke.mock.calls.at(-1)![1].body).toEqual(original);
+  });
   it('retries an ended validation failure explicitly with a fresh ID and the same timestamp', async () => {
     const hook=await mount();
     mock.invoke.mockResolvedValueOnce({error:{context:{json:async()=>({code:'question_answer_unverified',error:'Do not surface arbitrary server text'})}}});

@@ -87,7 +87,7 @@ it('keeps the room style with the viewer across titles and leaves the watching G
   view.rerender(room('viewer-a', 'First movie', true));
   expect(screen.getByRole('button', { name: 'End focus' })).toBeTruthy();
   expect(view.container.querySelector('.room-force-lift')).toBeTruthy();
-  expect(screen.getByRole('img', { name: /watches the glowing TV.*Deep Navy/ })).toBeTruthy();
+  expect(screen.getByRole('group', { name: /watches the glowing TV.*Deep Navy/ })).toBeTruthy();
   view.rerender(room('viewer-a', 'Next movie'));
   expect(screen.getByRole('button', { name: 'Room style: Deep Navy' })).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Room style: Deep Navy' }));

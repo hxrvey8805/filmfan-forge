@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import {databaseWatchCheckpoints} from '../supabase/functions/_shared/watch-checkpoints';
 import { beginQuestionAllowance } from '../supabase/functions/_shared/question-allowance';
 import type { BudgetRpc } from '../supabase/functions/_shared/sol-budget';
 import { solGenerator } from '../supabase/functions/_shared/openrouter-sol';
@@ -24,7 +25,7 @@ beforeAll(async()=>{
   for(const name of ['20261013120000_companion_evidence_and_memory','20261015153000_caption_context_revision',
     '20261015195500_companion_answer_revision','20261106093000_quarantine_subtitle_editions','20261106163000_shared_cut_revision',
     '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance',
-    '20261114120000_companion_spending_safeguards']) await pg.exec(migration(name));
+    '20261114120000_companion_spending_safeguards','20261125120000_companion_work_checkpoints']) await pg.exec(migration(name));
 });
 
 describe('spending safeguards',()=>{
@@ -236,11 +237,80 @@ describe('spending safeguards',()=>{
 afterAll(()=>pg.close());
 beforeEach(async()=>{
   user=randomUUID();
-  await pg.exec(`TRUNCATE companion_question_calls,companion_question_requests,companion_usage_accounts,companion_question_packs,
+  await pg.exec(`TRUNCATE companion_work_checkpoints,companion_question_calls,companion_question_requests,companion_usage_accounts,companion_question_packs,
     companion_pro_entitlements,companion_sol_calls,ai_conversations;
     UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=500000,user_month_limit_micro_usd=2000000,
       user_day_limit_micro_usd=null,question_call_limit=64;
     UPDATE companion_sol_budget SET enabled=true,limit_micro_usd=5000000,committed_micro_usd=0,halted_reason=null;`);
+});
+
+describe('parallel reservations and private continuation checkpoints',()=>{
+  const parallel=(id=randomUUID())=>beginQuestionAllowance(rpc,user,id,scope,'openrouter-sol',true);
+  it('waits for overlapping holds without raising or prematurely exhausting the question cap',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=350000');
+    const gate=await parallel(),one=randomUUID(),two=randomUUID();
+    expect(await gate.budget.reserve(one,200000)).toBe(true);
+    let completed=false;const waiting=gate.budget.reserve(two,200000).then(value=>{completed=true;return value;});
+    await pg.query('SELECT 1');await pg.query('SELECT 1');expect(completed).toBe(false);
+    await gate.budget.settle(one,50000,'one',null);
+    expect(await waiting).toBe(true);expect(gate.budgetBlocked).toBe(false);
+    await gate.budget.settle(two,50000,'two',null);await gate.end(false);
+    expect((await pg.query('SELECT committed_micro_usd FROM companion_sol_budget')).rows[0].committed_micro_usd).toBe(100000);
+    expect((await pg.query('SELECT question_limit_micro_usd FROM companion_usage_policy')).rows[0].question_limit_micro_usd).toBe(350000);
+  });
+  it('still denies work if actual settled spend leaves insufficient money',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=350000');
+    const gate=await parallel(),one=randomUUID();await gate.budget.reserve(one,200000);
+    const waiting=gate.budget.reserve(randomUUID(),200000);
+    await gate.budget.settle(one,200000,'one',null);
+    expect(await waiting).toBe(false);expect(gate.budgetBlocked).toBe(true);
+    await expect(gate.end(true)).rejects.toMatchObject({code:'question_budget_unavailable'});
+  });
+  it('retains an uncertain cost and stops queued work after a transport failure',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=350000');
+    const gate=await parallel(),one=randomUUID();await gate.budget.reserve(one,200000);
+    const waiting=gate.budget.reserve(randomUUID(),200000);
+    await gate.budget.settle(one,null,null,'transport_error');expect(await waiting).toBe(false);
+    expect((await pg.query('SELECT committed_micro_usd,halted_reason FROM companion_sol_budget')).rows[0])
+      .toEqual({committed_micro_usd:200000,halted_reason:'transport_error'});
+    expect((await pg.query('SELECT count(*)::int n FROM companion_sol_calls')).rows[0].n).toBe(1);
+  });
+  it('does not bypass a permanent call-count or global-money limit',async()=>{
+    await pro();await pg.exec('UPDATE companion_usage_policy SET question_call_limit=1');
+    const gate=await parallel(),call=randomUUID();await gate.budget.reserve(call,100);
+    await gate.budget.settle(call,10,'one',null);
+    expect(await gate.budget.reserve(randomUUID(),10)).toBe(false);await gate.end(false);
+    await pg.exec('UPDATE companion_sol_budget SET committed_micro_usd=5000000');
+    const next=await parallel();expect(await next.budget.reserve(randomUUID(),1)).toBe(false);
+  });
+  it('keeps checkpoints private to the exact request and live attempt, then removes them on completion',async()=>{
+    await pro();const id=randomUUID(),gate=await parallel(id),key='a'.repeat(64)+':0';
+    const store=databaseWatchCheckpoints(rpc,user,id,gate.attempt);
+    await store.save(key,{points:[{text:'PRIVATE_DRAFT'}]});
+    expect(await store.load()).toEqual({[key]:{value:{points:[{text:'PRIVATE_DRAFT'}]}}});
+    for(const wrong of [databaseWatchCheckpoints(rpc,randomUUID(),id,gate.attempt),databaseWatchCheckpoints(rpc,user,id,randomUUID())])
+      await expect(wrong.load()).rejects.toThrow('safely');
+    await gate.end(true);await expect(store.load()).rejects.toThrow();
+    const next=await parallel(id),resumed=databaseWatchCheckpoints(rpc,user,id,next.attempt);
+    expect(await resumed.load()).toHaveProperty(key);await expect(store.save(key,{})).rejects.toThrow();
+    await next.finish(answer(id),true);
+    expect((await pg.query('SELECT count(*)::int n FROM companion_work_checkpoints')).rows[0].n).toBe(0);
+  });
+  it('expires intermediate results and clears abandoned or released requests',async()=>{
+    await pro();const id=randomUUID(),gate=await parallel(id),key='b'.repeat(64)+':0';
+    const store=databaseWatchCheckpoints(rpc,user,id,gate.attempt);await store.save(key,null);
+    await pg.exec("UPDATE companion_work_checkpoints SET expires_at=now()-interval '1 second'");expect(await store.load()).toEqual({});
+    await store.save(key,{private:true});await gate.end(false);
+    expect((await pg.query('SELECT count(*)::int n FROM companion_work_checkpoints')).rows[0].n).toBe(0);
+  });
+  it('denies client access and direct service edits to intermediate responses',async()=>{
+    for(const role of ['anon','authenticated','service_role'])await expect(pg.transaction(async tx=>{
+      await tx.exec(`SET LOCAL ROLE ${role}`);await tx.exec('SELECT * FROM companion_work_checkpoints');
+    })).rejects.toThrow(/permission denied/);
+    for(const role of ['anon','authenticated'])await expect(pg.transaction(async tx=>{
+      await tx.exec(`SET LOCAL ROLE ${role}`);await tx.query('SELECT load_companion_work($1,$2,$3,$4)',[user,randomUUID(),randomUUID(),'revision']);
+    })).rejects.toThrow(/permission denied/);
+  });
 });
 const rpc:BudgetRpc=async(name,args)=>{
   try {
