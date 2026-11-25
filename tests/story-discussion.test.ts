@@ -25,6 +25,33 @@ const check = (changes:Record<string,unknown> = {}) => ({boundarySafe:true,fit:'
 }]});
 
 describe('contextual story explanations with independent receipts',()=>{
+  it('splits a long valid line range without dropping any source words or skipping independent review',async()=>{
+    const text=Array.from({length:12},(_,i)=>`Detail ${i}: Mira suggests sharing a flat to reduce the rent and make the bills affordable.`).join('\n');
+    const ctx={...context,sources:[{...context.sources[1],text}]};
+    const support=[{id:'R2',firstLine:1,lastLine:12}];
+    const gen=vi.fn().mockResolvedValueOnce({points:[{text:draft().points[0].text,support}]})
+      .mockResolvedValueOnce(check({support}));
+    const result=await storyDiscussion(ctx,gen);
+    expect(result?.answer).toBe(draft().points[0].text);
+    expect(result?.points[0].support.map(r=>r.quote).join('\n')).toBe(text);
+    expect(result?.points[0].support.every(r=>r.quote.length<=700)).toBe(true);
+    expect(gen.mock.calls.map(c=>c[3])).toEqual(['writer','verifier']);
+  });
+  it.each(['single-long-line','too-many-spans','legacy-long-quote'])('still rejects excessive receipts: %s',async mode=>{
+    const text=mode==='single-long-line'?'x'.repeat(701):Array.from({length:mode==='too-many-spans'?9:2},()=> 'x'.repeat(400)).join('\n');
+    const support=mode==='legacy-long-quote'?[{id:'R2',quote:text}]:[{id:'R2',firstLine:1,lastLine:text.split('\n').length}];
+    const gen=vi.fn().mockResolvedValue({points:[{text:draft().points[0].text,support}]});
+    expect(await storyDiscussion({...context,sources:[{...context.sources[1],text}]},gen)).toBeNull();
+    expect(gen.mock.calls.every(c=>c[3]==='writer')).toBe(true);
+  });
+  it('cannot turn a long valid receipt into approval of an unsupported identity',async()=>{
+    const text=Array.from({length:12},()=> 'The speaker proposes sharing the rent to make the bills more affordable.').join('\n');
+    const support=[{id:'R2',firstLine:1,lastLine:12}];
+    const gen=vi.fn().mockResolvedValueOnce({points:[{text:draft().points[0].text,support}]})
+      .mockResolvedValueOnce(check({support})).mockResolvedValueOnce({points:[]});
+    expect(await storyDiscussion({...context,sources:[{...context.sources[1],text}]},gen)).toBeNull();
+    expect(gen.mock.calls.map(c=>c[3])).toEqual(['writer','verifier','writer']);
+  });
   it('lets the writer cite typo-containing original lines without retyping them, then independently checks them',async()=>{
     const text='The office is above the COVENIENCE STORE.\nMira suggests sharing a flat to reduce the rent.';
     const ctx={...context,sources:[context.sources[0],{...context.sources[1],text}]};

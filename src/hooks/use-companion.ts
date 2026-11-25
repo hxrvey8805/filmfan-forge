@@ -1,4 +1,5 @@
 import {useAIPrivacy} from '@/components/AIPrivacy';
+import { CompanionAnswerError } from '../../supabase/functions/_shared/companion-answer-error';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { companionVersionFor, safeHistory, type Conversation, type ViewingPosition } from '../../supabase/functions/_shared/companion';
@@ -38,14 +39,15 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
   }, []);
 
   const { tmdbId, mediaType, seasonNumber, episodeNumber, seconds } = position ?? {};
+  const hasTimestamp = seconds !== undefined;
   useEffect(() => {
     let active = true;
     setHistoryError(null);
-    if (!enabled || !tmdbId || !mediaType || seconds === undefined || !userId) return;
+    if (!enabled || !tmdbId || !mediaType || !hasTimestamp || !userId) return;
     const timer = setTimeout(async () => {
       let query = supabase.from('ai_conversations').select('*').eq('user_id', userId)
         .eq('title_id', tmdbId).eq('media_type', mediaType)
-        .eq('companion_version', companionVersionFor({ tmdbId, mediaType, seasonNumber, episodeNumber })).lte('position_seconds', seconds);
+        .eq('companion_version', companionVersionFor({ tmdbId, mediaType, seasonNumber, episodeNumber }));
       if (mediaType === 'tv') query = query.eq('season_number', seasonNumber!).eq('episode_number', episodeNumber!);
       const { data, error } = await query.order('created_at', { ascending: false }).limit(30);
       if (!active) return;
@@ -53,7 +55,7 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
       setHistory({ scope, rows: (data ?? []) as unknown as CompanionMessage[] });
     }, 150);
     return () => { active = false; clearTimeout(timer); };
-  }, [scope, tmdbId, mediaType, seasonNumber, episodeNumber, seconds, enabled, userId, revision]);
+  }, [scope, tmdbId, mediaType, seasonNumber, episodeNumber, hasTimestamp, enabled, userId, revision]);
 
   useEffect(() => {
     const refresh = () => setRevision(value => value + 1);
@@ -83,15 +85,17 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
       }
       if (error) {
         let message = 'The companion could not answer. Please try again.';
+        let unverified = false;
         try {
           const failure = await error.context.json();
           message = failure.error || message;
+          unverified = failure.code === 'question_answer_unverified';
           if (failure.code === "ai_consent_required") privacy.reload();
           // Retrying a retired cached answer needs a fresh request ID. Other
           // failures keep their ID so a successful save cannot charge twice.
-          if (['answer_version_changed', 'question_request_closed', 'question_budget_unavailable'].includes(failure.code)) pendingRequest.current = null;
+          if (['answer_version_changed', 'question_request_closed', 'question_budget_unavailable', 'question_answer_unverified'].includes(failure.code)) pendingRequest.current = null;
         } catch { /* Network errors have no response body. */ }
-        throw new Error(message);
+        throw unverified ? new CompanionAnswerError() : new Error(message);
       }
       if (!data?.conversation) throw new Error('The answer could not be saved. Please try again.');
       pendingRequest.current = null;
@@ -105,5 +109,8 @@ export function useCompanion(position: ViewingPosition | null, enabled = true) {
   };
 
   return { ask, isLoading, historyError,
-    messages: enabled && position && history.scope === scope ? safeHistory(history.rows, position) : [] };
+    // Reopening/rewinding an episode keeps the user's already-saved chat.
+    // Each row's evidence still has to respect that row's ORIGINAL cutoff.
+    // This display ceiling never enters ask(), source retrieval or AI memory.
+    messages: enabled && position && history.scope === scope ? safeHistory(history.rows, {...position, seconds:43200}) : [] };
 }

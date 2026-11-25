@@ -6,6 +6,7 @@ import { RoomChat } from '../src/components/RoomChat';
 import { readQuestionAllowance, questionAllowanceLabel, type QuestionAllowance } from '../src/lib/question-allowance';
 import { ProAccessContext } from '../src/hooks/use-pro-access';
 import { planFixture } from './pro-access-fixture';
+import { CompanionAnswerError } from '../supabase/functions/_shared/companion-answer-error';
 
 afterEach(cleanup);
 const renderChat=(allowance:QuestionAllowance)=>{
@@ -78,4 +79,29 @@ it('rejects malformed balances and does not turn an error into free questions',(
   expect(readQuestionAllowance({mode:'monthly',plan:'annual',included:15,limit:15,purchased:-1,renewsAt:null})).toEqual({mode:'unavailable'});
   expect(questionAllowanceLabel(readQuestionAllowance(null))).toBe('Question allowance unavailable');
   expect(readQuestionAllowance({mode:'beta'})).toEqual({mode:'beta'});
+});
+it('keeps a rejected question editable and retries only after an explicit tap',async()=>{
+  const {onAsk,send}=renderChat({mode:'monthly',plan:'monthly',included:15,limit:15,purchased:0,renewsAt:null});
+  onAsk.mockRejectedValueOnce(new CompanionAnswerError());fireEvent.click(send);
+  const retry=await screen.findByRole('button',{name:'Try again'});
+  expect(screen.getByRole('alert').textContent).toContain('No question used.');
+  expect((screen.getByRole('textbox',{name:'Your question'}) as HTMLTextAreaElement).value).toBe('Why did that happen?');
+  expect(onAsk).toHaveBeenCalledOnce();
+  fireEvent.click(retry);await waitFor(()=>expect(onAsk).toHaveBeenCalledTimes(2));
+  expect(onAsk).toHaveBeenLastCalledWith('Why did that happen?');
+  await waitFor(()=>expect(screen.queryByRole('button',{name:'Try again'})).toBeNull());
+});
+it('does not offer the old retry after changing the timestamp or bypass a Free lock',async()=>{
+  const onAsk=vi.fn().mockRejectedValue(new CompanionAnswerError());
+  const chat=(timestamp:string,plan:'monthly'|'free'='monthly')=><RoomChat expanded={false} onExpand={()=>{}}
+    timestamp={timestamp} valid onEditPosition={()=>{}} positionButton={createRef()} messages={[]} historyError={null}
+    loading={false} onAsk={onAsk} remainingFree={null} onStore={()=>{}}
+    allowance={{mode:'monthly',plan,included:plan==='monthly'?15:0,limit:plan==='monthly'?15:0,purchased:0,renewsAt:null}}/>;
+  const view=render(chat('08:27'));
+  fireEvent.change(screen.getByRole('textbox',{name:'Your question'}),{target:{value:'Summarise her speech.'}});
+  fireEvent.click(screen.getByRole('button',{name:'Send question'}));await screen.findByRole('button',{name:'Try again'});
+  view.rerender(chat('08:26'));expect(screen.queryByRole('button',{name:'Try again'})).toBeNull();
+  view.rerender(chat('08:27','free'));
+  expect((screen.getByRole('button',{name:'Try again'}) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button',{name:'Try again'}));expect(onAsk).toHaveBeenCalledOnce();
 });

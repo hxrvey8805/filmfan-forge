@@ -1,6 +1,6 @@
 import type { JsonGenerator } from './answer.ts';
 
-export const WATCH_CHECK_REVISION = 'watch-checks-2026-11-13-v1';
+export const WATCH_CHECK_REVISION = 'watch-checks-2026-11-25-speech-retry-v1';
 export type DiscussionIssue = 'identity'|'speaker'|'action'|'cause'|'timing'|'spoiler'|'relevance'|'citation';
 export type ProofFailure = 'receipt_count'|'receipt_source'|'receipt_range'|'receipt_mixed_format'|'receipt_missing_quote'|'receipt_length'|'receipt_mismatch';
 export type WatchDiagnostic =
@@ -13,7 +13,7 @@ export type WatchDiagnostic =
   | {stage:'answer_exhausted'}
   | {stage:'sources_ready';sources:number;episodes:number}
   | {stage:'selection_invalid';reason:'search_terms'|'source_size'|'batch_selection'|'combined_size'|'budget_selection'|'budget_exceeded'}
-  | {stage:'answer_gap';reason:'no_sources'|'no_selection'|'no_scene'|'explanation_rejected'}
+  | {stage:'answer_gap';reason:'no_sources'|'no_selection'|'no_scene'|'selection_rejected'|'explanation_rejected'}
   | {stage:'model_call';call:number;phase:'writer'|'verifier'|'analyst'|'unspecified';state:'started'|'returned'|'failed';inputHash:string};
 export type WatchObserver = (event:WatchDiagnostic)=>void;
 
