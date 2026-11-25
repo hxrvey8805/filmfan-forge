@@ -1,0 +1,51 @@
+Companion response-time follow-up — prepared, not deployed
+
+Live PR37 verification
+- The same speech request on the enrolled account completed in 71.119 seconds,
+  compared with 92.158 seconds previously (21.039 seconds / 22.8% faster in this
+  single comparison, not a promised average). Both used 12 model calls and two
+  draft/review attempts. Current cost: $0.115798. All three cited exchanges end
+  before the selected 08:27 cutoff; latest cited evidence ends at 08:21.088.
+- The season recap failed again at 90.409 seconds. Draft: 32.966 seconds;
+  review: 45.699 seconds, rejected for identity. A correction was admitted with
+  only about 11 seconds left because the previous minimum was 10 seconds.
+- The failed correction returned no reliable usage receipt. Its full $0.137380
+  reservation remains committed, alongside the older $0.137837 unknown hold.
+  Global admission is halted (unknown_cost); no question was charged for the
+  failed recap. No recovery was executed for this new halt.
+- Tests used the signed-in browser against the live backend. Build 38 is in
+  the private TestFlight group; installation on the phone is not verified here.
+
+Correction
+- Require at least 60 seconds remaining before each provider call, rechecked
+  after its budget reservation. Observed reviews take 46–52 seconds. Otherwise
+  defer, preserving the private checkpoint and the same question budget.
+- Keep the 90-second shared response deadline, model, provider, prompts,
+  reasoning, context, output limits and all publication checks unchanged.
+- Bump diagnostic revision to watch-checks-2026-11-25-latency-v2.
+- This does not promise immunity from provider timeouts. Unknown charges still
+  halt spending, and cold season recaps can still reach existing monetary caps.
+
+Validation
+- Six new/strengthened regression cases failed on PR37 before the correction.
+- Both observed duration patterns now defer before the review, resume identical
+  prompts, perform both repair/review pairs and yield the same checked answer.
+- The 11-second dispatch case and reservation-queue case no longer send a paid
+  call; a reservation not sent to the provider settles at exactly zero.
+- 1,465 tests across 95 files passed. Existing golden model-input/output, rewind,
+  episode-switch, recap, ledger and checkpoint checks remain intact. TypeScript,
+  Deno endpoint checking and changed-production-file lint passed.
+- No additional paid AI calls used for this follow-up's local tests.
+- The exact-state recovery passed eight isolated database cases: only the
+  recorded state reopens admission. Changed spending, caps, outstanding calls,
+  halt reason, held cost, request status or enabled purchases are rejected.
+  The ledger stays unchanged and a second execution is rejected.
+
+Rollout (requires approval for a new Lovable deployment request)
+- Deploy only spoiler-free-companion with reviewed imports; no migration or new
+  TestFlight build is required. Build 38 already has continuation/progress UI.
+- Review and run the separately prepared exact-state halt recovery. Keep both
+  full unknown holds, the $5 global/$0.35 question/$3 account-month caps and
+  disabled real purchases. Stop if any live guard no longer matches.
+- Retest the season recap within those unchanged caps; do not claim a live pass
+  from deterministic timing replays. Record any cost-limit blocker accurately.

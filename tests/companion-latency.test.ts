@@ -88,7 +88,12 @@ describe('question-private continuation',()=>{
     expect(await next('review','draft',100,'verifier')).toEqual({verified:true});
     expect(fresh.mock.calls.map(c=>c[3])).toEqual(['verifier']);
   });
-  it('resumes the observed 36s draft / 52s rejection without changing repair prompts or skipping review',async()=>{
+  it.each([
+    {name:'original 36s draft / 52s rejection',durations:[36460,52220,8000,10000]},
+    // The first two durations are from the live PR37 retest. Give the repair
+    // and its check the same full durations instead of assuming a fast repair.
+    {name:'live 33s draft / 46s rejection',durations:[32966,45699,32966,45699]},
+  ])('resumes $name without changing repair prompts or skipping review',async({durations})=>{
     vi.useFakeTimers();
     const ctx:StoryDiscussionContext={question:'Recap this section.',boundary:{season:2,episode:7,seconds:1489},
       request:{intent:'recap',target:{season:2,episode:7,start:0,end:1489}},sources:[{id:'S1',text:'They agree to share the rent.',season:2,episode:7,end:10}]};
@@ -102,7 +107,7 @@ describe('question-private continuation',()=>{
     const b=budget(),calls:unknown[][]=[],j=journal();let n=0;
     const makeWorker=()=>{
       const model=solGenerator('test',b,vi.fn<typeof fetch>().mockImplementation(async()=>{
-        const index=n++;vi.advanceTimersByTime([36460,52220,8000,10000][index]);
+        const index=n++;vi.advanceTimersByTime(durations[index]);
         return new Response(JSON.stringify({id:'gen-'+index,model:SOL_RESOLVED_MODEL,provider:'OpenAI',usage:{cost:.001},
           choices:[{finish_reason:'stop',message:{content:JSON.stringify(outputs[index])}}]}));
       }));
@@ -112,14 +117,29 @@ describe('question-private continuation',()=>{
       },j.store);
     };
     await expect(storyDiscussion(ctx,makeWorker())).rejects.toBeInstanceOf(CompanionWorkDeferred);
-    expect(b.reserve).toHaveBeenCalledTimes(2);expect(Object.keys(j.entries)).toHaveLength(2);
-    expect(await storyDiscussion(ctx,makeWorker())).toEqual(expected);
+    // A complete review needs a fresh response window after either observed
+    // draft. Do not wait until the repair has only eleven seconds remaining.
+    expect(b.reserve).toHaveBeenCalledTimes(1);expect(Object.keys(j.entries)).toHaveLength(1);
+    let actual:Awaited<ReturnType<typeof storyDiscussion>>|undefined;
+    for(let slice=0;slice<4 && actual===undefined;slice++){
+      try {actual=await storyDiscussion(ctx,makeWorker());}
+      catch(error){expect(error).toBeInstanceOf(CompanionWorkDeferred);}
+    }
+    expect(actual).toEqual(expected);
     expect(calls).toEqual(baseline.mock.calls);expect(b.reserve).toHaveBeenCalledTimes(4);
     expect(b.settle.mock.calls.every(c=>c[3]===null)).toBe(true);
   });
 });
 
 describe('deadline admission and billing',()=>{
+  it.each([11000,30000,59999])('defers with %i ms left before reserving another paid call',async(remaining)=>{
+    vi.useFakeTimers();const b=budget(),network=vi.fn<typeof fetch>().mockImplementation(async()=>receipt());
+    const gen=solGenerator('test',b,network);await gen('write','safe',100,'writer');
+    vi.advanceTimersByTime(90000-remaining);
+    await expect(gen('review','safe',100,'verifier')).rejects.toBeInstanceOf(CompanionWorkDeferred);
+    expect(network).toHaveBeenCalledOnce();expect(b.reserve).toHaveBeenCalledOnce();
+    expect(b.settle.mock.calls.every(c=>c[3]===null)).toBe(true);
+  });
   it('does not launch or reserve the observed last-second repair',async()=>{
     vi.useFakeTimers();const b=budget(),network=vi.fn<typeof fetch>().mockImplementation(async()=>receipt());
     const gen=solGenerator('test',b,network);await gen('write','safe',100,'writer');
@@ -130,7 +150,7 @@ describe('deadline admission and billing',()=>{
   });
   it('settles exactly zero when a budget queue consumes the remaining dispatch window',async()=>{
     vi.useFakeTimers();const b=budget(),network=vi.fn<typeof fetch>();
-    b.reserve.mockImplementation(async()=>{vi.advanceTimersByTime(82000);return true;});
+    b.reserve.mockImplementation(async()=>{vi.advanceTimersByTime(31000);return true;});
     await expect(solGenerator('test',b,network)('write','safe',100,'writer')).rejects.toBeInstanceOf(CompanionWorkDeferred);
     expect(network).not.toHaveBeenCalled();expect(b.settle).toHaveBeenCalledWith(expect.any(String),0,null,null);
   });
