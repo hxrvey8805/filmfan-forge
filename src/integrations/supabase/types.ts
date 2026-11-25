@@ -964,6 +964,45 @@ export type Database = {
         }
         Relationships: []
       }
+      companion_work_checkpoints: {
+        Row: {
+          expires_at: string
+          key: string
+          request_id: string
+          revision: string
+          value: Json
+        }
+        Insert: {
+          expires_at?: string
+          key: string
+          request_id: string
+          revision: string
+          value: Json
+        }
+        Update: {
+          expires_at?: string
+          key?: string
+          request_id?: string
+          revision?: string
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companion_work_checkpoints_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "companion_question_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companion_work_checkpoints_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "companion_spending_questions"
+            referencedColumns: ["request_id"]
+          },
+        ]
+      }
       season_summaries: {
         Row: {
           created_at: string
@@ -1465,6 +1504,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      load_companion_work: {
+        Args: {
+          p_attempt: string
+          p_request_id: string
+          p_revision: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       match_companion_chunks: {
         Args: {
           p_current_episode: number
@@ -1591,6 +1639,17 @@ export type Database = {
         Args: { p_call: string; p_hash: string; p_user: string }
         Returns: Json
       }
+      save_companion_work: {
+        Args: {
+          p_attempt: string
+          p_key: string
+          p_request_id: string
+          p_revision: string
+          p_user_id: string
+          p_value: Json
+        }
+        Returns: boolean
+      }
       set_ai_privacy_choice: {
         Args: { p_allowed: boolean; p_feature: string; p_version: string }
         Returns: Json
@@ -1641,6 +1700,16 @@ export type Database = {
           p_title: number
         }
         Returns: undefined
+      }
+      try_reserve_companion_question_call: {
+        Args: {
+          p_attempt: string
+          p_call_id: string
+          p_micro_usd: number
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: string
       }
     }
     Enums: {
