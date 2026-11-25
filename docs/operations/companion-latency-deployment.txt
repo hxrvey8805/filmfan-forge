@@ -1,0 +1,8 @@
+PR37 companion latency deployment receipt — 2026-11-25 UTC
+Source: merge 8c1aaf3a79fc803a0296fdd801e202f2e7acc281; tested head 0f380c0d1173d0811d6bb960ec83916dfa8057e1; shared tree 10f8a85c669bf6457611390b569501d3289d34cd (matches synced HEAD).
+Migration 20261125120000_companion_work_checkpoints.sql: applied once by owner via Cloud SQL editor (not by agent). Agent readback: RLS=true.
+Deployed: spoiler-free-companion only. Tool result: success. Submitted source SHA-256 8b68bc9ea12e3d86ee12d43e9ec73596d331f5806b3d19de0b2c86d8fff77438.
+Revision: watch-checks-2026-11-25-latency-v1 confirmed in source only; live revision/deployment ID not exposed by tools.
+Unsigned POST: 401 {"error":"Please log in."}
+Post-deploy gates: production enabled=true sales_enabled=false; budget limit 5000000, committed 1606972, halted_reason=transport_error (preserved); question 350000, user-month 3000000, no daily cap, call limit 64; 1 non-settled call (unknown hold preserved).
+Not done: no AI calls, secrets, policy/budget changes, publishing, other functions, purchases.
