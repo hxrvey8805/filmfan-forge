@@ -1,43 +1,68 @@
-PR #39 packs and random skins — preflight STOPPED
-Checked: 2026-11-26T08:54:45Z
-Source merge/HEAD: a3cfc8a24fb3735057fb050e1a2a38ed30d00c96
+PR #39 packs and random skins — deployed; operator validation pending
+Postflight checked: 2026-11-26T08:57:29Z
+Reviewed merge: a3cfc8a24fb3735057fb050e1a2a38ed30d00c96
 Tested head: 40e72e1b513e15b0945afda28889be53268f4228
-Both trees: 5e613ed5a9ea705f29de4f9394404eeb128e289e
-All six transitive open-pack local files match tested source byte-for-byte.
-Existing open-pack verify_jwt=false inspected, unchanged.
+Reviewed tree: 5e613ed5a9ea705f29de4f9394404eeb128e289e
+Deployment checkout: 56a005e2f16a19aadf0349a9a162f32fa86f535e
+All six transitive open-pack local files match tested source byte-for-byte;
+checkout differs from reviewed merge only in prior receipt/roadmap work.
+Existing open-pack verify_jwt=false preserved; no authentication config edits.
 
-Live preflight: 31 collection cards, 250 packs, 9 XP wallets, 0 unlocks,
-4 redemption events; matches owner-reported 00:40:15 UTC backup counts.
-Both timestamped migrations absent from schema_migrations; exact file hashes
-also absent from the Drizzle journal. Live v2 draw/random redemption absent.
-20261124180000 SHA256: ecd08b84d31d9505a4e396044821891cd0560dce97f4ec0f059f23cdf301498c
-20261124190000 SHA256: f8de735aeb2c6fd354c2a09ad6ee368c50a874c8e6a65235663e406c20c3d4fc
-Both reviewed migration bodies have no outer transaction statements.
+Operator confirmed the complete private backup is held locally and explicitly
+took responsibility for exact before/after comparison and rollback-only SQL.
+Neither requires sandbox access for this continuation.
+
+Both migrations absent at fresh preflight, then applied once in this order:
+1. 20261124180000_pack_catalogue_v2.sql
+   Applied path: drizzle/migrations/0010_pack_catalogue_v2.sql
+   SHA256: ecd08b84d31d9505a4e396044821891cd0560dce97f4ec0f059f23cdf301498c
+   Live journal id 11; created_at 1795683402833
+   Journal timestamp UTC: 2026-11-26T08:56:42.833Z
+2. 20261124190000_random_skin_redemption.sql
+   Applied path: drizzle/migrations/0011_random_skin_redemption.sql
+   SHA256: f8de735aeb2c6fd354c2a09ad6ee368c50a874c8e6a65235663e406c20c3d4fc
+   Live journal id 12; created_at 1795683418174
+   Journal timestamp UTC: 2026-11-26T08:56:58.174Z
+Tool reported both successful. Applied files match reviewed SQL SHA256 exactly.
+Live function definitions confirm v2 support, v1 acceptance and skin:random.
+Live collection constraint accepts established/discovery/featured/star/icon.
+
+Deployment tool reported success for ONLY open-pack.
+Submitted source SHA256 (files and settings):
+7ec48d079c76194962340b7592d52dd4416ce9188d9f6b817e25b2fa5c1cf530
+Deployment ID, numeric active version and exact deployment time were not
+exposed by the tool. Source fingerprint is submitted-source evidence, not
+independent live source readback. Live serving verified by unsigned request:
+POST /open-pack with explicitly empty Authorization and body {} returned
+401 {"error":"Your pack is safe. Please try revealing it again shortly."}
+Tool confirms no preview-user token was injected.
+
+Concrete live RPC permissions (all security-definer; PUBLIC has no EXECUTE):
+store_cinegeek_pack_pick: anon=false, authenticated=false, service_role=true
+claim_cinegeek_pack: anon=false, authenticated=false, service_role=true
+store_cinegeek_reveal: anon=false, authenticated=false, service_role=true
+decide_cinegeek_pack: anon=false, authenticated=true, service_role=false
+redeem_cinegeek_xp: anon=false, authenticated=true, service_role=false
+Postgres owner retains EXECUTE on all five functions.
+RLS true on collection, packs, XP wallets, XP events and unlocks.
+XP wallets/events/unlocks direct SELECT false for all three API roles;
+collection/packs SELECT grants true for all three, governed by existing RLS.
+
+Postflight counts still 31 cards, 250 packs, 9 wallets, 0 unlocks,
+4 redemption events. Counts are not an exact record comparison.
 Production enabled=true, sales_enabled=false.
 AI enabled=true; global cap 5000000 micro-USD, committed 1955001,
 halt unknown_cost; question cap 350000; account-month cap 3000000;
-daily cap NULL; provider-call limit 64.
-Unknown calls: 2, reserved total 275217 micro-USD, actual cost NULL.
-These are observations only; no companion deployment, halt or hold changed.
+daily cap NULL; provider-call limit 64, unchanged from preflight.
+Unknown calls still 2, reserved total 275217 micro-USD, actual cost NULL.
 
-Blockers discovered before any migration/deployment:
-1. Owner reports a complete private backup saved at 00:40:15 UTC, but that
-   backup is not accessible in this sandbox's project or mounted documents.
-   Only the older PR32 private backup was located. Matching aggregate counts
-   do not establish exact row preservation against the release backup.
-2. packs-skin-live-checks.sql creates a temporary PL/pgSQL function, inserts
-   disposable auth users and changes local roles before exception rollback.
-   Available read_query supports SELECT only; run_sql supports data changes
-   only; sandbox psql is restricted and cannot execute database functions.
-   No supported privileged execution path for this exact script was found.
-   The check script was not submitted to the migration runner or rewritten.
-   Live-check SHA256: 4f05f3b5a0518062204c480692997b0e1163708012d7d718b1fc7d0a577cd938
-
-Result: neither migration applied; open-pack not deployed; no unsigned POST
-post-deployment check, new-grant verification or before/after row comparison.
-Deployment ID/version/time: not applicable (no deployment attempted).
-Implementation, secrets, policies, payment settings, AI caps, other functions,
-frontend publication and existing user XP/packs remain untouched.
-No purchases, AI calls, or native/TestFlight operations performed.
-Continuation requires accessible private backup evidence and a supported
-execution path or owner-run exact rollback-only validation.
+PENDING RELEASE OPERATOR:
+- Compare all archived private records and old function definitions as needed.
+- Execute exact docs/operations/packs-skin-live-checks.sql in Cloud SQL editor.
+  SHA256: 4f05f3b5a0518062204c480692997b0e1163708012d7d718b1fc7d0a577cd938
+- Build39/TestFlight handled separately; no distribution validation claimed.
+No rollback fixtures or normal user's XP/packs consumed by this session.
+No tested implementation rewrites, unrelated functions, companion deployment,
+halt/hold changes, secrets, policy rewrites, AI calls, purchases, payment/cap
+changes or frontend publication. Only approved migration grants were applied.
+Migration-tool journal/snapshots generated; no manual generated-type edits.

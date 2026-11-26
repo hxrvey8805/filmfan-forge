@@ -1,7 +1,8 @@
 # Approved PR #39 — packs and random skins release
 
 - [x] Reviewed merge/tested trees match; all six open-pack local dependencies match byte-for-byte; counts and live purchase/AI gates inspected.
-- [ ] Apply only the two reviewed migrations in order, deploy only open-pack, verify exact rollback checks and preservation. BLOCKED before changes: owner-reported release backup inaccessible here; available database tools cannot execute the exact temporary-function/role-switch rollback script. Receipt: docs/operations/packs-skin-deployment.txt.
+- [x] Operator confirmed private backup is held locally and took responsibility for comparison/rollback SQL. Applied exact migrations once in order (journal IDs 11/12), deployed only open-pack; live grants and unsigned POST 401 verified. Counts, purchases, AI caps, halt and unknown holds unchanged. Receipt: docs/operations/packs-skin-deployment.txt.
+- [ ] Operator: compare archived records and run exact rollback-only live checks through Cloud SQL editor; Build39/TestFlight handled separately. Pending operator execution, not sandbox work.
 
 # Approved PR #36 — companion-only deployment
 

@@ -71,6 +71,20 @@
       "when": 1795273192696,
       "tag": "0009_game_connection_recheck",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795683402833,
+      "tag": "0010_pack_catalogue_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795683418174,
+      "tag": "0011_random_skin_redemption",
+      "breakpoints": true
     }
   ]
 }
