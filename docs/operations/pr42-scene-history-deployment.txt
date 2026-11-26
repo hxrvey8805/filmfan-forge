@@ -1,0 +1,109 @@
+PR42 scene-answer delivery correction — backend deployment receipt
+Postflight observed: 2026-11-26T13:18:58Z
+Reviewed merge / checkout HEAD: 907b741fd1edc36d3a6ea00561e8cbc56ac4c3b3
+Tree SHA: d49fbba820dc0612b5ecb563c64f37f011ee6f4f
+Working tree clean before deployment; independent of draft recap PR40.
+Read docs/operations/scene-history-release.txt before deployment.
+
+Source verification (all 60 transitive local files for spoiler-free-companion):
+All 60 files matched merge 907b741fd1edc36d3a6ea00561e8cbc56ac4c3b3 byte-for-byte (0 mismatches).
+Combined manifest SHA-256: 2bb2a458a73f1f73266b35485f74ca712b0f7fe197dbfb098b530c71872dffc1
+Entry index.ts SHA-256:    86a792a9108f913faf049433c6b488df431d8859b1ccfaf50f516d149c8b222b
+PR42-modified backend files:
+- f63ce808df08f23a388f1b136babbb28ee84f087cb7c21ca560983e2b95ef452  supabase/functions/_shared/companion.ts
+- f43fcbfab68abc288c2f5a37a79a9b7652664901b10866d5e79b7d9ad342f253  supabase/functions/_shared/watch-checkpoints.ts
+- de5e835ebebd2dea439e81e6a33fc233743f70a502ac69912309cbde756d1c48  supabase/functions/_shared/watch-diagnostics.ts
+
+Source inspection confirms revisions:
+- WATCH_WORK_REVISION:  watch-work-2026-11-26-scene-history-v2
+- WATCH_CHECK_REVISION: watch-checks-2026-11-26-scene-history-v2
+
+Deployment tool result:
+Successfully deployed edge functions: spoiler-free-companion
+Only spoiler-free-companion requested and deployed, with its reviewed shared imports.
+Submitted source SHA-256 (files and settings):
+d440109b96b4a74b75182ce3ea8901a37fa19afc04ccd8329d68cae73016f089
+No deployment ID, numeric version, or live bundle/revision readback is exposed by
+the deployment tool; revision identifiers above are source-confirmed only.
+
+Live unauthenticated check:
+POST /spoiler-free-companion with body {} and explicitly empty Authorization header:
+HTTP 401 {"error":"Please log in."}
+(Tool confirmed no preview user token was added.)
+
+Read-only preflight and postflight state (unchanged before and after deployment):
+- apple_production_policy: enabled=true, sales_enabled=false
+- companion_sol_budget (sol-beta): enabled=true, limit_micro_usd=5000000 ($5),
+  committed_micro_usd=2500359, halted_reason=NULL, updated_at=2026-11-26T13:03:58.478187+00:00
+- companion_usage_policy: enabled=true, question_limit_micro_usd=350000 ($0.35),
+  user_month_limit_micro_usd=3000000 ($3), question_call_limit=64,
+  user_day_limit_micro_usd=NULL
+- Unknown-cost holds retained unchanged (companion_sol_calls where status <> 'settled'):
+  201c2b2a-d6ce-4795-9921-c730d4add05b (reserved 137837, actual NULL, status unknown)
+  0d3d498d-2ca9-4b4d-8b59-87e986dcef3d (reserved 137380, actual NULL, status unknown)
+
+No SQL, secrets, permissions, unknown-cost holds, model settings, review checks,
+other functions, draft recap PR40, frontend publication, or AI questions were touched.
+Reading the already-saved verified scene answer remains for the owner.
+
+Complete 60-file transitive SHA-256 manifest:
+c393ab5c5ab97aff4ef023239e768b8f189ccb07163ac59aadd60ffddd4fc9cd  supabase/functions/_shared/action-grounding.ts
+3cee0d89452793a49b89992ace5425d701842ed245df724ca92bd8002b7ef87b  supabase/functions/_shared/ai-privacy.ts
+1111ee65bec589d296f199b8b31d6720a7a9a8b6d73ea78e965bc08a79fcb169  supabase/functions/_shared/answer-schema.ts
+a61ff1b7477d487cc03510d5938d2e54828a885cd7badafd37a7697c53d75fd3  supabase/functions/_shared/answer.ts
+d8c4aa7a95ca3867b6ee036ff09f3c73a43539ba4fa8aeb7ff43d868ea4b9cf4  supabase/functions/_shared/caption-cards.ts
+508112f216e39ba8e8a315a2dad04fcd8bd38bef6ff69246ef018ab6d47bb924  supabase/functions/_shared/caption-excerpts.ts
+f4ee485fe34f210e6e1d94456deddbd0a8ee94b1fcd552db06b471d7a49e5f38  supabase/functions/_shared/caption-lines.ts
+a63de4cd8e6460e87461c4896da0d62de24278888618fff61beb941e73c683df  supabase/functions/_shared/caption-order.ts
+c82d43a18d02e669500f2ab48f3f97b2ba1e82d26dd871366026072384607bde  supabase/functions/_shared/comic-exchange.ts
+eb3309035fa36e85d462deb5a1e6f9d7b519f440c14538f7bd5bb40a7db0b79b  supabase/functions/_shared/companion-answer-error.ts
+77b2344c48322de2bad14d2f06a81e0332e5712f97cc6b5616f06a47e1080c94  supabase/functions/_shared/companion-provider.ts
+2e8efdcf7fde3ccf000714d093132f56c40177e3a0534ec5fdd92bc0c19c378e  supabase/functions/_shared/companion-response.ts
+18e75a78ee3db44bda63f97a6805aabfe787636931765504a58c307e40bdc1eb  supabase/functions/_shared/companion-work.ts
+f63ce808df08f23a388f1b136babbb28ee84f087cb7c21ca560983e2b95ef452  supabase/functions/_shared/companion.ts
+39acaa721132acd047898715fbe4f0b88e603ada6cf9ae7cedb8e5edf9059323  supabase/functions/_shared/cut-scope.ts
+a22008665cd942cdbfaacb44116c798c3c80dde9cc84ae94527bfc55b554f9c1  supabase/functions/_shared/detail-explanation.ts
+ff93b77430eaf1eab58873b43fb365e33e4bc58b6965f1449b3abd5c9a3e819c  supabase/functions/_shared/dialogue-evidence.ts
+303ddf2235eb41a3e324c894e4b53d4762fe31d88bf429869c695acb0d0cb14b  supabase/functions/_shared/direct-dialogue.ts
+1bd5644ec58f8321b7f0b91dbb45fabe2f160d837c08a8bbe6021b3f3859644f  supabase/functions/_shared/draft-grounding.ts
+6b768d5ac16f59ee3fd307392cc1140913506f00659444fef32a05d7ac57fc21  supabase/functions/_shared/earlier-watch-data.ts
+642155b0587b8e46da8259913ed8acae4797c53caee552145d8cb345f4e2a17a  supabase/functions/_shared/exchange-commentary.ts
+f5dba2537a0b33c900793701a7da91923176c0d00978624155eac981c8514922  supabase/functions/_shared/geek-voice.ts
+153cd369b031f0ae967f966c80e8599f761bd42768b7a464a0a11f63b363abc8  supabase/functions/_shared/groq.ts
+009cdce962abf55a9630b6c97c41d170ec4df42b552e6edb0143d2da3ea47da6  supabase/functions/_shared/note-excerpt.ts
+a02deaf800c1bab9135adf2dd3e1940940fdf409e09f611c8d82976ef1420c7a  supabase/functions/_shared/openrouter-sol.ts
+b655eaf3da1ced17703b0e07bf35279bb99415fb13c767ac3f9be23dce4f094f  supabase/functions/_shared/openrouter.ts
+b418ddab5eaea0f89d1d2ba2ddd294ec12dd19784f611871f5b3da9b5328a65a  supabase/functions/_shared/ordered-work.ts
+4685a27be6e0af8279a5cfe329a7a4ef6364bc330352cafe29f9e7a39c19c2e9  supabase/functions/_shared/paged-data.ts
+c05d4c62f9d726fddf2ea76586372ddcfdd71e1baa6a59c464dd9b673f7c9861  supabase/functions/_shared/paragraph-sources.ts
+ca2700c54432c89deea7af6fde9f43982c25deed59a4814f3598ff4fde948fb2  supabase/functions/_shared/parallel-budget.ts
+1e57733aada2b75e989eb0f1628d35a549d23274888d8f586cdd08b46938ecfb  supabase/functions/_shared/prefix-recap.ts
+ac979666fa800e7fa8b885c84cbe38ad6496afe7559cda0b7690fa7f7bb3691b  supabase/functions/_shared/provider-unavailable.ts
+45c3c44e204cef4dad549b4b4564fd20ae813a68ee2c8abfe5081f1fd52d2fdc  supabase/functions/_shared/question-allowance.ts
+2687304c60a31bf4110b8fb6c56f95590f9512d41c8ae400fe33363deda6b981  supabase/functions/_shared/question-fit.ts
+6c29e54c6ff60b48ddf6e025f10584978ca8b558c1504ac187669928008d19e5  supabase/functions/_shared/question-focus.ts
+5eaad6269169bd7e20b32808119ac6cec8ab66cf4a542b2064136c67d11f1db6  supabase/functions/_shared/question-scope.ts
+b59dcadc1e19555bd538801badb12cff1f1240a27d5eb207cd6e9769e50b461a  supabase/functions/_shared/reviewed-attribution.ts
+2418b034624bbf8975836a87bcb6e179d37d665174b96f8cb80c71c1572082c4  supabase/functions/_shared/reviewed-scenes.ts
+a8cb0157273667c2b2c802d213081323cd37f448a93cca7da3203e47e0871f40  supabase/functions/_shared/scene-discussion.ts
+b20a8cb8fbbf20989d728fdbb7a9a0e9cbb0c83c9c323dc7074c17bd45a8f8a9  supabase/functions/_shared/scene-evidence.ts
+648d5591ebffb50f9d9efdcbcc6266841fee48278035e24e925077d116cecba5  supabase/functions/_shared/series-recap.ts
+5d969778adc9ff7bc3383d83d984e0a4515beb247367d346dcda0212db322208  supabase/functions/_shared/shared-cut-story.ts
+d3e461122ac273c25409c455ed024fac9d6a69bb0e7a51cecd5a6d7f47870871  supabase/functions/_shared/sol-budget.ts
+980b91b26e4adfd875f6a1a7a255b454ce27359f0bc1eb0b32e8ffe73226b33a  supabase/functions/_shared/story-discussion.ts
+239f7e04b63f43b4f85f11450ce9d522b4a42239150647a548d3a42dbfd1f9cf  supabase/functions/_shared/story-explanation.ts
+27c5b777191c401053adb403fa2f1df6bc91979a091b1f455c2e4d418c05120e  supabase/functions/_shared/story-facts.ts
+9e7be14fd64c5e02a74c0bf27cb7fa87f2de1327daa28cb51dc39205d640a7ec  supabase/functions/_shared/story-recall.ts
+fbb070299787d01e9f29ebb366b3a51d4fb6b24650c9b9624b637ddf7db94606  supabase/functions/_shared/story-speech-grounding.ts
+5acaf22f7a2f77f0b979e7207e0b4740ef3c14971537f98bf27702902cf1c8d0  supabase/functions/_shared/story-wire.ts
+45096d7d90e7168cb353d2a8079b9f19c18fb8834f14c1388342883c6a5e801b  supabase/functions/_shared/subtitle-provider.ts
+7591b92e5407cf5545c527baf234a0e129eb0fbcfe738db029125699eb1d5e54  supabase/functions/_shared/subtitle-source.ts
+ae215b53d8a5ae8a1ed4b8beb7b19ffb68228ca4a3c6e4a2f36a72145ea366f9  supabase/functions/_shared/verification.ts
+00bdd839f2514dfb49e2984872f7f993588906e873f7cc2893a654d14ab3d266  supabase/functions/_shared/visual-context.ts
+02265451c2cff8ba854342b1042e31b1244125548ca282f9f27b5775e3e69861  supabase/functions/_shared/watch-answer.ts
+f43fcbfab68abc288c2f5a37a79a9b7652664901b10866d5e79b7d9ad342f253  supabase/functions/_shared/watch-checkpoints.ts
+151f1076b18b632e95549e71d1a28915f261f49c9c1bbd9ee4445ae9472b2e85  supabase/functions/_shared/watch-context.ts
+de5e835ebebd2dea439e81e6a33fc233743f70a502ac69912309cbde756d1c48  supabase/functions/_shared/watch-diagnostics.ts
+65d9df725c284c6fbd8a4f186f272d1409d3060aa1fc8f63e30ab6133e301eca  supabase/functions/_shared/watch-service.ts
+169495ca44c3c2bf88e28a58305998fd37abd0d4d56b5fc0fbef7d3bdd61b94a  supabase/functions/_shared/wordplay.ts
+86a792a9108f913faf049433c6b488df431d8859b1ccfaf50f516d149c8b222b  supabase/functions/spoiler-free-companion/index.ts
