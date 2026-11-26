@@ -41,6 +41,16 @@ describe('recap attribution repair',()=>{
       .mockResolvedValueOnce({points:[{index:1,...replacement}]}).mockResolvedValueOnce(last);
     expect(await storyDiscussion(ctx,gen)).toBeNull();
   });
+  it('repairs an unsupported physical action without rewriting other verified sections',async()=>{
+    const first={...review,checks:[review.checks[0],{index:1,supported:false,issue:'action',attribution:'none',support:[]}]};
+    const gen=vi.fn().mockResolvedValueOnce({points:[good,{...bad,text:'The travellers board the ferry.'}]}).mockResolvedValueOnce(first)
+      .mockResolvedValueOnce({points:[{index:1,...replacement}]}).mockResolvedValueOnce(fixedReview);
+    expect((await storyDiscussion(ctx,gen))?.answer).toBe(good.text+'\n\n'+replacement.text);
+    const repair=JSON.parse(gen.mock.calls[2][1]);
+    expect(repair.recapRepair.replace).toEqual([{index:1,issues:['action'],sourceIds:['S2']}]);
+    expect(JSON.stringify(gen.mock.calls[2])).not.toContain('The travellers board');
+    expect(JSON.parse(gen.mock.calls[3][1]).points).toEqual([{text:good.text},{text:replacement.text}]);
+  });
   it.each([
     [],[{index:0,...replacement}],[{index:2,...replacement}],
     [{index:1,...replacement},{index:1,...replacement}],[{index:'1',...replacement}],
@@ -104,5 +114,22 @@ describe('source-backed grammatical forms of a named search service',()=>{
   it('does not apply verb stemming to arbitrary proper names',()=>{
     expect(captionIdentityWords('Mira speaks.').has('miring')).toBe(false);
     expect(captionIdentityWords('Bing searches.').has('binging')).toBe(false);
+  });
+});
+
+describe('explicit country names and their conventional initialism',()=>{
+  it.each([
+    ['The United States Ambassador is being introduced.','The new U.S. ambassador is introduced.'],
+    ['The U.S. Ambassador is being introduced.','The new United States ambassador is introduced.'],
+  ])('accepts the same country while retaining full independent review',async(source,text)=>{
+    const gen=vi.fn().mockResolvedValueOnce({points:[{text,support:proof('S1')}]})
+      .mockResolvedValueOnce({boundarySafe:true,fit:'direct',checks:[accepted(0,proof('S1'))]});
+    expect((await storyDiscussion({...ctx,sources:[{...ctx.sources[0],text:source}]},gen))?.answer).toBe(text);
+    expect(gen).toHaveBeenCalledTimes(2);
+  });
+  it.each(['The ambassador met us.','The British ambassador is being introduced.'])('does not infer a country from %s',async source=>{
+    const gen=vi.fn().mockResolvedValueOnce({points:[{text:'The new U.S. ambassador is introduced.',support:proof('S1')}]})
+      .mockResolvedValueOnce({boundarySafe:true,fit:'direct',checks:[accepted(0,proof('S1'))]}).mockResolvedValueOnce({points:[]});
+    expect(await storyDiscussion({...ctx,sources:[{...ctx.sources[0],text:source}]},gen)).toBeNull();
   });
 });

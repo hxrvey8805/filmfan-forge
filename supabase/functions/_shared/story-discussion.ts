@@ -121,7 +121,7 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     // A recap can keep individually verified paragraphs only when the whole
     // prior draft passed the boundary/fit checks. The final FULL answer still
     // needs fresh independent review; kept prose is never source evidence.
-    const instruction = '\n' + relevanceRules + (attempt ? '\nRebuild the answer from the sources, preserving the useful explanation. ' + [...new Set(feedback)].map(i => repair[i]).join(' ') : '');
+    const instruction = '\n' + relevanceRules + (attempt ? (recapRepair?'\nRepair the specified sections from the sources, preserving the useful explanation. ':'\nRebuild the answer from the sources, preserving the useful explanation. ') + [...new Set(feedback)].map(i => repair[i]).join(' ') : '');
     const packet = {...ctx,...(attributionWarnings.length ? {attributionWarnings} : {}),
       ...(actionWarnings.length?{actionWarnings:[...new Set(actionWarnings)]}:{}),
       ...(contextCandidates.length?{contextCandidates}: {})};
@@ -233,7 +233,7 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     };}
     emit({stage:'review_rejected',attempt:attempt+1,issues:[...new Set(feedback)]});
     if(attempt===0 && recap && check.boundarySafe && check.fit!=='reject' && kept.length && failed.size &&
-      feedback.every(issue=>issue==='identity'||issue==='speaker')) {
+      feedback.every(issue=>['identity','speaker','action'].includes(issue))) {
       // Failed paragraph text is omitted entirely. Source IDs point only into
       // the unchanged permitted packet, not into the model's remembered plot.
       const checked=new Map(kept.map((p,i)=>[p.index,verified[i]]));

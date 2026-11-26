@@ -10,9 +10,12 @@ match only that explicitly named service; this is not general fuzzy name matchin
 Regression tests also reproduce chronology prefixes such as "Meanwhile Mira"
 being mistaken for the person's complete name. The actual name still needs its
 own original receipt and positive independent attribution review.
+The full-episode test additionally reproduced rejection of "U.S." despite an
+explicit "United States" receipt. Their conventional equivalence is recognized;
+lowercase "us" or a different country's ambassador does not establish it.
 
 If a recap passes its overall boundary/relevance review but a subset of paragraphs
-fails only identity/speaker checks, the second writer replaces only those sections.
+fails only identity/speaker/action checks, the second writer replaces those sections.
 Previously verified paragraphs retain their exact text. The writer receives
 verified text, failed paragraph indexes, fixed issue codes and permitted source
 IDs. Rejected prose and reviewer explanations are never passed into the retry.
@@ -34,7 +37,7 @@ Quality and controls
   changed parsing. Existing valid chapter receipts retain their original checks.
 
 Verification
-- 1,533 automated checks passed across 98 files, including six unchanged-input
+- 1,538 automated checks passed across 98 files, including six unchanged-input
   parity fixtures, recap ranges, rewind, episode switches, independent final
   review rejection, unsupported identities and invalid replacement payloads.
 - Deno typecheck, scoped ESLint and git diff --check passed.
@@ -47,10 +50,35 @@ Verification
   while retaining two previously verified paragraphs. A fresh repair and complete
   independent review passed for $0.015044. This is deliberately injected test
   input, not a historical production draft or independent end-to-end run.
+- Fresh rewind test at S2E7 06:00, range 04:00–06:00: first-attempt pass, two
+  calls, $0.017902, all cited lines inside that range (latest evidence 05:47.065).
+  The result did not reuse or reveal the later 07:00 recap.
 - Private drafts, captions and billing receipts remain outside the repository.
 
+Full-episode result — RELEASE GATE FAILED
+The private S2E1 full-episode test uses 29 permitted sources in two complete
+source groups. The first group passed. The second group still failed after its
+ordinary two attempts, including with targeted repair and country normalization.
+In the final captured run, the first review accepted seven paragraphs and local
+receipt identity checking rejected one. The repair replaced only that paragraph.
+Fresh full review then rejected paragraphs 2 and 8 for speaker and identity.
+Both had passed the previous review. Their earlier verdicts were not trusted or
+used to override the final rejection; no unchecked or partial recap was returned.
+This is a remaining attribution consistency problem, not a missing source
+packet, exhausted private test cap or transport/deadline failure in this run.
+The original private drafts and exact review/source packets are retained for
+diagnosis. Do not make further random retries or weaken checks to force a pass.
+
+Status: draft PR only; do not deploy this candidate as a completed recap fix.
+The short-range and deterministic corrections pass, but the full-episode release
+gate remains open. Live production has not been changed by this candidate.
+Read-only live control export at 2026-11-26T10:26:11Z: sales_enabled=false;
+global committed 2310171 of 5000000 microUSD; halt null; no active provider calls;
+question 350000, account/month 3000000; both earlier unknown-cost holds unchanged.
+
 Deployment scope
-Deploy only spoiler-free-companion from the reviewed merged head. Verify the
+After the remaining release gate passes, deploy only spoiler-free-companion from
+the reviewed merged head. Verify the
 complete deployed function/shared-source manifest matches that head and runtime
 revision watch-checks-2026-11-26-recap-v1 appears in the live test logs.
 No SQL, halt reset, secret change, website publication or new iOS build is needed.

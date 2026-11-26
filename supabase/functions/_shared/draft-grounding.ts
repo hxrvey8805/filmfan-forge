@@ -25,6 +25,11 @@ export function captionIdentityWords(text:string) {
   // recognize its grammatical forms when the cited source names Google;
   // do not stem arbitrary character names or infer a service from "search".
   if(result.has('google'))for(const form of ['googles','googled','googling'])result.add(form);
+  // An explicitly named country can use its conventional dotted initialism.
+  // Lowercase "us" or a different country's ambassador is not sufficient.
+  if(/\bunited states\b/i.test(text)||/\bU\.S\.(?:A\.)?/.test(text)) {
+    for(const form of ['u','s','a','us','usa','united','states'])result.add(form);
+  }
   // A hyphenated acronym+noun descriptor can be the same phrase as the
   // spaced plural in a caption ("TV-show" / "TV shows"). This does not
   // fuzzy-match personal names or supply an acronym absent from the source.
