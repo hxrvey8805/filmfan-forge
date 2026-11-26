@@ -4,6 +4,9 @@ import { previewActorConnect } from "./actor-connect";
 import {gamePath,verifyGamePath} from "../../supabase/functions/_shared/game-verification";
 import { SHELF_CONFLICTS, type LibraryShelfId } from '../lib/library-shelves';
 let samplePlan="free", sampleReward="xp", previewSpinEarned=false, previewSpinUsed=false;
+let previewXp=new URLSearchParams(window.location.search).get('sampleXp')==='2000'?2000:750;
+const previewLifetimeXp=Math.max(previewXp,1250);
+const previewRedemptions=new Map<string,Record<string,unknown>>();
 const previewSkins=new Set(['jedi']);
 let previewSpinPrize:Record<string,unknown>|null=null;
 const previewGames=new Map<string,{start:number;target:number;expires:number;won:boolean}>();
@@ -61,8 +64,8 @@ const previewCollection=[
 ].slice(0,new URLSearchParams(window.location.search).get('sampleCollection')==='full'?6:3)
   .map((p,i)=>({...p,id:`preview-card-${i}`,user_id:user.id,person_type:'actor',card_rarity:null}));
 const previewPackPeople:Record<string,Row>={
-  'preview-actor':{id:99,name:'Emma Stone',profile_path:'/ak2Y9wOI3wi2pNQU6OWSvVvWPj5.jpg',rarity:'star'},
-  'preview-director':{id:100,name:'Christopher Nolan',profile_path:null,rarity:'icon'},
+  'preview-actor':{id:99,name:'Emma Stone',profile_path:'/ak2Y9wOI3wi2pNQU6OWSvVvWPj5.jpg',rarity:'star',catalogue_version:'cinegeek-cast-2'},
+  'preview-director':{id:100,name:'Christopher Nolan',profile_path:null,rarity:'icon',catalogue_version:'cinegeek-cast-2'},
 };
 const privacyChoices: Record<string,boolean>={};
 const tables: Record<string, Row[]> = {
@@ -196,7 +199,18 @@ export const supabase = {
     const plan=samplePlan;
     if(name==='get_cinegeek_access')return {data:{userId:user.id,plan,purchasesEnabled:false,smartLists:plan!=='free',focusGeek:true,
       allSkins:plan==='annual',unlockedSkins:plan==='monthly'?[...previewSkins]:[],badges:[],gamesRemaining:plan==='free'?1:null,
-      xp:750,lifetimeXp:1250,xpToday:75,xpDailyCap:225,spinAvailable:plan!=='free'&&previewSpinEarned&&!previewSpinUsed,expiresAt:plan==='free'?null:'2027-01-01T00:00:00Z'},error:null};
+      xp:previewXp,lifetimeXp:previewLifetimeXp,xpToday:75,xpDailyCap:225,spinAvailable:plan!=='free'&&previewSpinEarned&&!previewSpinUsed,expiresAt:plan==='free'?null:'2027-01-01T00:00:00Z'},error:null};
+    if(name==='redeem_cinegeek_xp'){
+      const request=String(args.p_request),item=String(args.p_item),existing=previewRedemptions.get(request);
+      if(existing)return existing.item===item?{data:existing,error:null}:unavailable();
+      if(plan!=='monthly'||item!=='skin:random')return {data:null,error:{message:'Monthly Pro random skins only',code:'P0001'}};
+      const skins=['breaking','stranger','trek','matrix','jurassic','jedi','chucky','karate','mha','peaky','spider','hogwarts','thrones','pulp','social','squid','dune','scar','gladiator','wolf'];
+      const skin=skins.find(key=>!previewSkins.has(key));
+      if(!skin||previewXp<1500)return {data:null,error:{message:skin?'Not enough XP':'Every skin is already unlocked',code:'P0001'}};
+      previewXp-=1500;previewSkins.add(skin);
+      const receipt={item,skin,packId:null,xpBalance:previewXp};previewRedemptions.set(request,receipt);
+      return {data:receipt,error:null};
+    }
     if(name==='get_ai_privacy_choices')return {data:{...privacyChoices},error:null};
     if(name==='set_ai_privacy_choice'){privacyChoices[String(args.p_feature)]=args.p_allowed===true;return {data:{...privacyChoices},error:null};}
     if(name==='get_companion_allowance')return {data:{mode:'monthly',plan,included:plan==='free'?0:15,limit:plan==='free'?0:15,purchased:0,renewsAt:plan==='free'?null:'2026-12-13T00:00:00Z'},error:null};

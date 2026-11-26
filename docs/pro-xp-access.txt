@@ -11,7 +11,7 @@ Free: manual lists, default animated Geek, one Actor Connect start per UTC day,
 collectible packs with XP, zero included questions. Verified purchased questions
 remain usable without Pro and do not unlock Pro features.
 Monthly: Smart Lists, unlimited games, one daily spin after the first verified win,
-15 successful questions per subscription month, skins unlockable for 1,500 XP.
+15 successful questions per subscription month, random unowned skins unlockable for 1,500 XP. Specific-skin purchases are retired by the pending random-skin migration (see random-skin-rollout.txt).
 Annual: same monthly question allowance, all existing/new skins while subscribed,
 Annual film buff badge, other Monthly benefits. No automatic complimentary grants.
 Expiry/revocation returns to Free without deleting saved lists, selected outfit or
@@ -89,3 +89,47 @@ Final local validation
 Deno checks for game-result/open-pack/actor-connect/interpret-smart-list, and the
 native Vite build passed. git diff --check passed. The build retains the existing
 large-chunk advisory; no build errors. No live AI calls or deployed changes.
+
+15 November 2026 — Free chat composer lock (private iPhone build 22)
+- Free with zero purchased questions has a disabled textarea, Send and question
+  shortcuts, in both the compact room dock and expanded chat. A lock and short
+  explanation replace the invitation to type; View plans opens Profile/Your Plan.
+- A known Free plan also locks the composer if the server is still reporting its
+  legacy beta allowance. The daily beta display is not a Free-plan entitlement.
+- A confirmed purchased question balance allows Free users to ask, as agreed.
+  Monthly and Annual retain access while they have included or purchased questions.
+  Unavailable balances and exhausted allowances lock the composer; an existing
+  draft survives an entitlement refresh but cannot be sent while locked.
+- Focus controls, saved history, timestamps and spoiler filtering are unchanged.
+  Real purchases remain disabled; this is an interface change, not a new grant,
+  production accounting activation or modification of the companion backend.
+- 40 focused tests passed across allowance UI, companion UI, Focus and tier UI.
+  Frontend TypeScript, scoped ESLint and the native web build passed.
+  Logs: /tmp/cinegeek-free-chat-tests.log and /tmp/cinegeek-free-chat-web-build.log.
+- Signed build 22 is installed on Harvey's iPhone. The existing Family Controls
+  capability and corrected group picker are retained. No public deployment.
+
+16 November 2026 — Free wardrobe visibility (private build 23)
+- The shared GeekWardrobe shows only Arcade for Free and unconfirmed access.
+  This applies to Dress your geek in Profile and the compact Outfit picker in
+  title/Screening Room setup. Paid skin thumbnails and unlock actions are hidden.
+- The existing shared outfit hook continues to use Arcade on Home, Play and
+  Focus for Free, even if a previously chosen Pro skin is stored on the device.
+  Saved preferences are retained for a later valid Pro subscription.
+- Monthly keeps XP unlocks and owned outfits; Annual keeps the full wardrobe.
+  Question packs do not grant access to paid skins. No backend grants changed.
+- 34 tests passed across tier access, wardrobes, companion UI and question access.
+  Frontend TypeScript, scoped ESLint and diff checks passed.
+  Test log: /tmp/cinegeek-free-wardrobe-tests.log.
+- Native web and signed iPhone builds passed. Build 23 is at
+  .focus-build/Build/Products/Debug-iphoneos/App.app. The first installation
+  timed out when Harvey disconnected. After the owner reconnected and unlocked
+  the phone on 16 November, devicectl confirmed successful installation of
+  app.cinegeek.mobile (database sequence 6660). No public deployment.
+
+16 November owner access note
+Live inspection found the full tier RPCs/tables still absent. The temporary
+owner-only Monthly bridge is documented in operations/private-monthly-beta.txt.
+Before deploying the staged subscription migrations, retire that exact bridge
+with operations/retire-private-monthly-beta.sql in the same transaction. This
+private access is not a verified purchase and must never be written as one.

@@ -1,0 +1,9 @@
+Packs and random skins release — 26 November 2026
+
+Owner authorised deployment with existing Lovable credits and a TestFlight update; real purchases remain disabled. Source staged on main 4357228245df4f8323cd98a4322395774331ea79.
+
+The two migration files contain the reviewed SQL bodies; outer BEGIN/COMMIT removed because the Lovable migration runner supplies the transaction. Keep migration order: 20261124180000_pack_catalogue_v2 then 20261124190000_random_skin_redemption. Do not reapply when already active. Retain tierRpc for the existing authenticated XP transport.
+
+A private backup contains existing collections, packs, wallets, unlocks, redemption receipts and both old function definitions. Before/after compare existing records; preserve them exactly. Use docs/operations/packs-skin-live-checks.sql for disposable rollback-only live database validation, then verify open-pack uses v2 and accepts stored v1 draws. No real user XP should be spent for verification.
+
+Deploy only open-pack with its shared imports. Do not deploy the pending companion correction, clear its spending halt, change caps, publish the public frontend, activate purchases or touch secrets as part of this request. Client-only close controls accompany the pack and skin UI.

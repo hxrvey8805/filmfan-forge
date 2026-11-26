@@ -1,9 +1,10 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useState } from "react";
-import { ArrowUpRight, Bookmark, CircleCheck, Heart, ListVideo, Play, MessageSquare, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Bookmark, CircleCheck, Heart, ListVideo, Play, MessageSquare, Trash2 } from "lucide-react";
 import type { LibraryTitle } from "@/lib/home-lists";
 import { CineGeekFrames } from "./GlassesWithLenses";
 import { PosterArtwork } from "./PosterArtwork";
+import {PopupClose} from "./ui/popup-close";
 import "./move-title-menu.css";
 
 export type ShelfId = "watchlist" | "watching" | "favourite" | "watched";
@@ -55,7 +56,7 @@ export function MoveTitleMenu({ request, onClose, onMove, onRemove, onOpen }: {
               <Dialog.Title>{request.title.title}</Dialog.Title>
               <p>{request.title.type === "tv" ? "TV series" : "Movie"}{request.title.year ? " · " + request.title.year : ""}</p>
             </div>
-            <Dialog.Close className="move-title-close" aria-label="Cancel move"><X size={14} aria-hidden="true" /></Dialog.Close>
+            <Dialog.Close asChild><PopupClose className="move-title-close" aria-label="Cancel move"/></Dialog.Close>
           </header>
           <div className="move-title-choices">
             {confirmRemoval ? <div className="move-title-confirm">

@@ -33,7 +33,6 @@
 .privacy-consent .privacy-consent-allow:hover { background: #ffd04b; }
 .privacy-consent .privacy-consent-decline { min-height: 44px; height: auto; border-radius: 12px; color: #b8bcc5; font-size: 13px; }
 .privacy-consent .privacy-consent-decline:hover { background: #ffffff08; color: #f5f4ef; }
-.privacy-consent[role="dialog"] > button:last-child { display: grid; place-items: center; top: 12px; right: 12px; width: 44px; height: 44px; border-radius: 50%; color: #b8bcc5; }
 .privacy-consent .privacy-consent-error { margin: 0 0 16px; padding: 12px; border-radius: 12px; background: #f2747410; color: #ffb4b4; font-size: 13px; line-height: 1.5; }
 .privacy-consent[role="dialog"] :is(summary, a):focus-visible { outline: 2px solid #ffd053; outline-offset: 4px; border-radius: 4px; }
 @media (max-width: 360px) {

@@ -1,0 +1,38 @@
+Random Geek skin unlocks — 24 November 2026
+
+Status: implemented and verified locally. Not deployed and not in TestFlight.
+
+Product behaviour
+- Monthly Pro can spend 1,500 earned XP on one random unowned Geek skin.
+- The shop does not let users select a skin to purchase. The server rejects fresh skin:<specific> requests as well.
+- Free retains the default Geek only. Annual includes all skins and has no random-skin shop.
+- Existing owned skins are retained and can still be selected in the wardrobe.
+- All 20 non-default skins are eligible, with equal probability among those the account does not own. Daily-spin unlocks are excluded from subsequent purchases too.
+- The draw is immediately added to the wardrobe. No skipping, rerolling, selling or XP refund. Equipping is the user's choice.
+- Confirmation shows the XP price before spending; the result reveals the actual granted skin. Probability details are collapsed under How it works.
+- When every skin is owned, no XP can be spent. Insufficient XP also leaves the wallet unchanged.
+
+Safety and recovery
+- The server locks the wallet and commits the debit, random unlock and request receipt atomically.
+- A persisted request ID survives navigation, remounts and uncertain transport results. Retrying returns the original skin, without a second draw or debit.
+- Invalid success responses retain the request ID until a validated receipt is recovered.
+- Completed historical specific-skin receipts remain readable; this does not permit another direct-skin purchase.
+- The UI ignores a response after an account switch. Free/Annual attempts, cross-account receipts and concurrent final-skin attempts are covered by tests.
+- Actor/director XP pack purchases and their existing price remain unchanged.
+
+Local verification
+- 137 tests passed across 10 focused files, including random-skin UI, database access/redemption, XP recovery, wardrobe, daily rewards and the pending pack catalogue changes.
+- TypeScript application check, scoped ESLint and native web bundle build passed. Vite reports the existing large-chunk advisory.
+- Local fixture preview at phone and small-phone sizes verified confirmation, the revealed skin and the balance changing from 2,000 to 500 XP.
+- One stale wardrobe test selector was corrected to the Focus room's existing group role; no Focus implementation was changed for this work.
+- These checks used local fixtures/test databases, not live user XP. No real purchases or AI requests were made.
+- Private evidence: ../.cinegeek-private/random-skin-2026-11-24/
+
+Rollout when authorised
+1. Review this change against the live baseline, preserving unrelated ongoing app work.
+2. If releasing with pack catalogue v2, apply 20261124180000_pack_catalogue_v2.sql first, then 20261124190000_random_skin_redemption.sql. Follow packs-v2-rollout.txt for the open-pack function.
+3. Apply the random-skin migration before releasing the matching client. Old clients' direct-skin purchase requests will receive a controlled rejection until updated.
+4. On a disposable Monthly test account, verify one draw, receipt replay, an insufficient-XP rejection and direct-skin rejection. Verify Free/Annual denial and no debit when all skins are owned.
+5. Release the matching TestFlight client after live server checks. Review the store and wardrobe on the phone.
+6. Keep real purchases disabled. Companion answers, spoiler checks and AI spending limits are unchanged.
+7. Do not restore the old direct-skin redemption function as a rollback. Preserve random receipts and random-only restrictions; pause the client entry if necessary.

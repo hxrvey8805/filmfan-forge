@@ -124,25 +124,8 @@
 
 .move-title-header p { color: #f1f1f3; font-size: .74rem; line-height: 1.35; }
 
-.move-title-close {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  color: white;
-}
-
-.move-title-close svg {
-  box-sizing: content-box;
-  padding: 5px;
-  border-radius: 50%;
-  background: #090b118c;
-}
-
-.move-title-close:focus-visible { outline: 2px solid white; outline-offset: -5px; border-radius: 50%; }
+.move-title-close { --popup-close-top: 3px; --popup-close-right: 3px; }
+.move-title-close::before { background: #090b118c; }
 
 .move-title-choices {
   min-height: 0;

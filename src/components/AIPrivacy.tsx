@@ -54,7 +54,7 @@ export function AIPrivacyProvider({children}:{children:ReactNode}){
  const disclosure=feature?AI_DISCLOSURES[feature]:null;
  return <Context.Provider value={{choices,ready,error,ensure,withdraw:f=>save(f,false),reload:()=>setRevision(v=>v+1)}}>
   {children}
-  <Dialog open={!!feature} onOpenChange={open=>{if(!open)close();}}><DialogContent className="privacy-consent"
+  <Dialog open={!!feature} onOpenChange={open=>{if(!open)close();}}><DialogContent className="privacy-consent" closeDisabled={busy}
    onOpenAutoFocus={e=>{e.preventDefault();heading.current?.focus();}}
    onEscapeKeyDown={e=>{if(busy)e.preventDefault();}} onPointerDownOutside={e=>{if(busy)e.preventDefault();}}>
    <header className="privacy-consent-header">

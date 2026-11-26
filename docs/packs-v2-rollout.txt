@@ -1,0 +1,51 @@
+Curated pack catalogue v2 — 24 November 2026
+
+Status: implemented and verified locally. Not deployed or released to TestFlight.
+Source checkout contains other ongoing app changes; do not publish the whole working tree blindly.
+
+Product behaviour
+- 97 actors and 75 directors. Pools: Discovery 60%, Featured 30%, Star 8%, Icon 2%.
+- Actor pool sizes: 32 / 28 / 25 / 12. Director pool sizes: 24 / 20 / 19 / 12.
+- The 60% pool focuses on recognisable supporting film/TV faces and directors with mainstream English-language credits, not a general worldwide trending feed.
+- Selection is editorial, not a claim about talent, market value or measured demand. Mainstream recognition is subjective; familiarity cannot be guaranteed for every viewer.
+- People of any nationality may qualify through relevant film/TV work. The existing internationally recognised icons remain eligible. Nationality is not a filter.
+- Joseph Zada is in the Star pool. Each actor Star has 8% / 25 = 0.32% per actor pack. Each Icon has 2% / 12 = approximately 0.1667% per corresponding pack.
+- Every name within a pool is equally likely. Tier rolls are independent; no promised pull after any number of packs.
+- Cards and replacement thumbnails show the name/photo/role, with no rarity text or rarity-specific border colour.
+- Pack odds remain collapsed by default. Nested details list eligible names and individual probabilities for each pack type.
+- No new AI call, automatic candidate import, scheduled job or live popularity-based reclassification.
+- Price stays 150 XP. Six actors and six directors, duplicate refusal, keep/skip/replace and no selling/refunds are preserved. Plan rules and reward spinner odds are unchanged.
+
+Versioning and persistence
+- Released cinegeek-cast-1 is preserved exactly in pack-catalogues.ts; v1 identities are unchanged.
+- Fresh draws use cinegeek-cast-2. Original saved v1 picks resolve with v1 membership, even when the person moved pools or is no longer eligible for new draws.
+- Already revealed legacy cards are returned unchanged. Unrecorded legacy odds and unknown future versions are explicitly distinguished in the odds UI.
+- Migration 20261124180000_pack_catalogue_v2.sql expands the card-rarity constraint and the service-only store-pick RPC to accept v1 and v2 with their respective category sets. It does not rewrite any card, pick, balance or entitlement.
+- Save-before-provider-lookup remains intact. Errors and reopen cannot redraw.
+- The client does not decide draws or get write access to collection/pack records.
+
+Curation maintenance (manual for launch, not an automatic schedule)
+1. Review the catalogue roughly monthly or ahead of a release. No monthly automation has been created.
+2. Consider recognisable credits, substantial screen roles, breakout attention and lasting recognition together. Do not use a popularity score as an eligibility rule or a threshold for automatic promotion.
+3. Keep the easy pool approachable: familiar supporting faces and mainstream film/TV credits. Being new is not sufficient to be common; a temporary spike is not sufficient to be an Icon.
+4. Review new candidates and moves against the existing pools; use actual credits to disambiguate same-name TMDB profiles. Keep global recognition exceptions deliberate.
+5. Once v2 is deployed, never mutate it. Add v3 with new membership and retain all earlier resolvers and stable identities. Add the corresponding SQL version acceptance and disclosure, and repeat tests.
+6. Existing cards/drawn packs remain unchanged. Newly opened, previously undrawn packs use the active catalogue. Account plan and spending history never alter odds.
+7. Automated candidate suggestions may be added later, but must not silently publish a roster or change draw weights.
+
+Verification
+- All 172 current identities checked against TMDB profile and acting/directing credits using the existing key; same-name collisions reviewed explicitly.
+- 115 tests pass across catalogue/service, UI, pack decisions, collection, database migrations/permissions, daily rewards and Pro access.
+- Includes exact draw boundaries, 200,000 seeded draws, full-roster reachability, v1 frozen-catalogue digest, old-draw retry, unknown-version refusal, current/legacy odds disclosure, six-card replacement and cross-account restrictions.
+- TypeScript application check, Deno open-pack check, scoped ESLint and native web bundle build pass.
+- Local fixture preview checked at phone and small-phone sizes: clean card, full-shelf replacement, collapsed odds, expanded pools and individual probabilities.
+- This is not a live database or TestFlight verification. No user packs or XP were used.
+- Private receipts: ../.cinegeek-private/pack-catalogue-v2-2026-11-24/
+
+Rollout when authorised
+1. Review only this change against the currently deployed baseline, preserving other app work.
+2. Back up pack/collection state; apply the v2 migration before deploying the v2 open-pack function.
+3. Deploy open-pack with pack-catalogue, pack-catalogues, pack-identities and pack-service; run disposable-account live checks for new v2 and preserved v1 draws/decisions.
+4. Release the matching client only after the endpoint is active so pre-draw odds reflect the active server. Verify eligible names, odds, card labels and full collection on the phone.
+5. Keep real purchases disabled. No changes to companion models, spoiler checks, payment flags or AI budgets are part of this rollout.
+6. Do not revert to a v1-only resolver after any v2 draws exist. A rollback must preserve v2 decoding and database support, even if future draws are paused.

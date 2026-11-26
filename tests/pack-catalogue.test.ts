@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {PACK_CATALOGUES} from '../supabase/functions/_shared/pack-catalogues';
 import {describe,it,expect,vi} from 'vitest';
 import {drawPack,uniformIndex,PACK_ODDS,PACK_ROSTER,PACK_CATALOGUE_VERSION,readPackPick,personNameKey,type PackPick} from '../supabase/functions/_shared/pack-catalogue';
 import {resolvePackPerson,openCollectiblePack} from '../supabase/functions/_shared/pack-service';
@@ -6,14 +8,14 @@ const next=(...values:number[])=>()=>values.shift()!;
 const pick:PackPick={name:'Emma Stone',packType:'actor',rarity:'star',version:PACK_CATALOGUE_VERSION};
 const id='00000000-0000-4000-8000-000000000001';
 describe('approved pack odds',()=>{
- it.each([[0,'established'],[59,'established'],[60,'star'],[89,'star'],[90,'icon'],[99,'icon']] as const)('roll %s gives %s',(roll,tier)=>{
+ it.each([[0,'discovery'],[59,'discovery'],[60,'featured'],[89,'featured'],[90,'star'],[97,'star'],[98,'icon'],[99,'icon']] as const)('roll %s gives %s',(roll,tier)=>{
    for(const type of ['actor','director'] as const)expect(drawPack(type,next(roll,0)).rarity).toBe(tier);
  });
- it('assigns exactly 60/30/10 probability with equal odds per name and no repeated roster entries',()=>{
+ it('assigns exactly 60/30/8/2 probability with equal odds per name and no repeated roster entries',()=>{
   expect(PACK_ODDS.reduce((a,t)=>a+t.weight,0)).toBe(100);
   for(const type of ['actor','director'] as const){
    const names=Object.values(PACK_ROSTER[type]).flat();expect(new Set(names.map(personNameKey)).size).toBe(names.length);
-   expect(names.length).toBe(type==='actor'?44:36);
+   expect(names.length).toBe(type==='actor'?97:75);
    let start=0;
    for(const tier of PACK_ODDS){
     const pool=PACK_ROSTER[type][tier.id];
@@ -22,7 +24,7 @@ describe('approved pack odds',()=>{
     }
     start+=tier.weight;
    }
-   // Each icon is 10% / 12 = 1 in 120 packs, independent of popularity.
+   // Each icon is 2% / 12 = 1 in 600 packs, independent of popularity.
    expect(PACK_ROSTER[type].icon.length).toBe(12);
   }
  });
@@ -36,21 +38,21 @@ describe('approved pack odds',()=>{
  it('a repeatable large draw follows the approved distribution for both kinds of pack',()=>{
   let seed=912341;const random=()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return seed>>>0;};
   for(const type of ['actor','director'] as const){
-   const counts={established:0,star:0,icon:0};const names=new Map<string,number>();
-   for(let i=0;i<100000;i++){const p=drawPack(type,random);counts[p.rarity]++;names.set(p.name,(names.get(p.name)??0)+1);}
+   const counts={discovery:0,featured:0,star:0,icon:0};const names=new Map<string,number>();
+   for(let i=0;i<100000;i++){const p=drawPack(type,random);counts[p.rarity as keyof typeof counts]++;names.set(p.name,(names.get(p.name)??0)+1);}
    for(const t of PACK_ODDS)expect(Math.abs(counts[t.id]/1000-t.weight)).toBeLessThan(.6);
    for(const t of PACK_ODDS)for(const name of PACK_ROSTER[type][t.id]){
     const expected=100000*t.weight/100/PACK_ROSTER[type][t.id].length;
-    expect(Math.abs(names.get(name)!-expected)/expected).toBeLessThan(.15);
+    expect(Math.abs(names.get(name)!-expected)).toBeLessThan(6*Math.sqrt(expected));
    }
   }
  });
 });
 describe('profile verification and persistent draws',()=>{
  it('covers the exact frozen roster with unique reviewed identities',()=>{
-  const names=Object.values(PACK_ROSTER).flatMap(t=>Object.values(t).flat());
+  const names=[...new Set(Object.values(PACK_CATALOGUES).flatMap(c=>Object.values(c.roster).flatMap(t=>Object.values(t).flat())))];
   expect(Object.keys(PACK_PERSON_IDS).sort()).toEqual([...names].sort());
-  expect(new Set(Object.values(PACK_PERSON_IDS)).size).toBe(80);
+  expect(new Set(Object.values(PACK_PERSON_IDS)).size).toBe(names.length);
   for(const id of Object.values(PACK_PERSON_IDS))expect(Number.isSafeInteger(id)&&id>0).toBe(true);
  });
  it('loads the reviewed identity directly instead of rejecting same-name search collisions',async()=>{
@@ -60,7 +62,7 @@ describe('profile verification and persistent draws',()=>{
  });
  it('normalizes accents, accepts documented aliases and verifies directing credits',async()=>{
   expect(personNameKey('Lupita Nyong’o')).toBe(personNameKey("Lupita Nyong'o"));
-  const director:PackPick={...pick,name:'Céline Sciamma',packType:'director',rarity:'established'};
+  const director:PackPick={...pick,name:'Céline Sciamma',packType:'director',rarity:'established',version:'cinegeek-cast-1'};
   const read=vi.fn().mockResolvedValueOnce({id:68813,name:'Celine Sciamma',profile_path:'https://other.test/image.jpg'}).mockResolvedValueOnce({crew:[{job:'Director'}]});
   expect(await resolvePackPerson(director,read)).toMatchObject({id:68813,profile_path:null,name:'Céline Sciamma'});
   const alias=vi.fn().mockResolvedValueOnce({id:54693,name:'Emily Jean Stone',also_known_as:['Emma Stone']}).mockResolvedValueOnce({cast:[{character:'Mia'}]});
@@ -96,11 +98,46 @@ describe('profile verification and persistent draws',()=>{
    return {data:{person:args.p_person,packType:'actor'},error:null};
   });
   const read=vi.fn(async()=>{order.push('profile');throw Error('offline');});
-  await expect(openCollectiblePack(rpc,read,'u',id,'first',next(60,4))).rejects.toThrow('offline');
+  await expect(openCollectiblePack(rpc,read,'u',id,'first',next(90,4))).rejects.toThrow('offline');
   expect(saved).toEqual(pick);expect(order).toEqual(['claim_cinegeek_pack','store_cinegeek_pack_pick','profile']);
   const retryRead=vi.fn().mockResolvedValueOnce({id:54693,name:'Emma Stone'}).mockResolvedValueOnce({cast:[{character:'Mia'}]});
   const random=vi.fn();const result=await openCollectiblePack(rpc,retryRead,'u',id,'second',random);
   expect(result.person).toMatchObject({name:'Emma Stone',rarity:'star'});expect(random).not.toHaveBeenCalled();
   expect(rpc.mock.calls.filter(c=>c[0]==='store_cinegeek_pack_pick')).toHaveLength(1);
+ });
+});
+
+describe('catalogue editions',()=>{
+ it('keeps the complete released v1 roster and odds unchanged',()=>{
+  expect(createHash('sha256').update(JSON.stringify(PACK_CATALOGUES['cinegeek-cast-1'])).digest('hex')).toBe('106d0de00b5478162679741fa7a498c95fd7a20275db4053ca3fc875cf990495');
+  for(const type of ['actor','director'] as const)for(const tier of PACK_CATALOGUES['cinegeek-cast-1'].odds){
+   for(const name of PACK_CATALOGUES['cinegeek-cast-1'].roster[type][tier.id]){
+    const saved={name,packType:type,rarity:tier.id,version:'cinegeek-cast-1'};
+    expect(readPackPick(saved)).toEqual(saved);
+   }
+  }
+ });
+ it('resolves a v1 draw after its person changed tier without using new randomness',async()=>{
+  const saved={name:'Florence Pugh',packType:'actor',rarity:'established',version:'cinegeek-cast-1'};
+  const rpc=vi.fn(async(name:string,args:Record<string,unknown>)=>({data:name==='claim_cinegeek_pack'?{packType:'actor',pick:saved}:{person:args.p_person,packType:'actor'},error:null}));
+  const read=vi.fn().mockResolvedValueOnce({id:1373737,name:'Florence Pugh'}).mockResolvedValueOnce({cast:[{character:'Yelena'}]});
+  const random=vi.fn();
+  const result=await openCollectiblePack(rpc,read,'u',id,'retry',random);
+  expect(result.person).toMatchObject({name:'Florence Pugh',rarity:'established',catalogue_version:'cinegeek-cast-1'});
+  expect(random).not.toHaveBeenCalled();
+  expect(rpc.mock.calls.map(c=>c[0])).toEqual(['claim_cinegeek_pack','store_cinegeek_reveal']);
+  expect(readPackPick({...saved,version:PACK_CATALOGUE_VERSION})).toBeNull();
+ });
+ it('keeps Joseph Zada out of easy pools and retains the hardest tier for the named icons',()=>{
+  expect(PACK_ROSTER.actor.star).toContain('Joseph Zada');
+  expect(PACK_ROSTER.actor.discovery).not.toContain('Joseph Zada');
+  expect(PACK_ROSTER.actor.icon).toContain('Leonardo DiCaprio');
+  expect(PACK_ROSTER.director.icon).toContain('Christopher Nolan');
+ });
+ it('refuses an unknown saved edition rather than silently redrawing',async()=>{
+  const rpc=vi.fn().mockResolvedValue({data:{packType:'actor',pick:{...pick,version:'future'}},error:null});
+  const read=vi.fn(),random=vi.fn();
+  await expect(openCollectiblePack(rpc,read,'u',id,'token',random)).rejects.toThrow('version unavailable');
+  expect(read).not.toHaveBeenCalled();expect(random).not.toHaveBeenCalled();
  });
 });

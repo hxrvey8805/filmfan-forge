@@ -254,7 +254,7 @@ const TitleDetailModalContent = ({ title, viewer, open, onOpenChange, onAddToFav
     : !sourceList && onAddToWatchList ? { label: "Add to watch list", run: () => onAddToWatchList(title) } : null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent ref={panel} className="title-companion p-0 gap-0 flex flex-col overflow-hidden [&>button:last-child]:hidden"
+      <DialogContent ref={panel} hideClose className="title-companion p-0 gap-0 flex flex-col overflow-hidden"
         onEscapeKeyDown={event => {
           if (!inRoom) return;
           event.preventDefault();
