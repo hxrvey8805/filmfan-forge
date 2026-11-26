@@ -110,7 +110,7 @@ export async function selectWatchSources(question:string,plan:QuestionScope,sour
       adjacent.start<=s.end+15 && adjacent.end>=s.start-15)selected.add(adjacent.id);
   }
   const chosen=sources.filter(s=>selected.has(s.id));
-  if(chosen.length<=55 && JSON.stringify(chosen.map(sourcePacket)).length<=PACKET_CHARS)return withIdentityContext(chosen,sources,plan,PACKET_CHARS);
+  if(chosen.length<=55 && JSON.stringify(chosen.map(sourcePacket)).length<=PACKET_CHARS)return withIdentityContext(chosen,sources,plan,PACKET_CHARS,question);
   // Per-batch relevance is not a global context budget. Select again across
   // the eligible union rather than dropping the whole answer or truncating
   // its last exchanges (which could remove an important qualification).
@@ -130,7 +130,7 @@ export async function selectWatchSources(question:string,plan:QuestionScope,sour
   const requiredContext=bundles.filter(s=>anchorIds.has(s.id)).flatMap(s=>s.contextIds);
   const finalIds=new Set([...values.flatMap(id=>bundles.find(s=>s.id===id)!.contextIds),...requiredContext]);
   const final=sources.filter(s=>finalIds.has(s.id));
-  return final.length<=55 && JSON.stringify(final.map(sourcePacket)).length<=PACKET_CHARS?withIdentityContext(final,sources,plan,PACKET_CHARS):fail('budget_exceeded');
+  return final.length<=55 && JSON.stringify(final.map(sourcePacket)).length<=PACKET_CHARS?withIdentityContext(final,sources,plan,PACKET_CHARS,question):fail('budget_exceeded');
 }
 
 async function explain(question:string,plan:QuestionScope,sources:WatchSource[],generate:JsonGenerator,referenceQuestion?:string,observe?:WatchObserver):Promise<CheckedResponse|null> {

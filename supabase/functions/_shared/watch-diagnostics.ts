@@ -1,6 +1,6 @@
 import type { JsonGenerator } from './answer.ts';
 
-export const WATCH_CHECK_REVISION = 'watch-checks-2026-11-26-identity-context-v1';
+export const WATCH_CHECK_REVISION = 'watch-checks-2026-11-26-identity-context-v2';
 export type DiscussionIssue = 'identity'|'speaker'|'action'|'cause'|'timing'|'spoiler'|'relevance'|'citation';
 export type ProofFailure = 'receipt_count'|'receipt_source'|'receipt_range'|'receipt_mixed_format'|'receipt_missing_quote'|'receipt_length'|'receipt_mismatch';
 export type WatchDiagnostic =

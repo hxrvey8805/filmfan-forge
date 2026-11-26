@@ -1,0 +1,35 @@
+Question identity context retrieval — 26 November 2026
+
+The fresh question “How did Walt get Jesse to work with him in the first place?”
+failed independent identity review on both attempts. It had two episodes of
+eligible context and no budget block, but PR48's identity-retention step applied
+only to scene questions. Raw released drafts were already cleaned up, so the
+exact rejected wording is not retained and is not claimed here.
+
+Extend the same original-source retention to non-recap questions. A name in
+the original question may nominate a matching explicit caption label even
+when selected dialogue contains only pronouns. Question text never becomes
+evidence, an alias, or an attribution. The writer and independent reviewer
+still have to establish all actual relationships from original sources.
+
+No selected passage is removed. Only spare capacity within the unchanged
+20,000-character / 55-source packet is used, retaining adjacent qualifications.
+Maximum three original introduction bundles; no additional model calls.
+Recaps retain their exact interval. Current-episode-only exclusions and
+viewing boundaries apply before adding context. No future material is added.
+
+Validation: 1,599 automated tests / 103 files passed, including three new
+non-scene retrieval and boundary regressions. Changed-file ESLint and Deno
+check of shared watch-answer passed. Fresh live retest remains required.
+
+Rollout: deploy only spoiler-free-companion with the complete transitive
+manifest verified against the merged source. Check revision identity-context-v2
+in a fresh signed-in live answer. No database migration, website publication,
+secret changes, TestFlight upload, or draft recap PR40 deployment.
+
+All writer/reviewer prompts, model, reasoning, retry limits and factual,
+speaker and spoiler checks remain unchanged. Normal limits remain $3 per
+account/calendar month, $0.35 per question, 64 calls per question and $5 global.
+The existing owner-only $2 grant and its expiry remain unchanged. Preserve
+committed spend and both unknown-cost holds. Private CLI cap stays $11;
+this change makes no CLI AI calls. Real purchases remain disabled.
