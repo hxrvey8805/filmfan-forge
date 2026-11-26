@@ -1,0 +1,53 @@
+PR38 recap runtime verification
+================================
+Request ID: 20cd53ad-4565-43e9-8322-150782069e77
+Function: spoiler-free-companion
+Requested log window: 2026-11-26T09:32:30Z through 2026-11-26T09:37:00Z
+Matching runtime events: 2026-11-26T09:32:34Z through 2026-11-26T09:36:11Z
+Runtime revision: watch-checks-2026-11-25-latency-v2
+Evidence: live function logs filtered by the exact request ID.
+
+Chronological diagnostic events (UTC)
+-------------------------------------
+09:32:34  sources_ready: sources=28, episodes=1
+09:32:34  model_call: writer call=1 started
+09:33:14  model_call: writer call=1 returned, elapsedMs=40328
+09:33:14  model_call: verifier call=2 started
+09:33:14  model_call: verifier call=2 failed, elapsedMs=1
+09:33:15  sources_ready: sources=28, episodes=1
+09:33:15  model_call: verifier call=1 started
+09:34:04  model_call: verifier call=1 returned, elapsedMs=48640
+09:34:04  review_rejected: attempt=1, issues=[identity]
+09:34:04  model_call: writer call=2 failed, elapsedMs=0
+09:34:04  model_call: writer call=2 started
+09:34:05  sources_ready: sources=28, episodes=1
+09:34:05  review_rejected: attempt=1, issues=[identity]
+09:34:05  model_call: writer call=1 started
+09:34:43  model_call: writer call=1 returned, elapsedMs=37682
+09:34:44  model_call: verifier call=2 failed, elapsedMs=1
+09:34:44  model_call: verifier call=2 started
+09:34:45  sources_ready: sources=28, episodes=1
+09:34:45  review_rejected: attempt=1, issues=[identity]
+09:34:45  model_call: verifier call=1 started
+09:36:11  model_call: verifier call=1 returned, elapsedMs=86144
+09:36:11  answer_gap: reason=explanation_rejected
+09:36:11  review_rejected: attempt=2, issues=[speaker]
+09:36:11  answer_exhausted
+
+Summary
+-------
+Checkpoint/defer/resume events: none present for this request in the returned window.
+sources_ready: 4 events; every event reported sources=28 and episodes=1.
+Settled writer calls: 2 returned (40328 ms and 37682 ms).
+Settled verifier calls: 2 returned (48640 ms and 86144 ms).
+Immediate call=2 failures: writer=2 (0 ms); verifier=2 (1 ms each). No error detail was logged.
+review_rejected attempt=1: 3 events, all issues=[identity].
+review_rejected attempt=2: 1 event, issues=[speaker].
+Both drafts failed the same check: no; the recorded review issue changed from identity on attempt 1 to speaker on attempt 2.
+Final failure code: answer_exhausted.
+Associated answer_gap reason: explanation_rejected.
+Concrete failed answer checks: identity, then speaker. The logs do not provide a narrower explanation within either issue code.
+
+Scope
+-----
+Read-only log inspection and this metadata receipt only. No retry, model call, deployment, recovery, implementation change, spending change, or user-data mutation was performed. No captions, generated drafts, credentials, or user email are stored here.
