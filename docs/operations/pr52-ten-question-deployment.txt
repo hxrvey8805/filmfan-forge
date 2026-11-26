@@ -1,0 +1,75 @@
+CineGeek — PR #52 Ten-Question Release Deployment Receipt
+Timestamp (UTC): 2026-11-26T21:33Z
+
+1. Release & Source Verification
+- PR: #52 (merged)
+- Base commit: f0b456c795b84311a017dc583a338d3d9959935f
+- Reviewed migration: supabase/migrations/20261126220000_ten_question_subscription_budget.sql
+  - Expected SHA-256: fe5a79c19ff4370c96dbb8830890006bc67bb6b0215bf0a7e6de46ab6b670917
+  - Verified SHA-256: fe5a79c19ff4370c96dbb8830890006bc67bb6b0215bf0a7e6de46ab6b670917 (unchanged)
+- Applied migration: drizzle/migrations/0014_ten_question_subscription_budget.sql
+  - Applied SHA-256: f533be4a2669eefa26178a0d7ada85dacabedc77a56d77add48a7ed14a925429
+  - Transport note: Submitted to transactional runner with only outer BEGIN; and COMMIT; removed; all interior SQL statements preserved byte-for-byte.
+  - Status: Applied transactionally and committed.
+
+2. Function MD5 Verification (Before -> After)
+- public.companion_allowance_for(uuid):
+  - Before: 3e55f5657c7fe70fdae6af3d2f219f1b
+  - After:  d1c777fd78a24e1134cc44e6d1080825
+  - Verified uses 10 (greatest(0,10-count(*)) and ELSE 10 END): true
+- public.reserve_companion_question_call(uuid,uuid,uuid,uuid,bigint):
+  - Before: 6c282d6ea85e94987a5c721ef9170c59
+  - After:  8c482469b72df2e1e66384db1952094d
+- public.try_reserve_companion_question_call(uuid,uuid,uuid,uuid,bigint):
+  - Before: 18ad54b3c50b984961068bbfd45a5119
+  - After:  13744e267b7e035ad573692f1ccea6c4
+- public.companion_account_spending_window(uuid) [new]:
+  - After:  18a2f3d7086ce2c3bbceedca10c5982a
+- public.companion_account_spending_limit(uuid,bigint) [new]:
+  - After:  e9cffd559cf74db895c51467afcfa615
+
+3. Numeric-Only Controls (Before -> After; no account IDs or credentials)
+- companion_usage_policy:
+  - enabled: true -> true
+  - user_month_limit_micro_usd: 3000000 -> 4000000
+  - question_limit_micro_usd: 350000 -> 350000
+  - question_call_limit: 64 -> 64
+  - user_day_limit_micro_usd: null -> null
+  - subscription_budget_started_at: (added) 2026-11-26T21:32:58.346005+00:00
+- apple_production_policy:
+  - enabled: true -> true
+  - sales_enabled: false -> false
+- companion_sol_budget (id='sol-beta'):
+  - enabled: true -> true
+  - limit_micro_usd: 5000000 -> 5000000
+  - committed_micro_usd: 3731658 -> 3731658
+  - halted_reason: null -> null
+- Unknown reservations (companion_sol_calls where status='unknown'):
+  - count: 2 -> 2
+  - reserved_amounts: [137380, 137837] -> [137380, 137837]
+  - total_reserved_micro_usd: 275217 -> 275217
+- Active private test budget grants (companion_private_test_budget_grants):
+  - count: 1 -> 1
+  - approved_base_micro_usd_total: (defaulted) 3000000
+  - additional_micro_usd_total: 2000000 -> 2000000
+  - approved_total_micro_usd: 5000000 (3000000 + 2000000)
+  - min_expires_at: 2026-11-27T16:43:17.166609+00:00 -> 2026-11-27T16:43:17.166609+00:00
+  - max_expires_at: 2026-11-27T16:43:17.166609+00:00 -> 2026-11-27T16:43:17.166609+00:00
+  - any_revoked: false -> false
+- Existing request/history row counts (unchanged):
+  - companion_question_requests: 32 -> 32
+  - companion_sol_calls: 252 -> 252
+  - ai_conversations: 132 -> 132
+
+4. Web Client Publication Status
+- Action: preview_ui--publish requested for https://cinegeek.lovable.app
+- Status: Publishing scheduled (deployment typically takes about a minute as an estimate; completion/reachability not yet confirmed).
+- Security scan note: 2 pre-existing unresolved findings (subtitle_chunks and season_summaries permissive SELECT policies) were reported; workspace did not block publication.
+
+5. Scope Guardrails Confirmed
+- No AI requests run.
+- No credits purchased.
+- No secret or key changes.
+- No other migrations applied.
+- No companion edge function redeployment or model/prompt/context/spoiler changes.
+- Production sales remain disabled (sales_enabled=false).
