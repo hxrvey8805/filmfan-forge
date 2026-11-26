@@ -34,7 +34,13 @@ export function captionIdentityWords(text:string) {
   }
   return result;
 }
-const capitals = (text: string) => text.match(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu) ?? [];
+// Match the complete same token that words() checks in the cited context.
+// Dropping digits turns a name such as "Unit-7" into "Unit-", which cannot
+// match its real receipt and falsely rejects an independently checked answer.
+// Keep compound separators only when followed by another token component.
+const capitalToken = String.raw`[\p{Lu}][\p{L}\p{M}\p{N}]*(?:['’\-][\p{L}\p{M}\p{N}]+)*`;
+const capitalMatches = (text: string) => text.matchAll(new RegExp(String.raw`(?<![\p{L}\p{N}])${capitalToken}`, 'gu'));
+const capitals = (text: string) => [...capitalMatches(text)].map(match => match[0]);
 const speechVerbs = '(?:says?|said|saying|states?|stated|stating|tells?|told|telling|asks?|asked|asking|' +
   'confirms?|confirmed|confirming|notes?|noted|noting|advises?|advised|advising|clarifies|clarified|clarifying|' +
   'declares?|declared|declaring|insists?|insisted|insisting|expects?|expected|expecting|argues?|argued|arguing|' +
@@ -49,7 +55,7 @@ const speechVerbs = '(?:says?|said|saying|states?|stated|stating|tells?|told|tel
 // "Mira has complained" need the same label as "Mira says". Saved failures
 // slipped through the old present/past-only check and reversed the speakers.
 const auxiliary = '(?:(?:is|are|was|were|has|have|had|been|being)\\s+){0,3}';
-const namedSpeech = new RegExp(`(?<![\\p{L}\\p{N}])([\\p{Lu}][\\p{L}\\p{M}'’\\-]*(?: [\\p{Lu}][\\p{L}\\p{M}'’\\-]*)?)\\s+(?:${auxiliary}${speechVerbs}|(?:is|was)\\s+[^.!?]{1,60}\\bwho\\s+${speechVerbs})\\b`, 'gu');
+const namedSpeech = new RegExp(`(?<![\\p{L}\\p{N}])(${capitalToken}(?: ${capitalToken})?)\\s+(?:${auxiliary}${speechVerbs}|(?:is|was)\\s+[^.!?]{1,60}\\bwho\\s+${speechVerbs})\\b`, 'gu');
 // "Mira is described as a cousin" describes Mira; it does not say she spoke.
 // Preserve active progressive/perfect forms such as "Mira has described...".
 const passiveSpeech = /\b(?:is|are|was|were|be|been|being)\s+(?:[\p{L}]+ed|said|told|spoken)\b/u;
@@ -92,14 +98,14 @@ export function draftGroundingIssues(question: string, draft: GroundedDraft, evi
     const cited = claim.evidenceIds.map(id => byId.get(id)?.text ?? '').join('\n');
     const citedWords = captionIdentityWords(cited), claimWords = words(claim.text);
     if (questionNames.some(name => claimWords.has(name) && !citedWords.has(name))) issues.add('identity');
-    for (const match of claim.text.matchAll(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu)) {
+    for (const match of capitalMatches(claim.text)) {
       const name = token(match[0]);
       if (genericSubjects.has(name) || sentenceWords.has(name)) continue;
       // Common descriptive wording is not a newly introduced person or
       // institution. The semantic reviewer must still ground the treatment;
       // this does not license "VIP says..." or an unknown acronym such as FBI.
       if (match[0] === 'VIP' && /^\s+(?:treatment|service|experience)\b/i.test(claim.text.slice(match.index! + match[0].length))) continue;
-      const sentenceStart = !claim.text.slice(0, match.index).trim() || /[.!?][”"'’\)\]]*\s*$/.test(claim.text.slice(0, match.index));
+      const sentenceStart = !claim.text.slice(0, match.index).trim() || /[.!?][”"'’)\]]*\s*$/.test(claim.text.slice(0, match.index));
       if ((!sentenceStart || sourceNames.has(name) || /^[A-Z]{2,}$/.test(match[0])) && !citedWords.has(name)) issues.add('identity');
     }
     // A name being called or mentioned is not a speaker label. Preserve real
