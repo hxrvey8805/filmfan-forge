@@ -718,6 +718,7 @@ export type Database = {
           attempt: string
           budget_block_reason: string | null
           budget_month: string
+          check_diagnostics: Json
           committed_micro_usd: number
           created_at: string
           id: string
@@ -735,6 +736,7 @@ export type Database = {
           attempt: string
           budget_block_reason?: string | null
           budget_month: string
+          check_diagnostics?: Json
           committed_micro_usd?: number
           created_at?: string
           id: string
@@ -752,6 +754,7 @@ export type Database = {
           attempt?: string
           budget_block_reason?: string | null
           budget_month?: string
+          check_diagnostics?: Json
           committed_micro_usd?: number
           created_at?: string
           id?: string
@@ -1638,6 +1641,17 @@ export type Database = {
       reserve_smart_list_interpretation_legacy: {
         Args: { p_call: string; p_hash: string; p_user: string }
         Returns: Json
+      }
+      save_companion_diagnostics: {
+        Args: {
+          p_attempt: string
+          p_dropped?: number
+          p_events: Json
+          p_request_id: string
+          p_revision: string
+          p_user_id: string
+        }
+        Returns: boolean
       }
       save_companion_work: {
         Args: {
