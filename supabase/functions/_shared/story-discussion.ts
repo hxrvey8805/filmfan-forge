@@ -64,6 +64,15 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
   const byId = new Map(ctx.sources.map(s => [s.id, s]));
   if (byId.size !== ctx.sources.length) {emit({stage:'context_rejected',reason:'duplicate_source'});return null;}
   const lineProof = object({id:{type:'string',enum:[...byId.keys()]},firstLine:{type:'integer',minimum:1},lastLine:{type:'integer',minimum:1}});
+  // Express the existing acceptance contract in the provider schema too:
+  // an approved paragraph cannot have empty receipts. Rejections retain an
+  // empty-support route, so decoding never forces a fabricated citation.
+  const reviewCheck = {anyOf:[
+    object({index:{type:'integer'},supported:{type:'boolean',enum:[true]},issue:{type:'string',enum:['none']},
+      attribution:{type:'string',enum:['none','explicit','contextual']},support:array(lineProof,1,8)}),
+    object({index:{type:'integer'},supported:{type:'boolean',enum:[false]},issue:{type:'string',enum:issues.filter(i=>i!=='none')},
+      attribution:{type:'string',enum:['none','explicit','contextual','uncertain']},support:array(lineProof,0,8)}),
+  ]};
   // Both writer and reviewer select immutable source spans rather than retyping them.
   // In particular, an OCR typo must not turn a sound review into a new draft.
   const numberedSources=ctx.sources.map(s=>({...s,text:s.text.split('\n').map((line,i)=>`[${i+1}] ${line}`).join('\n')}));
@@ -97,7 +106,12 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
         if(typeof r.quote!=='string')return fail('receipt_missing_quote');
         quotes=[r.quote];
       }
-      if(result.length+quotes.length>8)return fail('receipt_count');
+      // Eight is the number of model-selected references, checked above.
+      // Internal splitting must not turn e.g. six valid ranges into an
+      // invalid nine-reference model output. Retain the old maximum expansion
+      // of any single range (eight fragments), now bounded to 8*8 overall.
+      // Every original line is still copied exactly and checked below.
+      if(quotes.length>8)return fail('receipt_length');
       for(const quote of quotes) {
         if(normal(quote).length<4 || quote.length>700)return fail('receipt_length');
         if(!normal(byId.get(r.id)!.text).includes(normal(quote)))return fail('receipt_mismatch');
@@ -113,7 +127,7 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
   const attributionWarnings: Receipt[] = [];
   let actionWarnings: string[] = [];
   const contextCandidates: {word:string;sourceIds:string[]}[] = [];
-  let citationRetry: {points: Point[]} | undefined;
+  let citationRetry: {points: unknown[]} | undefined;
   let drafts = 0, receiptRetried = false;
   // Receipt repair must not spend the writer's one semantic repair. A first
   // review can have malformed proof; its corrected review can then expose a
@@ -166,8 +180,7 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     const proposedPoints=points.map(({text})=>({text}));
     const check = await generate(reviewer + (repairingReceipts ? '\nA prior review returned an inexact citation. Recheck the entire answer independently. Choose short exact spans, preferably one source line each; preserve source typos. No prior verdict or repaired quote is supplied as evidence.' : '') + '\n' + relevanceRules + '\nCheck QUESTION RELEVANCE independently for EACH paragraph, even when every factual statement is true. A paragraph about a different later situation does not answer the original event-specific question just because both situations involve hesitation, the same people or the same topic. Reject that paragraph with supported=false, issue=relevance, support=[] and fit=reject. A directly answering first paragraph does not excuse a tangent in another paragraph. Do not reject useful interpretation or evidence from another moment that actually explains the requested event. Apply the explicit recap/comparison/development scope instead when that is what the user asks.' + '\nEach paragraph naming a person must retain an exact receipt containing that name, as well as the contextual link to the attributed words or action. Do not rely on another paragraph’s receipts. Up to eight short receipts are available per paragraph: cover every detail, including the end of the paragraph, without spending them all on its opening. A name alone cannot prove the link.' + (ctx.request ? '\nApply request.intent and target to relevance: a basic fact may be fully answered in one sentence. Cover all parts of compound questions. A recap must span the requested section, not just the newest exchange. A correct death status is direct even if the culprit is unknown. Confirmed unresolved answers can be direct; an absent visual account means missing coverage, not proof nothing happened or remains unrevealed. referenceQuestion supplies no facts. Reject needless caveats that imply an event is unrevealed solely because the packet lacks it. Check narration as narration, not as an anonymous speaker claiming personal experience.':'' ) + '\nRECEIPT FORMAT: Sources are numbered by line within each source. Select id, firstLine and lastLine (inclusive, starting at 1). The server copies those exact original lines, preserving all spelling. Never write quote text. Keep each span under 700 characters; choose separate spans for separate facts. Line numbers are local to that source, not timestamps. The draft support quotes are untrusted; independently select original source lines for every check.', JSON.stringify({...packet,sources:numberedSources,points:proposedPoints,...(repairingReceipts?{}:{warnings})}), recap?2400:1600, 'verifier',
       format('companion_story_discussion_check', {boundarySafe:{type:'boolean'},fit:{type:'string',enum:['direct','partial','reject']},
-        checks:array(object({index:{type:'integer'},supported:{type:'boolean'},issue:{type:'string',enum:[...issues]},
-          attribution:{type:'string',enum:['none','explicit','contextual','uncertain']},support:array(lineProof,0,8)}),points.length,points.length)}));
+        checks:array(reviewCheck,points.length,points.length)}));
     if (!record(check) || typeof check.boundarySafe !== 'boolean' || !['direct','partial','reject'].includes(String(check.fit)) ||
       !Array.isArray(check.checks) || check.checks.length !== points.length) {emit({stage:'review_invalid',attempt:attempt+1,reason:'shape'});return null;}
     const verified: Point[] = [];
@@ -228,7 +241,9 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
       // Repeating an invalid proof is not a semantic issue for the writer to
       // solve. Stop instead of looping or spending another generation call.
       if(receiptRetried)break;
-      citationRetry = {points};
+      // Reparse the original selected references on resume/retry, not their
+      // internal split fragments (which can legitimately exceed eight).
+      citationRetry = {points:raw.points};
       receiptRetried = true;
     }
     // Never salvage and show a fragment: the whole answer must pass review.
