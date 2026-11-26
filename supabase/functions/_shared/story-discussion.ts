@@ -114,8 +114,15 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
   let actionWarnings: string[] = [];
   const contextCandidates: {word:string;sourceIds:string[]}[] = [];
   let citationRetry: {points: Point[]} | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  let drafts = 0, receiptRetried = false;
+  // Receipt repair must not spend the writer's one semantic repair. A first
+  // review can have malformed proof; its corrected review can then expose a
+  // genuine identity/speaker issue. Allow that answer to be rebuilt and fully
+  // checked. Still at most two drafts and one receipt retry (five model calls),
+  // each subject to the existing generator spending and deadline guards.
+  for (let attempt = 0; attempt < 3 && (citationRetry || drafts < 2); attempt++) {
     const repairingReceipts = !!citationRetry;
+    if (!repairingReceipts) drafts++;
     // Only fixed categories cross the retry boundary. Rejected draft text and
     // model-written reasons can contain spoilers and are never reused.
     const instruction = '\n' + relevanceRules + (attempt ? '\nRebuild the answer from the sources, preserving the useful explanation. ' + [...new Set(feedback)].map(i => repair[i]).join(' ') : '');
@@ -214,7 +221,11 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
     // Semantic failures still rebuild the answer without rejected prose.
     if(check.boundarySafe && check.fit !== 'reject' && feedback.length && feedback.every(i=>i==='citation') &&
       check.checks.every(c=>record(c) && c.supported===true && c.issue==='none' && c.attribution!=='uncertain')) {
+      // Repeating an invalid proof is not a semantic issue for the writer to
+      // solve. Stop instead of looping or spending another generation call.
+      if(receiptRetried)break;
       citationRetry = {points};
+      receiptRetried = true;
     }
     // Never salvage and show a fragment: the whole answer must pass review.
   }
