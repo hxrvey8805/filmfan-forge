@@ -1,0 +1,51 @@
+CineGeek — ten-question allowance and subscription-period spending
+26 November 2026
+
+Approved scope
+Monthly and Annual Pro: 10 successful questions per subscription month; no rollover.
+Free: no included questions. Question-pack purchases remain disabled.
+Account model-cost ceiling: $4 per subscription month, including failed attempts.
+Annual refreshes monthly, using the same original anniversary as the question allowance.
+The whole-question $0.35 cap, 64-call guard, optional daily cap, $5 lifetime beta
+pool, private CLI test cap, model, prompts, context and spoiler checks are unchanged.
+Production sales remain disabled. This does not fund or activate public sales.
+
+Accounting
+Ten questions at the $0.35 ceiling leave $0.50 inside the $4 ceiling for failed
+work. This is not a separate failed-work fund or a guarantee that every possible
+request completes: excessive failed work, unknown charges or the global stop
+can still prevent another answer. No question is deducted for such a failure.
+Pending/unknown calls retain their full reservations; actual settlement still
+updates the same ledger. There is no reset, refund, provider change or downgrade.
+The first migrated period also retains old calendar-month costs. Subsequent
+periods use the subscription anniversary (including month-end clamping).
+Private test grants keep their previously approved base plus extra allowance:
+the existing $3+$2 grant remains $5, not $6, and its expiry is unchanged.
+
+Deployment
+1. Review/merge this release and prepare build 42 from the verified build 41
+   native baseline. Native-only styling, StoreKit and recovery changes are preserved.
+2. Apply 20261126220000_ten_question_subscription_budget.sql transactionally.
+   Its guards stop on unexpected prior function bodies or spending settings.
+3. Publish the updated plan/onboarding/allowance client. Older native builds
+   validate a 15-question contract: testers must install build 42 after rollout.
+4. Verify the new allowance function, $4 account ceiling, $0.35 request ceiling,
+   retained unknown holds, unchanged temporary grant expiry, $5 global ceiling,
+   and disabled Production sales. No paid model request is required.
+5. Make build 42 available in the existing internal TestFlight group. Do not
+   submit to App Review, enable sales, purchase credits or increase the global cap.
+
+Validation
+The updated SQL and UI tests cover Free, both Pro plans, ten-question exhaustion,
+already-used balances, subscription anniversaries, plan switches, refunds,
+mid-day resets, concurrent reservations, failures, unknown charges and permissions.
+Real PostgreSQL concurrency tests use a network-isolated disposable container.
+No provider or Apple API calls are needed for the accounting tests.
+
+Apple commission
+The signed-in enrollment page showed a Small Business Program application form,
+not approval. User has been asked to review/submit declarations themselves.
+Do not assume the 15% rate is active until Apple confirms eligibility and its
+start date. Apple says adjusted proceeds start 15 days after the end of the
+fiscal month in which enrollment is approved.
+https://developer.apple.com/app-store/small-business-program/

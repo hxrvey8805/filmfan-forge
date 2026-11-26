@@ -213,7 +213,7 @@ export const supabase = {
     }
     if(name==='get_ai_privacy_choices')return {data:{...privacyChoices},error:null};
     if(name==='set_ai_privacy_choice'){privacyChoices[String(args.p_feature)]=args.p_allowed===true;return {data:{...privacyChoices},error:null};}
-    if(name==='get_companion_allowance')return {data:{mode:'monthly',plan,included:plan==='free'?0:15,limit:plan==='free'?0:15,purchased:0,renewsAt:plan==='free'?null:'2026-12-13T00:00:00Z'},error:null};
+    if(name==='get_companion_allowance')return {data:{mode:'monthly',plan,included:plan==='free'?0:10,limit:plan==='free'?0:10,purchased:0,renewsAt:plan==='free'?null:'2026-12-13T00:00:00Z'},error:null};
     if(name==='start_cinegeek_game'){
       const game={start:Number(args.p_start),target:Number(args.p_target),expires:Date.now()+120000,won:false};previewGames.set(String(args.p_game),game);
       return {data:{id:args.p_game,status:'playing',expires_at:new Date(game.expires).toISOString()},error:null};
