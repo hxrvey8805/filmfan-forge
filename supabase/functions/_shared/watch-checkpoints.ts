@@ -6,7 +6,7 @@ import type {BudgetRpc} from './sol-budget.ts';
 // The fingerprint includes the exact generator arguments: prompts, context,
 // cutoff, output token request, purpose and schema. Bump this revision whenever
 // model/provider/routing/settings or parsing changes outside those arguments.
-export const WATCH_WORK_REVISION='watch-work-2026-11-26-citation-contract-v1';
+export const WATCH_WORK_REVISION='watch-work-2026-11-26-identity-context-v1';
 export interface WatchCheckpoints {
   load():Promise<Record<string,{value:unknown}>>;
   save(key:string,value:unknown):Promise<void>;
