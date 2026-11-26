@@ -45,7 +45,7 @@ describe('shared-cut releases and opt-in series recaps', () => {
     expect(wholeShowRecap('Catch me up on the whole show so far')).toBe(true);
     expect(questionIntent('Who had the key up to this point?')).toBe('explanation');
   });
-  it('reads only earlier episodes, keeps the current cutoff and safely restores only explicit series recaps', async () => {
+  it('reads only earlier episodes and restores scoped earlier context without moving the current cutoff', async () => {
     const pos = { ...p, episodeNumber: 3, seconds: 15 };
     const list = priorEpisodes(pos, []);
     const source = (s: number, e: number, t: number) => ({
@@ -80,7 +80,9 @@ describe('shared-cut releases and opt-in series recaps', () => {
     };
     expect(safeHistory([row], pos)).toHaveLength(1);
     expect(safeHistory([row], { ...pos, seconds: 14 })).toHaveLength(0);
-    expect(safeHistory([{ ...row, question: 'What happened here?' }], pos)).toHaveLength(0);
+    expect(safeHistory([{ ...row, question: 'What happened here?' }], pos)).toHaveLength(1);
+    expect(safeHistory([{ ...row, question: 'What happened here? Only this episode.' }], pos)).toHaveLength(0);
+    expect(safeHistory([{ ...row, question: 'What happened here?', evidence: result.evidence.filter(e => e.episode !== 3) }], pos)).toHaveLength(0);
     expect(safeHistory([row], { ...pos, episodeNumber: 2 })).toHaveLength(0);
   });
 });

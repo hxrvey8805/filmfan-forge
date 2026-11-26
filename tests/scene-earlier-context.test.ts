@@ -3,6 +3,8 @@ import {answerWatchRequest,type WatchStore} from '../supabase/functions/_shared/
 import {questionScope} from '../supabase/functions/_shared/question-scope';
 import {watchSources,type WatchSource} from '../supabase/functions/_shared/watch-context';
 import {selectWatchSources,watchAnswer} from '../supabase/functions/_shared/watch-answer';
+import {companionResponse,immediateMemoryResponse} from '../supabase/functions/_shared/companion-response';
+import {safeHistory,conversationMemory,type Conversation} from '../supabase/functions/_shared/companion';
 import {scenePosition as position,sceneQuestion as question,sceneRecords} from './fixtures/scene-earlier-context';
 
 function store():WatchStore {
@@ -44,6 +46,33 @@ describe('scene explanations use earlier story without moving the viewing bounda
     expect(packets[0].request.target).toMatchObject({season:1,episode:2,end:300});
     expect(packets[0].sources.some((s:any)=>s.historicalDialogue && s.episode===1)).toBe(true);
     expect(JSON.stringify(gen.mock.calls)).not.toMatch(/CROSSING_CUTOFF|LATER_TIMESTAMP|FUTURE_EPISODE|FUTURE_SEASON|FOREIGN_TITLE/);
+  });
+  it('delivers and restores a checked scene answer with earlier citations through the saved-answer gate',async()=>{
+    const checked=await answerWatchRequest(question,position,[],generator(),store());
+    const response=companionResponse(question,position,[],[],checked);
+    const saved:Conversation={id:'saved-scene',title_id:position.tmdbId,media_type:'tv',season_number:1,episode_number:2,
+      position_seconds:300,companion_version:3,question,answer:response.answer,evidence:response.evidence,
+      answer_status:response.answer_status,context:'S1E2 @ 00:05:00',timestamp:'00:05:00',created_at:'2026-11-26T12:00:00Z'};
+    expect(response.charge).toBe(true);
+    expect(safeHistory([saved],position)).toEqual([saved]); // Post-save/idempotent response.
+    expect(safeHistory([saved],{...position,seconds:43200})).toEqual([saved]); // Episode-visible UI history.
+    expect(conversationMemory([saved],position)).toEqual([saved]);
+    expect(immediateMemoryResponse('Repeat your last answer',position,[saved])).toMatchObject({answer,charge:false});
+    expect(safeHistory([saved],{...position,seconds:299})).toEqual([]);
+    expect(conversationMemory([saved],{...position,seconds:299})).toEqual([]);
+    expect(safeHistory([saved],{...position,episodeNumber:1,seconds:43200})).toEqual([]);
+    expect(safeHistory([saved],{...position,tmdbId:123456})).toEqual([]);
+    const past=response.evidence.find(e=>e.episode===1)!;
+    const current=response.evidence.find(e=>e.episode===2)!;
+    // The new route still rejects future, foreign, retired or unscoped citations.
+    for(const invalid of [
+      {...current,end:301}, {...past,episode:3,id:`series:${position.tmdbId}:1:3:v3:later`},
+      {...past,season:2,id:`series:${position.tmdbId}:2:1:v3:later`},
+      {...past,id:'unscoped'}, {...past,id:'series:123456:1:1:v3:foreign'},
+      {...past,id:`series:${position.tmdbId}:1:1:v2:retired`}, {...past,end:43201},
+    ]) expect(safeHistory([{...saved,evidence:[current,invalid]}],position)).toEqual([]);
+    expect(safeHistory([{...saved,evidence:[past]}],position)).toEqual([]);
+    expect(safeHistory([{...saved,question:'Explain this scene. Only this episode.'}],position)).toEqual([]);
   });
   it.each(['timing','spoiler','old-only'] as const)('rejects an explanation with %s failure',async mode=>{
     await expect(answerWatchRequest(question,position,[],generator(mode),store())).rejects.toMatchObject({code:'question_answer_unverified'});

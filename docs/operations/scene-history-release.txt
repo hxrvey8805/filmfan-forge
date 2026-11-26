@@ -1,0 +1,66 @@
+Scene-answer delivery correction — 26 November 2026
+
+Problem and behaviour
+PR41 deployed successfully with all 60 transitive source hashes matching its
+tested tree. Its first live tests confirmed two-episode context selection.
+One scene answer passed the unchanged factual/spoiler review, was saved, and used
+one question, but the post-save history gate rejected it with HTTP 409. That gate
+still excluded every scene answer citing a previous episode. The frontend uses
+the same gate, so it would also hide the saved answer after a backend-only fix.
+
+This correction admits properly scoped earlier-episode citations for scene
+answers only when current-episode evidence is present too. The existing title,
+episode, timestamp, source-version and earlier-order checks remain in place.
+An earlier-only scene answer or an explicit current-episode-only request still
+cannot pass with historical citations. Rewinds still exclude later answers from
+model memory; the UI keeps its already-shipped same-episode history behaviour.
+
+The corrected gate returns the existing verified answer on a same-request retry
+or history read. It does not regenerate the answer or charge another question.
+Work/check revisions advance to watch-work-2026-11-26-scene-history-v2 and
+watch-checks-2026-11-26-scene-history-v2.
+
+Verification
+- Reproduced the delivery rejection before changing the gate.
+- 1,525 automated checks passed across 98 files. The regression exercises the
+  generator, response builder, saved-answer gate, UI history, model memory and
+  uncharged exact-repeat path. It rejects future/foreign/unscoped/retired source
+  citations, earlier-only scene evidence and explicit current-only requests.
+- An old series-recap test assumed scene questions could never use earlier
+  context. Its expectation now matches PR41 while retaining cutoff, explicit
+  restriction and current-evidence checks.
+- Nine offline assertions against the exact saved live answer passed, including
+  delivery/history, same-position memory, rewind, episode switch, foreign title
+  rejection and an unchanged, uncharged repeat. No additional AI call was made.
+- Deno function typecheck, native web-bundle build, production-file ESLint and
+  git diff --check passed. The scene test file retains the same 13 pre-existing
+  no-explicit-any lint findings as PR41; this patch adds none.
+
+Live results and remaining limit
+At Breaking Bad S1E2 08:40, the sales-call scene answer passed review and used
+both episodes. Its current-episode citations ended no later than 08:38.851.
+It was hidden by the delivery defect above, not rejected for a spoiler.
+At S1E2 20:00, the broader blaming-each-other question returned an uncharged
+verification fallback after citation and identity review failures. This patch
+does not change those reviewer decisions or establish that this case passes.
+The episode-switch UI returned to S1E1 00:00 without E2 chat. No new AI question
+was submitted at that boundary, so this is a UI check, not a live answer test.
+
+The two live questions cost $0.190188 in total. At the final snapshot all calls
+were settled, no call remained active, and no budget halt was present.
+Global committed cost was $2.500359 of $5. Production caps remain $0.35/question
+and $3/account/calendar month, with 64 calls/question. The private test cap is
+still $11 and its committed amount remains $10.89039165. Existing unknown-cost
+holds remain reserved. Real purchases remain disabled.
+
+Rollout
+Prepare a follow-up to PR41; deploy spoiler-free-companion and its shared files,
+then ship the matching client in a new TestFlight build. Both use companion.ts.
+Verify the deployment manifest and new revision, then read the already-saved
+08:40 answer at the same position rather than issuing a paid repeat test.
+Check same-episode UI history and the server's rewind/title/episode boundaries.
+No SQL, secret, budget, purchase-setting or model/prompt change is required.
+The separate draft long-recap PR40 is excluded.
+
+This document records a locally verified correction, not a completed follow-up
+deployment, TestFlight release, or a fully passing live scene test suite.

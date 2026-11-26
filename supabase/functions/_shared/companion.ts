@@ -247,12 +247,16 @@ export function safeHistory<T extends Conversation>(rows: T[], position: Viewing
     row.companion_version === companionVersionFor(position) && row.position_seconds !== null &&
     (position.mediaType === 'movie' || (row.season_number === position.seasonNumber && row.episode_number === position.episodeNumber)) &&
     permittedPosition(row.season_number, row.episode_number, row.position_seconds, position) &&
-    // Persisted answers from older retrieval may have a correctly scoped row
-    // but citations from another episode. Never restore those into chat or memory.
+    // Earlier-story citations need the scoped title/episode/version prefix.
+    // A scene may use that background only alongside current-episode evidence;
+    // keep its own timestamp and all source boundaries checked on every restore.
     (row.evidence === undefined || (Array.isArray(row.evidence) && row.evidence.every(e => e &&
       Number.isFinite(e.start) && e.start >= 0 && Number.isFinite(e.end) && e.end >= e.start && (
         (e.scope !== 'completed_episode' && e.season === row.season_number && e.episode === row.episode_number && e.end <= row.position_seconds!) ||
-        (row.media_type === 'tv' && allowsEarlierStory(row.question) && questionIntent(row.question)!=='scene' && Number.isInteger(e.season) && e.season >= 0 &&
+        (row.media_type === 'tv' && allowsEarlierStory(row.question) &&
+          (questionIntent(row.question)!=='scene' || Array.isArray(row.evidence) && row.evidence.some(current=>current &&
+            current.scope!=='completed_episode' && current.season===row.season_number && current.episode===row.episode_number)) &&
+          Number.isInteger(e.season) && e.season >= 0 &&
           Number.isInteger(e.episode) && e.episode >= 1 && e.end <= 43200 &&
           (e.season < row.season_number! || (e.season === row.season_number && e.episode < row.episode_number!)) &&
           typeof e.id === 'string' && e.id.startsWith('series:'+row.title_id+':'+e.season+':'+e.episode+':v'+companionVersionFor({tmdbId:row.title_id,mediaType:'tv',seasonNumber:e.season,episodeNumber:e.episode})+':')))))))
