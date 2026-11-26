@@ -1,0 +1,54 @@
+Retained companion verification diagnostics
+
+Problem and scope
+The latest Breaking Bad S1E2 20:00 question failed after 7 settled provider
+calls ($0.156331). Its question allowance was returned, no answer was saved,
+and no spending guard stopped it. By inspection time its runtime log window
+was unavailable and finished checkpoints had been deleted. The precise final
+rejection could not be established. This change fixes that diagnostic gap;
+it does NOT claim to fix or pass the scene answer itself.
+
+Changes
+- Store up to four worker diagnostic snapshots on the existing private request
+  row. Each snapshot is bounded to 256 events and 64 KiB; first context counts
+  and latest failure survive overflow. The database rejects unknown fields,
+  free text, invalid categories and unbounded values.
+- Distinguish reviewer, receipt and local-rule paragraph rejections. Retain
+  source/episode counts, fixed issue codes, input hashes and call timings.
+- No captions, questions, drafts, reviewer prose, tokens or exception text
+  enter the new diagnostics. Existing request access/deletion rules apply.
+- Save after success, paused work or failure cleanup through a service-only,
+  account/request/worker-scoped RPC. Stale workers cannot overwrite a resume.
+  Diagnostics failures do not change answers or quota; RPC timeout is 2s.
+
+Unchanged
+Model, provider, inference settings, prompts, source context, rewrite limits,
+factual/spoiler acceptance rules, work checkpoints, spending caps, uncertain
+holds, client behavior and disabled real purchases. No TestFlight upload.
+
+Deployment order
+1. Verify current global $5, per-question $0.35, account-month $3 and call64
+   limits, existing unknown holds, sales_enabled=false. Record without change.
+2. Apply only 20261126160000_companion_diagnostics.sql. This adds one column
+   and one restricted RPC; it does not delete rows or alter allowance logic.
+3. Deploy only spoiler-free-companion and the exact reviewed transitive files.
+   Record all source hashes, source commit and deployment receipt. Do not
+   include draft recap PR40, publish frontend or run a model test in Lovable.
+4. Read schema/function permissions and verify controls unchanged and unsigned
+   access rejected. No fake diagnostic rows need to be inserted in production.
+5. Run at most one controlled scene reproduction through the existing app
+   and existing approved live guards. Read retained diagnostics before any
+   subsequent change/test. Do not call this scene ready until it passes live.
+
+Rollback
+Redeploy the previous function if needed. The additive private column/RPC can
+remain inert; no destructive rollback or spending reset is necessary.
+
+Validation
+Full regression suite: 1,548 checks across 100 files passed (26 November 2026).
+Local PostgreSQL tests exercise actual allowance/checkpoint migrations plus
+the additive migration: retained failure after cleanup, no quota/cost change,
+stale/foreign writer rejection, bounded/idempotent snapshots, free-text
+rejection and denied client/direct service reads. Unit tests cover metadata
+filtering, bounded buffer and identical generated arguments/results when
+logging/storage fails. Deno check and changed TypeScript lint pass.

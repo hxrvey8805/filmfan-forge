@@ -48,7 +48,17 @@ describe('diagnosing rejected explanations without logging story content',()=>{
     const events:WatchDiagnostic[]=[];
     expect(await storyDiscussion(ctx,gen,e=>events.push(e))).toBeNull();
     expect(events).toContainEqual({stage:'review_invalid',attempt:1,reason:'receipt_range'});
+    expect(events).toContainEqual({stage:'review_check_rejected',attempt:1,paragraph:0,origin:'receipt',issues:['citation']});
     expect(events.some(e=>e.stage==='writer_invalid')).toBe(false);
+  });
+  it.each(['reviewer','local'] as const)('distinguishes %s identity rejection without retaining the failed text',async origin=>{
+    const events:WatchDiagnostic[]=[];
+    const named={points:[{text:'The job belonged to Mira.',support}]};
+    const checked={...review,checks:[{...review.checks[0],...(origin==='reviewer'?{supported:false,issue:'identity',support:[]}: {})}]};
+    const gen=vi.fn().mockImplementation(async(_system,_packet,_tokens,role)=>role==='writer'?named:checked);
+    expect(await storyDiscussion(ctx,gen,e=>events.push(e))).toBeNull();
+    expect(events).toContainEqual({stage:'review_check_rejected',attempt:1,paragraph:0,origin,issues:['identity']});
+    expect(JSON.stringify(events)).not.toContain('Mira');
   });
   it('rejects a future source before any generation even if logging fails',async()=>{
     const gen=vi.fn(),events:WatchDiagnostic[]=[];
