@@ -175,6 +175,7 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
       if (!record(c) || c.index !== index || typeof c.supported !== 'boolean' || !issues.includes(c.issue as Issue) ||
         !['none','explicit','contextual','uncertain'].includes(String(c.attribution))) {emit({stage:'review_invalid',attempt:attempt+1,reason:'check_shape'});return null;}
       if (!c.supported || c.issue !== 'none') {
+        emit({stage:'review_check_rejected',attempt:attempt+1,paragraph:index,origin:'reviewer',issues:[c.issue==='none'?'citation':c.issue as Exclude<Issue,'none'>]});
         feedback.push(c.issue === 'none' ? 'citation' : c.issue as Exclude<Issue,'none'>);
         // Only exact phrases already in the permitted packet can identify a
         // disputed attribution on retry. Never pass draft words or judge prose.
@@ -185,12 +186,13 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
         continue;
       }
       const support = parseProof(c.support);
-      if (!support) {emit({stage:'review_invalid',attempt:attempt+1,reason:proofFailure});feedback.push('citation'); continue; }
+      if (!support) {emit({stage:'review_invalid',attempt:attempt+1,reason:proofFailure});emit({stage:'review_check_rejected',attempt:attempt+1,paragraph:index,origin:'receipt',issues:['citation']});feedback.push('citation'); continue; }
       const point = {text:points[index].text,support};
       const local = grounding(point);
       const hints=groundingContextHints(point.text,support.map(r=>r.quote).join(' '),evidence);
       const reaction=unsupportedCaptionReaction(point.text,support.map(r=>r.quote).join(' '));
       if(reaction && support.every(r=>byId.get(r.id)!.kind==='dialogue'||byId.get(r.id)!.historicalDialogue)) {
+        emit({stage:'review_check_rejected',attempt:attempt+1,paragraph:index,origin:'local',issues:['action']});
         actionWarnings.push(reaction);feedback.push('action');continue;
       }
       const names = namedSpeechSubjects(point.text);
@@ -199,10 +201,12 @@ export async function storyDiscussion(ctx: StoryDiscussionContext, generate: Jso
       // labels are no longer mandatory, but a contextual attribution must be
       // positively checked with receipts, never merely omitted from review.
       if (local.includes('identity') || names.some(name => !quoted.includes(' ' + normal(name).replace(/[^\p{L}\p{N}]+/gu,' ') + ' '))) {
+        emit({stage:'review_check_rejected',attempt:attempt+1,paragraph:index,origin:'local',issues:['identity']});
         contextCandidates.push(...hints.contextCandidates);feedback.push('identity');continue;
       }
-      if (c.attribution === 'uncertain' || names.length && c.attribution === 'none') { feedback.push('speaker'); continue; }
+      if (c.attribution === 'uncertain' || names.length && c.attribution === 'none') { emit({stage:'review_check_rejected',attempt:attempt+1,paragraph:index,origin:'local',issues:['speaker']});feedback.push('speaker'); continue; }
       if (local.includes('action') && support.every(r => byId.get(r.id)!.historicalDialogue)) {
+        emit({stage:'review_check_rejected',attempt:attempt+1,paragraph:index,origin:'local',issues:['action']});
         const term=unqualifiedCaptionActionTerm(point.text);if(term)actionWarnings.push(term);
         feedback.push('action');continue;
       }

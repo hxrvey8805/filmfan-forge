@@ -3,6 +3,7 @@ import {CompanionWorkDeferred} from '../_shared/companion-work.ts';
 import {databaseWatchCheckpoints,resumeWatchGenerator} from '../_shared/watch-checkpoints.ts';
 import { answerWatchRequest, WATCH_RECAP_REVISION } from '../_shared/watch-service.ts';
 import { traceWatchGenerator, WATCH_CHECK_REVISION, type WatchObserver } from '../_shared/watch-diagnostics.ts';
+import {retainedWatchDiagnostics} from '../_shared/watch-diagnostic-store.ts';
 import { referenceRequest } from '../_shared/watch-answer.ts';
 import { episodeRevision, priorEpisodes, seriesRecap } from '../_shared/series-recap.ts';
 import type { CheckedResponse } from '../_shared/companion-response.ts';
@@ -137,6 +138,7 @@ serve(async req => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   let allowance: Awaited<ReturnType<typeof beginQuestionAllowance>> | undefined;
   let resumable=false;
+  let flushDiagnostics:(()=>Promise<void>)|undefined;
   try {
     const authorization = req.headers.get('Authorization');
     if (!authorization) return json({ error: 'Please log in.' }, 401);
@@ -213,7 +215,10 @@ serve(async req => {
     if (!memoryReply && release.answerOptions.captionDiscussion) {
       let activeGenerator: JsonGenerator | undefined;
       // Source preparation must not consume the model's response deadline.
-      const observe:WatchObserver=event=>console.info('Companion watch check',{requestId:id,revision:WATCH_CHECK_REVISION,...event});
+      const diagnostics=retainedWatchDiagnostics((name,args)=>db.rpc(name,args).abortSignal(AbortSignal.timeout(2000)),
+        user.id,id,allowance.attempt,event=>console.info('Companion watch check',{requestId:id,revision:WATCH_CHECK_REVISION,...event}));
+      const observe:WatchObserver=diagnostics.observe;
+      flushDiagnostics=diagnostics.flush;
       const fresh=traceWatchGenerator((...args)=>(activeGenerator ??= companionGenerator(name => Deno.env.get(name), fetch,
         allowance!.budget))(...args),observe);
       const generate=resumable?resumeWatchGenerator(fresh,databaseWatchCheckpoints((name,args)=>db.rpc(name,args),user.id,id,allowance.attempt)):fresh;
@@ -368,5 +373,9 @@ serve(async req => {
     console.error('Companion request failed');
     return json({ error: error instanceof Error ? error.message : 'Unable to answer right now. Please try again.',
       ...(allowance?.active ? {code:'question_request_closed'} : {}) }, 503);
+  } finally {
+    // This runs after both success and failure cleanup. A missing migration or
+    // a diagnostics outage must not change the answer, quota or error shown.
+    await flushDiagnostics?.();
   }
 });

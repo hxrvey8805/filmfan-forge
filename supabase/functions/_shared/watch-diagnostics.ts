@@ -1,6 +1,6 @@
 import type { JsonGenerator } from './answer.ts';
 
-export const WATCH_CHECK_REVISION = 'watch-checks-2026-11-26-verification-repair-v1';
+export const WATCH_CHECK_REVISION = 'watch-checks-2026-11-26-retained-diagnostics-v1';
 export type DiscussionIssue = 'identity'|'speaker'|'action'|'cause'|'timing'|'spoiler'|'relevance'|'citation';
 export type ProofFailure = 'receipt_count'|'receipt_source'|'receipt_range'|'receipt_mixed_format'|'receipt_missing_quote'|'receipt_length'|'receipt_mismatch';
 export type WatchDiagnostic =
@@ -9,6 +9,7 @@ export type WatchDiagnostic =
   | {stage:'writer_rejected';attempt:number;issue:'spoiler'|'action'}
   | {stage:'review_invalid';attempt:number;reason:'shape'|'check_shape'|ProofFailure}
   | {stage:'review_rejected';attempt:number;issues:DiscussionIssue[]}
+  | {stage:'review_check_rejected';attempt:number;paragraph:number;origin:'reviewer'|'receipt'|'local';issues:DiscussionIssue[]}
   | {stage:'answer_accepted';attempt:number;paragraphs:number;partial:boolean}
   | {stage:'answer_exhausted'}
   | {stage:'sources_ready';sources:number;episodes:number}

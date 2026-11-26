@@ -4,6 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import {databaseWatchCheckpoints} from '../supabase/functions/_shared/watch-checkpoints';
+import {retainedWatchDiagnostics} from '../supabase/functions/_shared/watch-diagnostic-store';
 import { beginQuestionAllowance } from '../supabase/functions/_shared/question-allowance';
 import type { BudgetRpc } from '../supabase/functions/_shared/sol-budget';
 import { solGenerator } from '../supabase/functions/_shared/openrouter-sol';
@@ -25,7 +26,7 @@ beforeAll(async()=>{
   for(const name of ['20261013120000_companion_evidence_and_memory','20261015153000_caption_context_revision',
     '20261015195500_companion_answer_revision','20261106093000_quarantine_subtitle_editions','20261106163000_shared_cut_revision',
     '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance',
-    '20261114120000_companion_spending_safeguards','20261125120000_companion_work_checkpoints']) await pg.exec(migration(name));
+    '20261114120000_companion_spending_safeguards','20261125120000_companion_work_checkpoints','20261126160000_companion_diagnostics']) await pg.exec(migration(name));
 });
 
 describe('spending safeguards',()=>{
@@ -337,6 +338,60 @@ async function pack(count=5,transaction=randomUUID(),owner=user){
   return result.data;
 }
 async function complete(charge=true){const id=randomUUID();const gate=await begin(id);const result=await gate.finish(answer(id),charge);if(result.error)throw result.error;return result;}
+
+describe('retained private verification diagnostics',()=>{
+  const read=async(id:string)=>(await pg.query<{check_diagnostics:any[]}>('SELECT check_diagnostics FROM companion_question_requests WHERE id=$1',[id])).rows[0].check_diagnostics;
+  const args=(id:string,attempt:string,events:unknown[],owner=user)=>({p_user_id:owner,p_request_id:id,p_attempt:attempt,
+    p_revision:'watch-checks-test',p_events:events,p_dropped:0});
+  it('retains failure categories after checkpoint cleanup without charging or changing budgets',async()=>{
+    await pro();const id=randomUUID(),gate=await beginQuestionAllowance(rpc,user,id,scope,'openrouter-sol',true);
+    await databaseWatchCheckpoints(rpc,user,id,gate.attempt).save('a'.repeat(64)+':0',{secret:'PRIVATE_DRAFT'});
+    const diagnostics=retainedWatchDiagnostics(rpc,user,id,gate.attempt);
+    diagnostics.observe({stage:'review_check_rejected',attempt:3,paragraph:0,origin:'local',issues:['identity']});
+    diagnostics.observe({stage:'answer_gap',reason:'explanation_rejected'});
+    await gate.end(false);await diagnostics.flush();
+    expect((await read(id))[0].events).toEqual([
+      {stage:'review_check_rejected',attempt:3,paragraph:0,origin:'local',issues:['identity']},
+      {stage:'answer_gap',reason:'explanation_rejected'},
+    ]);
+    expect((await pg.query('SELECT count(*)::int n FROM companion_work_checkpoints')).rows[0].n).toBe(0);
+    expect(JSON.stringify(await read(id))).not.toContain('PRIVATE_DRAFT');
+    expect(await allowance()).toMatchObject({included:15});
+    expect((await pg.query('SELECT committed_micro_usd,limit_micro_usd FROM companion_sol_budget')).rows[0])
+      .toEqual({committed_micro_usd:0,limit_micro_usd:5000000});
+  });
+  it('rejects another account or stale worker and bounds retained worker snapshots',async()=>{
+    await pro();const id=randomUUID();let gate=await begin(id);
+    const old=gate.attempt;
+    for(let i=0;i<6;i++){
+      const a=args(id,gate.attempt,[{stage:'answer_exhausted'}]);
+      expect(await rpc('save_companion_diagnostics',a)).toMatchObject({data:true,error:null});
+      expect(await rpc('save_companion_diagnostics',a)).toMatchObject({data:true,error:null});
+      await gate.end(true);gate=await begin(id);
+    }
+    expect(await read(id)).toHaveLength(4);
+    expect((await rpc('save_companion_diagnostics',args(id,old,[]))).data).toBe(false);
+    expect((await rpc('save_companion_diagnostics',args(id,gate.attempt,[],randomUUID()))).data).toBe(false);
+  });
+  it.each([
+    {stage:'answer_gap',reason:'SECRET_CAPTION'}, {stage:'answer_exhausted',answer:'SECRET_DRAFT'},
+    {stage:'review_rejected',issues:['SECRET_SPOILER']}, {stage:'model_call',inputHash:'SECRET_TOKEN'},
+    {stage:'sources_ready',sources:-1},{stage:'sources_ready',sources:Infinity},
+  ])('the database itself refuses free text or invalid values: %j',async event=>{
+    await pro();const id=randomUUID(),gate=await begin(id);
+    expect((await rpc('save_companion_diagnostics',args(id,gate.attempt,[event]))).error).toBeTruthy();
+    expect(await read(id)).toEqual([]);
+  });
+  it('does not expose traces or let app clients write them',async()=>{
+    for(const role of ['anon','authenticated','service_role'])await expect(pg.transaction(async tx=>{
+      await tx.exec(`SET LOCAL ROLE ${role}`);await tx.exec('SELECT check_diagnostics FROM companion_question_requests');
+    })).rejects.toThrow(/permission denied/);
+    for(const role of ['anon','authenticated'])await expect(pg.transaction(async tx=>{
+      await tx.exec(`SET LOCAL ROLE ${role}`);
+      await tx.query('SELECT save_companion_diagnostics($1,$2,$3,$4,$5,$6)',[user,randomUUID(),randomUUID(),'watch-checks-test',[],0]);
+    })).rejects.toThrow(/permission denied/);
+  });
+});
 
 describe('monthly question policy and purchased balances',()=>{
   it('stages without changing the beta cap or enabling purchases',async()=>{
