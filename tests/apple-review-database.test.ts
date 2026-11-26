@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {vector} from '@electric-sql/pglite-pgvector';
-import {beforeAll,afterAll,beforeEach,it,expect} from 'vitest';
+import {beforeAll,afterAll,beforeEach,describe,it,expect} from 'vitest';
 import type {VerifiedSandboxPurchase} from '../supabase/functions/_shared/apple-purchase-verification';
 import {readProAccess,canWear} from '../src/lib/pro-access';
 
@@ -28,11 +28,12 @@ beforeAll(async()=>{
   await pg.exec(readFileSync(new URL('../supabase/release/apple-production.sql',import.meta.url),'utf8'));
   await pg.exec(readFileSync(new URL('../supabase/release/apple-review.sql',import.meta.url),'utf8'));
   await pg.exec(migration('20261122120000_private_test_plan_grants'));
+  for(const name of ['20261125120000_companion_work_checkpoints','20261126160000_companion_diagnostics','20261126180000_private_companion_test_budget','20261126220000_ten_question_subscription_budget'])await pg.exec(migration(name));
   expect((await pg.query<{enabled:boolean}>('SELECT enabled FROM apple_review_policy')).rows[0].enabled).toBe(false);
   expect((await pg.query<{enabled:boolean}>('SELECT enabled FROM companion_usage_policy')).rows[0].enabled).toBe(false);
   // EXCLUSIVELY inside this disposable PostgreSQL fixture. Never configure a
   // real policy, grant a real plan, call a provider or alter the beta cap.
-  await pg.exec(`UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=350000,user_month_limit_micro_usd=3000000;
+  await pg.exec(`UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=350000,user_month_limit_micro_usd=4000000;
     UPDATE apple_production_policy SET enabled=true; UPDATE apple_review_policy SET enabled=true,sales_enabled=true;
     UPDATE companion_sol_budget SET limit_micro_usd=5000000;`);
 });
@@ -44,7 +45,7 @@ it('reads the public-release preflight without changing policies or caps',async(
   const record=results.flatMap(r=>r.rows).find(r=>'release_configuration' in r)?.release_configuration;
   expect(record).toMatchObject({production_verification_enabled:true,production_sales_enabled:false,
     review_verification_enabled:true,review_sales_enabled:true,
-    question_policy:{question_limit_micro_usd:350000,user_month_limit_micro_usd:3000000},
+    question_policy:{question_limit_micro_usd:350000,user_month_limit_micro_usd:4000000},
     global_ai_budget:{limit_micro_usd:5000000}});
   expect((await pg.query('SELECT to_jsonb(p) AS policy FROM companion_usage_policy p')).rows).toEqual(before);
 });
@@ -61,14 +62,14 @@ function receipt(overrides:Partial<VerifiedSandboxPurchase['transaction']>={},st
 const deliver=(r:VerifiedSandboxPurchase,event:string|null=null,owner=user)=>call('apple_review_deliver',[owner,JSON.stringify(r),event]);
 const access=()=>call('get_cinegeek_access',[],'authenticated');
 const allowance=()=>call('get_companion_allowance',[],'authenticated');
-async function useIncluded(){await pg.query('INSERT INTO companion_usage_accounts(user_id) VALUES($1) ON CONFLICT DO NOTHING',[user]);await pg.query(`INSERT INTO companion_question_requests(id,user_id,scope,source,period_start,period_end,status,attempt,lease_until,budget_month)
+async function recordIncluded(){await pg.query('INSERT INTO companion_usage_accounts(user_id) VALUES($1) ON CONFLICT DO NOTHING',[user]);await pg.query(`INSERT INTO companion_question_requests(id,user_id,scope,source,period_start,period_end,status,attempt,lease_until,budget_month)
   SELECT $1,$2,'{}','monthly',w.period_start,w.period_end,'charged',$3,now(),CURRENT_DATE FROM active_companion_entitlement($2) e,
   LATERAL companion_month_window(e.anchor,now()) w`,[randomUUID(),user,randomUUID()]);}
 
 it.each(['monthly','annual'])('grants verified Sandbox %s only in review storage',async plan=>{
   await deliver(receipt({productId:plan==='annual'?annual:monthly}));
   expect(await access()).toMatchObject({plan,smartLists:true,allSkins:plan==='annual',purchasesEnabled:false});
-  expect(await allowance()).toMatchObject({plan,included:15,limit:15});
+  expect(await allowance()).toMatchObject({plan,included:10,limit:10});
   expect((await pg.query('SELECT * FROM companion_pro_entitlements WHERE user_id=$1',[user])).rows).toHaveLength(0);
   expect(await call('get_apple_purchase_configuration',[],'authenticated')).toMatchObject({environment:'Production',salesEnabled:false});
   expect(await call('get_apple_review_configuration',[],'authenticated')).toEqual({environment:'Sandbox',salesEnabled:true,restoreEnabled:true});
@@ -107,9 +108,9 @@ it('withdraws review access when enrollment expires without touching paid access
   await expect(deliver(receipt())).rejects.toThrow('disabled');
 });
 it('restores and upgrades without resetting spent included questions',async()=>{
-  const r=receipt();await deliver(r);await useIncluded();await deliver(r);
+  const r=receipt();await deliver(r);await recordIncluded();await deliver(r);
   await deliver({...r,verifiedAt:now+2,transaction:{...r.transaction,id:String(++counter),productId:annual,purchasedAt:now-100,signedAt:now+2}});
-  expect(await allowance()).toMatchObject({plan:'annual',included:14});
+  expect(await allowance()).toMatchObject({plan:'annual',included:9});
 });
 it('a delayed snapshot cannot reverse a refund',async()=>{
   const r=receipt();await deliver(r);await deliver({...r,status:5,verifiedAt:now+10,transaction:{...r.transaction,signedAt:now+10,revokedAt:now}});
@@ -147,7 +148,7 @@ it.each(['monthly','annual'])('keeps private %s access without expiry, a purchas
   const a=readProAccess(await access());
   expect(a).toMatchObject({plan,expiresAt:null,purchasesEnabled:false,smartLists:true,gamesRemaining:null});
   expect(canWear(a,'jedi')).toBe(plan==='annual');
-  expect(await allowance()).toMatchObject({plan,included:15,limit:15});
+  expect(await allowance()).toMatchObject({plan,included:10,limit:10});
   expect(Number.isFinite(Date.parse(String((await allowance()).renewsAt)))).toBe(true);
   expect((await pg.query('SELECT * FROM companion_pro_entitlements WHERE user_id=$1',[user])).rows).toHaveLength(0);
   expect((await pg.query('SELECT * FROM apple_review_entitlements WHERE user_id=$1',[user])).rows).toHaveLength(0);
@@ -166,23 +167,23 @@ it('keeps the private plan when Sandbox receipts expire or are revoked',async()=
   expect(await access()).toMatchObject({plan:'free'});
 });
 it('preserves a private grant anchor and spent questions across plan changes and repeated reads',async()=>{
-  await privateTestPlan();await useIncluded();
+  await privateTestPlan();await recordIncluded();
   const anchor=(await pg.query('SELECT starts_at FROM cinegeek_private_test_grants WHERE user_id=$1',[user])).rows;
   await privateTestPlan('annual');
   expect((await pg.query('SELECT starts_at FROM cinegeek_private_test_grants WHERE user_id=$1',[user])).rows).toEqual(anchor);
-  expect(await allowance()).toMatchObject({plan:'annual',included:14,limit:15});
+  expect(await allowance()).toMatchObject({plan:'annual',included:9,limit:10});
   expect(await access()).toMatchObject({plan:'annual'});
-  expect(await allowance()).toMatchObject({included:14});
+  expect(await allowance()).toMatchObject({included:9});
 });
 it('reserves, retries and releases questions for a permanent grant without bypassing revocation',async()=>{
   await privateTestPlan('annual');
   const request=randomUUID(),attempt=randomUUID();
   expect(await call('begin_companion_question',[user,request,attempt,{}])).toMatchObject({mode:'monthly',source:'monthly'});
-  expect(await allowance()).toMatchObject({included:14});
+  expect(await allowance()).toMatchObject({included:9});
   await call('end_companion_question_attempt',[user,request,attempt,true]);
   const retry=randomUUID();
   expect(await call('begin_companion_question',[user,request,retry,{}])).toMatchObject({mode:'monthly',source:'monthly'});
-  expect(await allowance()).toMatchObject({included:14});
+  expect(await allowance()).toMatchObject({included:9});
   await call('end_companion_question_attempt',[user,request,retry,true]);
   await pg.query('UPDATE cinegeek_private_test_grants SET revoked=true WHERE user_id=$1',[user]);
   expect(await call('begin_companion_question',[user,request,randomUUID(),{}])).toMatchObject({error:'questions_exhausted'});
@@ -211,4 +212,121 @@ it.each(['anon','authenticated','service_role'])('prevents %s from reading or as
     `SELECT * FROM active_companion_entitlement('${user}')`]) {
     await expect(pg.transaction(async tx=>{await tx.exec(`SET LOCAL ROLE ${role}`);await tx.exec(sql);})).rejects.toThrow('permission');
   }
+});
+
+// Accounting-only tests: real SQL/RPCs, synthetic receipts and numerical bills.
+// No provider traffic, captions, Apple purchases or real funds.
+describe('ten-question subscription budget',()=>{
+  beforeEach(async()=>{
+    await pg.exec(`UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=350000,
+      user_month_limit_micro_usd=4000000,user_day_limit_micro_usd=NULL,question_call_limit=64,
+      subscription_budget_started_at=now()-interval '2 years';
+      UPDATE companion_sol_budget SET enabled=true,committed_micro_usd=0,halted_reason=NULL;`);
+  });
+  const window=async()=> (await pg.query<{period_start:Date;period_end:Date}>(
+    'SELECT * FROM companion_account_spending_window($1)',[user])).rows[0];
+  const begin=async()=>{
+    const id=randomUUID(),attempt=randomUUID();
+    const result=await call('begin_companion_question',[user,id,attempt,{}]);
+    return {id,attempt,result};
+  };
+  const reserve=(q:Awaited<ReturnType<typeof begin>>,amount:number,parallel=false)=>
+    call(parallel?'try_reserve_companion_question_call':'reserve_companion_question_call',[randomUUID(),user,q.id,q.attempt,amount]);
+  const seed=async(amount:number,time:string|Date=new Date(),status='settled')=>{
+    await pg.query(`INSERT INTO companion_sol_calls(id,user_id,request_id,reserved_micro_usd,actual_micro_usd,status,created_at)
+      VALUES($1,$2,$3,$4::bigint,CASE WHEN $5='settled' THEN $4::bigint ELSE NULL END,$5,$6)`,
+      [randomUUID(),user,randomUUID(),amount,status,time]);
+  };
+  it.each(['monthly','annual'])('enforces exactly ten questions and the four-dollar cap for %s',async plan=>{
+    await deliver(receipt({productId:plan==='annual'?annual:monthly}));
+    expect(await allowance()).toMatchObject({included:10,limit:10});
+    for(let n=0;n<10;n++)await recordIncluded();
+    expect((await begin()).result).toMatchObject({error:'questions_exhausted'});
+    expect(await allowance()).toMatchObject({included:0,limit:10});
+    expect((await pg.query('SELECT user_month_limit_micro_usd FROM companion_usage_policy')).rows[0].user_month_limit_micro_usd).toBe(4000000);
+  });
+  it('clamps an existing account that already used more than ten without erasing its history',async()=>{
+    await deliver(receipt());for(let n=0;n<13;n++)await recordIncluded();
+    expect(await allowance()).toMatchObject({included:0,limit:10});
+    expect((await pg.query('SELECT count(*)::int n FROM companion_question_requests WHERE user_id=$1',[user])).rows[0].n).toBe(13);
+  });
+  it.each([false,true])('admits the final micro-dollar and refuses overspending (parallel %s)',async parallel=>{
+    await deliver(receipt());await seed(3999999);const q=await begin();
+    expect(await reserve(q,1,parallel)).toBe(parallel?'reserved':true);
+    // A pending own reservation may produce wait; settle it before testing hard denial.
+    await pg.query("UPDATE companion_sol_calls SET status='settled',actual_micro_usd=reserved_micro_usd WHERE user_id=$1",[user]);
+    expect(await reserve(q,1,parallel)).toBe(parallel?'denied':false);
+    await call('end_companion_question_attempt',[user,q.id,q.attempt,false]);
+    expect(await allowance()).toMatchObject({included:10});
+  });
+  it('fits ten worst-case $0.35 answers plus $0.50 of failed work inside $4',async()=>{
+    await deliver(receipt());await seed(500000);
+    for(let n=0;n<10;n++){
+      const q=await begin();expect(await reserve(q,350000)).toBe(true);
+      await pg.query("UPDATE companion_sol_calls SET status='settled',actual_micro_usd=reserved_micro_usd WHERE user_id=$1",[user]);
+      await call('end_companion_question_attempt',[user,q.id,q.attempt,false]);await recordIncluded();
+    }
+    expect(await allowance()).toMatchObject({included:0});
+    expect((await pg.query('SELECT sum(coalesce(actual_micro_usd,reserved_micro_usd))::bigint total FROM companion_sol_calls WHERE user_id=$1',[user])).rows[0].total).toBe(4000000);
+  });
+  it.each(['reserved','unknown'])('counts %s costs at their full reservation',async status=>{
+    await deliver(receipt());await seed(4000000,new Date(),status);
+    expect(await reserve(await begin(),1)).toBe(false);
+    expect((await pg.query('SELECT actual_micro_usd FROM companion_sol_calls WHERE user_id=$1',[user])).rows[0].actual_micro_usd).toBeNull();
+  });
+  it('keeps the original $0.35 question cap and $5 global cap',async()=>{
+    await deliver(receipt());const q=await begin();expect(await reserve(q,350001)).toBe(false);
+    await call('end_companion_question_attempt',[user,q.id,q.attempt,false]);
+    await pg.exec('UPDATE companion_sol_budget SET committed_micro_usd=5000000');
+    expect(await reserve(await begin(),1)).toBe(false);
+    expect((await pg.query('SELECT limit_micro_usd FROM companion_sol_budget')).rows[0].limit_micro_usd).toBe(5000000);
+  });
+  it('uses the same anniversary as the question allowance for Monthly and Annual',async()=>{
+    const r=receipt();await pg.query("UPDATE apple_review_testers SET expires_at=starts_at+interval '30 days' WHERE user_id=$1",[user]);await deliver(r);const first=await window();
+    expect(first.period_end.toISOString()).toBe(new Date((await allowance()).renewsAt as string).toISOString());
+    await recordIncluded();await deliver({...r,verifiedAt:now+1,transaction:{...r.transaction,id:String(++counter),productId:annual,signedAt:now+1}});
+    expect(await window()).toEqual(first);expect(await allowance()).toMatchObject({included:9});
+  });
+  it('counts costs on the anniversary boundary, not the calendar boundary',async()=>{
+    await deliver(receipt());const w=await window();
+    await seed(4000000,new Date(w.period_start.getTime()-1));
+    const q=await begin();expect(await reserve(q,1)).toBe(true);
+    await call('end_companion_question_attempt',[user,q.id,q.attempt,false]);
+    await seed(4000000,w.period_start);expect(await reserve(await begin(),1)).toBe(false);
+  });
+  it('counts earlier calendar-month costs during the first migrated period',async()=>{
+    await deliver(receipt());const original=await window();
+    await pg.exec('UPDATE companion_usage_policy SET subscription_budget_started_at=now()');
+    const cutover=await window();expect(cutover.period_start.getTime()).toBeLessThanOrEqual(original.period_start.getTime());
+    await seed(4000000,cutover.period_start);expect(await reserve(await begin(),1)).toBe(false);
+  });
+  it('does not lose daily costs when the subscription period begins partway through today',async()=>{
+    const anchor=now-1000;
+    await deliver(receipt({originalPurchasedAt:anchor,purchasedAt:anchor}));
+    await pg.exec('UPDATE companion_usage_policy SET user_day_limit_micro_usd=350000');
+    await seed(350000,new Date(anchor-1000));
+    expect(await reserve(await begin(),1)).toBe(false);
+  });
+  it('preserves the former $3+$2 test ceiling when the base becomes $4',async()=>{
+    await deliver(receipt());const q=await begin();
+    await pg.query(`INSERT INTO companion_private_test_budget_grants(user_id,month_start,additional_micro_usd,starts_at,expires_at,reason)
+      VALUES($1,date_trunc('month',now() AT TIME ZONE 'UTC')::date,2000000,now(),now()+interval '1 hour','fixture')`,[user]);
+    expect((await pg.query('SELECT companion_account_spending_limit($1,4000000) n',[user])).rows[0].n).toBe(5000000);
+    await seed(5000000);expect(await reserve(q,1)).toBe(false);
+    await pg.query('UPDATE companion_private_test_budget_grants SET revoked=true WHERE user_id=$1',[user]);
+    expect((await pg.query('SELECT companion_account_spending_limit($1,4000000) n',[user])).rows[0].n).toBe(4000000);
+  });
+  it.each([false,true])('stops a worker after its subscription expires (parallel %s)',async parallel=>{
+    const r=receipt();await deliver(r);const q=await begin();
+    await deliver({...r,status:5,verifiedAt:now+10,transaction:{...r.transaction,signedAt:now+10,revokedAt:now}});
+    expect(await reserve(q,1,parallel)).toBe(parallel?'denied':false);
+    expect(await allowance()).toMatchObject({plan:'free',included:0});
+  });
+  it.each(['anon','authenticated','service_role'])('prevents %s editing or reading private budget controls',async role=>{
+    for(const sql of ['UPDATE companion_usage_policy SET user_month_limit_micro_usd=5000000',
+      'UPDATE companion_private_test_budget_grants SET approved_base_micro_usd=5000000',
+      `SELECT companion_account_spending_window('${user}')`,
+      `SELECT companion_account_spending_limit('${user}',5000000)`])
+      await expect(pg.transaction(async tx=>{await tx.exec(`SET LOCAL ROLE ${role}`);await tx.exec(sql);})).rejects.toThrow(/permission/);
+  });
 });

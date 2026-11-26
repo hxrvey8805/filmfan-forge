@@ -11,7 +11,7 @@ export function PlanSummary({ access, allowance }: { access: ProAccess | null; a
   const balance = allowance?.mode === 'monthly' ? allowance : null;
   const total = balance ? balance.included + balance.purchased : null;
   const benefits = !access ? [] : pro ? [
-    '15 AI questions each month', 'Smart Lists', 'Unlimited actor games',
+    '10 AI questions each month', 'Smart Lists', 'Unlimited actor games',
     'Daily spin after your first eligible win',
     access.plan === 'annual' ? 'All Geek skins, including new releases' : 'Unlock Geek skins with XP or reward spins',
   ] : ['Manual movie & TV lists', 'Focus with Arcade Geek', 'One actor game each day', 'Earn XP for collectibles'];
@@ -48,7 +48,7 @@ export function PlanSummary({ access, allowance }: { access: ProAccess | null; a
       <details className="plan-disclosure">
         <summary>How questions work<ChevronDown size={17} aria-hidden="true" /></summary>
         <div className="plan-disclosure-body plan-question-rules">
-          <p>Monthly and Annual Pro include 15 questions each subscription month. Unused included questions don’t roll over.</p>
+          <p>Monthly and Annual Pro include 10 questions each subscription month. Unused included questions don’t roll over.</p>
           <p>Purchased questions work on any plan and are used after your included questions.</p>
           <p>XP is for skins and collectibles, separate from AI questions.</p>
         </div>
@@ -60,7 +60,7 @@ export function PlanSummary({ access, allowance }: { access: ProAccess | null; a
 export function PlanComparison({ access, children }: { access: ProAccess | null; children: ReactNode }) {
   return <details key={access?.plan ?? 'unknown'} className="plan-comparison plan-disclosure" open={!access || access.plan === 'free'}>
     <summary>{access?.plan === 'free' ? 'Explore Pro' : 'Compare plans'}<ChevronDown size={17} aria-hidden="true" /></summary>
-    <div className="plan-comparison-body"><p className="plan-comparison-intro">Both plans include 15 AI questions a month, Smart Lists and unlimited games.</p>{children}</div>
+    <div className="plan-comparison-body"><p className="plan-comparison-intro">Both plans include 10 AI questions a month, Smart Lists and unlimited games.</p>{children}</div>
   </details>;
 }
 

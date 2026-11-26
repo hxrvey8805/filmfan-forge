@@ -5,7 +5,7 @@ export const needsOnboarding = (user: { user_metadata?: Record<string, unknown> 
 
 // Design prices only. StoreKit products and entitlements must be connected and
 // verified before enabling purchases. This config never grants Pro access.
-export const PRO_PREVIEW = { monthlyPence: 899, annualPence: 7999, questionsPerMonth: 15, purchasesEnabled: false } as const;
+export const PRO_PREVIEW = { monthlyPence: 899, annualPence: 7999, questionsPerMonth: 10, purchasesEnabled: false } as const;
 export const pounds = (pence: number) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(pence / 100);
 export const annualSavingPence = PRO_PREVIEW.monthlyPence * 12 - PRO_PREVIEW.annualPence;
 export const annualSavingPercent = Math.round(annualSavingPence / (PRO_PREVIEW.monthlyPence * 12) * 100);

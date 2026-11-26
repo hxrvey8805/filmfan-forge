@@ -19,8 +19,8 @@ const renderChat=(allowance:QuestionAllowance)=>{
   return {onAsk,onViewPlan,send:screen.getByRole('button',{name:'Send question'}) as HTMLButtonElement};
 };
 it('shows monthly totals separately from purchased credits, without daily freebies or coins',()=>{
-  const {send}=renderChat({mode:'monthly',plan:'annual',included:14,limit:15,purchased:3,renewsAt:'2026-12-13T12:00:00Z'});
-  expect(screen.getByText('14 of 15 left this month · 3 purchased questions')).toBeTruthy();
+  const {send}=renderChat({mode:'monthly',plan:'annual',included:9,limit:10,purchased:3,renewsAt:'2026-12-13T12:00:00Z'});
+  expect(screen.getByText('9 of 10 left this month · 3 purchased questions')).toBeTruthy();
   expect(screen.queryByText(/free questions|150 coins/)).toBeNull();expect(send.disabled).toBe(false);
 });
 it('allows Free users to send a purchased question with no coins or subscription',async()=>{
@@ -40,7 +40,7 @@ it('does not offer Free users included AI or enable an unfinished checkout',()=>
   expect(screen.queryByRole('button',{name:'View store'})).toBeNull();
 });
 it.each(['monthly','annual'] as const)('%s keeps its composer enabled with included questions',plan=>{
-  const {send}=renderChat({mode:'monthly',plan,included:15,limit:15,purchased:0,renewsAt:'2026-12-13T12:00:00Z'});
+  const {send}=renderChat({mode:'monthly',plan,included:10,limit:10,purchased:0,renewsAt:'2026-12-13T12:00:00Z'});
   expect((screen.getByRole('textbox',{name:'Your question'}) as HTMLTextAreaElement).disabled).toBe(false);
   expect(send.disabled).toBe(false);
 });
@@ -60,7 +60,7 @@ it('locks an existing draft on downgrade and unlocks only when a purchased quest
     <RoomChat expanded={false} onExpand={()=>{}} timestamp="00:30" valid onEditPosition={()=>{}}
       positionButton={createRef()} messages={[]} historyError={null} loading={false} onAsk={onAsk}
       remainingFree={5} onStore={()=>{}} allowance={allowance}/></ProAccessContext.Provider>;
-  const view=render(chat({mode:'monthly',plan:'monthly',included:1,limit:15,purchased:0,renewsAt:'2026-12-13T12:00:00Z'}));
+  const view=render(chat({mode:'monthly',plan:'monthly',included:1,limit:10,purchased:0,renewsAt:'2026-12-13T12:00:00Z'}));
   const input=screen.getByRole('textbox',{name:'Your question'}) as HTMLTextAreaElement;
   fireEvent.change(input,{target:{value:'Explain this scene'}});
   view.rerender(chat({mode:'monthly',plan:'free',included:0,limit:0,purchased:0,renewsAt:null}));
@@ -75,13 +75,13 @@ it('locks an existing draft on downgrade and unlocks only when a purchased quest
   expect(input.disabled).toBe(true);
 });
 it('rejects malformed balances and does not turn an error into free questions',()=>{
-  expect(readQuestionAllowance({mode:'monthly',plan:'free',included:15,limit:15,purchased:0,renewsAt:null})).toEqual({mode:'unavailable'});
-  expect(readQuestionAllowance({mode:'monthly',plan:'annual',included:15,limit:15,purchased:-1,renewsAt:null})).toEqual({mode:'unavailable'});
+  expect(readQuestionAllowance({mode:'monthly',plan:'free',included:10,limit:10,purchased:0,renewsAt:null})).toEqual({mode:'unavailable'});
+  expect(readQuestionAllowance({mode:'monthly',plan:'annual',included:10,limit:10,purchased:-1,renewsAt:null})).toEqual({mode:'unavailable'});
   expect(questionAllowanceLabel(readQuestionAllowance(null))).toBe('Question allowance unavailable');
   expect(readQuestionAllowance({mode:'beta'})).toEqual({mode:'beta'});
 });
 it('keeps a rejected question editable and retries only after an explicit tap',async()=>{
-  const {onAsk,send}=renderChat({mode:'monthly',plan:'monthly',included:15,limit:15,purchased:0,renewsAt:null});
+  const {onAsk,send}=renderChat({mode:'monthly',plan:'monthly',included:10,limit:10,purchased:0,renewsAt:null});
   onAsk.mockRejectedValueOnce(new CompanionAnswerError());fireEvent.click(send);
   const retry=await screen.findByRole('button',{name:'Try again'});
   expect(screen.getByRole('alert').textContent).toContain('No question used.');
@@ -96,7 +96,7 @@ it('does not offer the old retry after changing the timestamp or bypass a Free l
   const chat=(timestamp:string,plan:'monthly'|'free'='monthly')=><RoomChat expanded={false} onExpand={()=>{}}
     timestamp={timestamp} valid onEditPosition={()=>{}} positionButton={createRef()} messages={[]} historyError={null}
     loading={false} onAsk={onAsk} remainingFree={null} onStore={()=>{}}
-    allowance={{mode:'monthly',plan,included:plan==='monthly'?15:0,limit:plan==='monthly'?15:0,purchased:0,renewsAt:null}}/>;
+    allowance={{mode:'monthly',plan,included:plan==='monthly'?10:0,limit:plan==='monthly'?10:0,purchased:0,renewsAt:null}}/>;
   const view=render(chat('08:27'));
   fireEvent.change(screen.getByRole('textbox',{name:'Your question'}),{target:{value:'Summarise her speech.'}});
   fireEvent.click(screen.getByRole('button',{name:'Send question'}));await screen.findByRole('button',{name:'Try again'});
