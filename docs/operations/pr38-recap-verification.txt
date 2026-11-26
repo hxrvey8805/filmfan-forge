@@ -51,3 +51,95 @@ Concrete failed answer checks: identity, then speaker. The logs do not provide a
 Scope
 -----
 Read-only log inspection and this metadata receipt only. No retry, model call, deployment, recovery, implementation change, spending change, or user-data mutation was performed. No captions, generated drafts, credentials, or user email are stored here.
+
+
+PR38 follow-up: speech request (passed)
+=======================================
+Request ID: 9df520ad-602d-447c-be84-61b66f4db164
+Function: spoiler-free-companion
+Matching runtime events: 2026-11-26T09:43:12Z through 2026-11-26T09:44:14Z
+Runtime revision: watch-checks-2026-11-25-latency-v2
+Evidence: live function logs filtered by the exact request ID.
+
+Chronological diagnostic events (UTC)
+-------------------------------------
+09:43:12  sources_ready: sources=458, episodes=17
+09:43:12  model_call: analyst call=1 started
+09:43:15  model_call: analyst call=1 returned, elapsedMs=3613
+09:43:15  model_call: analyst call=3 started
+09:43:15  model_call: analyst call=2 started
+09:43:20  model_call: analyst call=3 returned, elapsedMs=4228
+09:43:20  model_call: analyst call=4 started
+09:43:22  model_call: analyst call=2 returned, elapsedMs=6283
+09:43:22  model_call: analyst call=5 started
+09:43:25  model_call: analyst call=5 returned, elapsedMs=3667
+09:43:25  model_call: analyst call=6 started
+09:43:27  model_call: analyst call=4 returned, elapsedMs=7163
+09:43:27  model_call: analyst call=7 started
+09:43:29  model_call: analyst call=7 returned, elapsedMs=2506
+09:43:31  model_call: analyst call=6 returned, elapsedMs=5031
+09:43:31  model_call: analyst call=8 started
+09:43:32  model_call: analyst call=8 returned, elapsedMs=1883
+09:43:32  model_call: writer call=9 started
+09:43:42  model_call: writer call=9 returned, elapsedMs=9723
+09:43:42  model_call: verifier call=10 failed, elapsedMs=0
+09:43:42  model_call: verifier call=10 started
+09:43:43  sources_ready: sources=458, episodes=17
+09:43:44  model_call: verifier call=1 started
+09:43:52  model_call: verifier call=1 returned, elapsedMs=8039
+09:43:52  review_rejected: attempt=1, issues=[speaker, relevance]
+09:43:52  model_call: writer call=2 started
+09:44:01  model_call: writer call=2 returned, elapsedMs=9528
+09:44:01  model_call: verifier call=3 started
+09:44:14  model_call: verifier call=3 returned, elapsedMs=12485
+09:44:14  answer_accepted: attempt=2, paragraphs=1, partial=false
+
+Summary
+-------
+sources_ready: 2 events, each sources=458 and episodes=17.
+Settled analyst calls: 8 returned (3613, 6283, 4228, 7163, 3667, 5031, 2506, 1883 ms).
+Settled writer calls: 2 returned (9723 ms and 9528 ms).
+Settled verifier calls: 2 returned (8039 ms and 12485 ms).
+Immediate failure: verifier call=10 failed (0 ms); resumed cleanly on next pass.
+Attempt 1: review_rejected, issues=[speaker, relevance].
+Attempt 2: answer_accepted, paragraphs=1, partial=false.
+
+
+PR38 follow-up: short two-minute recap after rewind (failed verification)
+=========================================================================
+Request ID: 991cc959-4f9c-4bf1-a498-42b38b49ab2d
+Function: spoiler-free-companion
+Matching runtime events: 2026-11-26T09:45:02Z through 2026-11-26T09:46:34Z
+Runtime revision: watch-checks-2026-11-25-latency-v2
+Evidence: live function logs filtered by the exact request ID.
+
+Chronological diagnostic events (UTC)
+-------------------------------------
+09:45:02  sources_ready: sources=4, episodes=1
+09:45:02  model_call: writer call=1 started
+09:45:17  model_call: writer call=1 returned, elapsedMs=15329
+09:45:17  model_call: verifier call=2 started
+09:45:42  model_call: verifier call=2 returned, elapsedMs=25200
+09:45:43  review_rejected: attempt=1, issues=[identity, speaker]
+09:45:43  model_call: writer call=3 failed, elapsedMs=1
+09:45:43  model_call: writer call=3 started
+09:46:06  sources_ready: sources=4, episodes=1
+09:46:06  review_rejected: attempt=1, issues=[identity, speaker]
+09:46:06  model_call: writer call=1 started
+09:46:22  model_call: writer call=1 returned, elapsedMs=15647
+09:46:22  model_call: verifier call=2 started
+09:46:34  model_call: verifier call=2 returned, elapsedMs=11916
+09:46:34  review_rejected: attempt=2, issues=[speaker]
+09:46:34  answer_exhausted
+09:46:34  answer_gap: reason=explanation_rejected
+
+Summary
+-------
+sources_ready: 2 events, each sources=4 and episodes=1.
+Settled writer calls: 2 returned (15329 ms and 15647 ms).
+Settled verifier calls: 2 returned (25200 ms and 11916 ms).
+Immediate failure: writer call=3 failed (1 ms); resumed on next pass.
+Failure stage type: review_rejected on both attempts (no writer_invalid or review_invalid events).
+Issue sequence: attempt 1 review_rejected issues=[identity, speaker] (logged twice across the resumed pass); attempt 2 review_rejected issues=[speaker].
+Final failure code: answer_exhausted.
+Associated answer_gap reason: explanation_rejected.
