@@ -13,7 +13,7 @@ const genericSubjects = new Set(('a an the what whats why how who which where wh
 const sentenceWords = new Set(('at after before during earlier later meanwhile here there now then this these those ' +
   'in on for from by with without as but and or so yet however instead also only even finally captions i').split(' '));
 const normalized = (text: string) => text.normalize('NFKC').toLocaleLowerCase('en');
-const token = (text: string) => normalized(text).replaceAll('’', "'").replace(/'s$/, '');
+const token = (text: string) => normalized(text).replaceAll('’', "'").replace(/s'$/, 's').replace(/'s$/, '');
 const words = (text: string) => new Set((text.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) ?? []).map(token));
 // Some OCR subtitle editions systematically render lowercase l as uppercase I.
 // Keep original receipts untouched. Add only this narrow token equivalent
@@ -21,6 +21,15 @@ const words = (text: string) => new Set((text.match(/[\p{L}\p{N}]+(?:['’-][\p{
 // This is not fuzzy name matching or a substitute for attribution review.
 export function captionIdentityWords(text:string) {
   const result=words(text);
+  // The ordinary verb "Googling" is not a new person called Googling. Only
+  // recognize its grammatical forms when the cited source names Google;
+  // do not stem arbitrary character names or infer a service from "search".
+  if(result.has('google'))for(const form of ['googles','googled','googling'])result.add(form);
+  // An explicitly named country can use its conventional dotted initialism.
+  // Lowercase "us" or a different country's ambassador is not sufficient.
+  if(/\bunited states\b/i.test(text)||/\bU\.S\.(?:A\.)?/.test(text)) {
+    for(const form of ['u','s','a','us','usa','united','states'])result.add(form);
+  }
   // A hyphenated acronym+noun descriptor can be the same phrase as the
   // spaced plural in a caption ("TV-show" / "TV shows"). This does not
   // fuzzy-match personal names or supply an acronym absent from the source.
@@ -35,6 +44,19 @@ export function captionIdentityWords(text:string) {
   return result;
 }
 const capitals = (text: string) => text.match(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu) ?? [];
+const sentenceStart=(text:string,index:number)=>!text.slice(0,index).trim()||/[.!?][”"'’)\]]*\s*$/.test(text.slice(0,index));
+const questionCommands=new Set(['recap','summarise','summarize','summary','compare','list','outline','give']);
+function identityWordsForClaim(claim:string,cited:string,sourceNames:Set<string>) {
+  const result=captionIdentityWords(cited);
+  // "the Marlow name/family" can refer to the explicitly cited "Marlows"
+  // when Marlow itself is also established in this permitted packet. This is
+  // a family-reference inflection, never a guessed individual named Marlow.
+  for(const m of claim.matchAll(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu)) {
+    const name=token(m[0]);
+    if(sourceNames.has(name)&&result.has(name+'s')&&/^\s+(?:family|name|clan)\b/i.test(claim.slice(m.index!+m[0].length)))result.add(name);
+  }
+  return result;
+}
 const speechVerbs = '(?:says?|said|saying|states?|stated|stating|tells?|told|telling|asks?|asked|asking|' +
   'confirms?|confirmed|confirming|notes?|noted|noting|advises?|advised|advising|clarifies|clarified|clarifying|' +
   'declares?|declared|declaring|insists?|insisted|insisting|expects?|expected|expecting|argues?|argued|arguing|' +
@@ -58,7 +80,7 @@ const speechMatches = (text: string) => [...text.matchAll(namedSpeech)].filter(m
 export function namedSpeechSubjects(text: string): string[] {
   // A capitalized clause opener is not part of the person's name: "When Mira
   // says..." refers to Mira, not a character called "When Mira".
-  return speechMatches(text).map(match => normalized(match[1]).replace(/^(?:when|while|as|if|because|although|but|and|then|later)\s+/, ''))
+  return speechMatches(text).map(match => normalized(match[1]).replace(/^(?:when|while|as|if|because|although|but|and|then|later|now|meanwhile|earlier|finally)\s+/, ''))
     .map(name=>name.replace(/['’]s$/i,''))
     .filter(name => !genericSubjects.has(name));
 }
@@ -67,10 +89,18 @@ export function namedSpeechSubjects(text: string): string[] {
 // a name missing from the chosen quotes. Presence alone never proves a binding.
 // Only source-backed words may later be reused as rewrite hints.
 export function groundingContextHints(text:string, quotes:string, evidence:Pick<Evidence,'id'|'text'>[]) {
-  const cited=words(quotes);
-  const missing=[...new Set(capitals(text).map(token))].filter(name=>!genericSubjects.has(name)&&!sentenceWords.has(name)&&!cited.has(name));
+  const sourceNames=new Set(evidence.flatMap(e=>capitals(e.text).map(token)));
+  const cited=identityWordsForClaim(text,quotes,sourceNames);
+  const subjects=new Set(namedSpeechSubjects(text).flatMap(name=>name.split(' ')));
+  // Use the same sentence-start distinction as the local identity check.
+  // "Near the end" is not a missing person named Near. A known character
+  // named Near, an acronym or an explicit speech subject still needs proof.
+  const candidates=[...text.matchAll(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu)]
+    .filter(m=>!sentenceStart(text,m.index!)||sourceNames.has(token(m[0]))||subjects.has(token(m[0]))||/^[A-Z]{2,}$/.test(m[0]))
+    .map(m=>token(m[0]));
+  const missing=[...new Set(candidates)].filter(name=>!genericSubjects.has(name)&&!sentenceWords.has(name)&&!cited.has(name));
   const contextCandidates=missing.flatMap(name=>{
-    const sourceIds=evidence.filter(e=>words(e.text).has(name)).map(e=>e.id);
+    const sourceIds=evidence.filter(e=>captionIdentityWords(e.text).has(name)).map(e=>e.id);
     return sourceIds.length?[{word:name,sourceIds}]:[];
   });
   return {missingNames:missing,contextCandidates};
@@ -80,17 +110,18 @@ export function groundingContextHints(text:string, quotes:string, evidence:Pick<
 // A name in the question cannot identify an unlabeled speaker in an unrelated
 // exchange. These checks run before either writer draft reaches the verifier.
 export function draftGroundingIssues(question: string, draft: GroundedDraft, evidence: Evidence[]): VerificationIssue[] {
-  const questionNames = [...new Set(capitals(question).map(token))].filter(name => !genericSubjects.has(name));
   const byId = new Map(evidence.map(item => [item.id, item]));
   // Names already present in the permitted source stay names even at the start
   // of an answer sentence. Their appearance in one scene cannot label speakers
   // in a different, uncited exchange.
   const sourceNames = new Set(evidence.flatMap(item => capitals(item.text).map(token)));
+  const questionNames = [...new Set(capitals(question).map(token))].filter(name =>
+    !genericSubjects.has(name)&&(!questionCommands.has(name)||sourceNames.has(name)));
   const issues = new Set<VerificationIssue>();
   for (const claim of draft.claims) {
     if (unqualifiedCaptionAction(claim.text)) issues.add('action');
     const cited = claim.evidenceIds.map(id => byId.get(id)?.text ?? '').join('\n');
-    const citedWords = captionIdentityWords(cited), claimWords = words(claim.text);
+    const citedWords = identityWordsForClaim(claim.text,cited,sourceNames), claimWords = words(claim.text);
     if (questionNames.some(name => claimWords.has(name) && !citedWords.has(name))) issues.add('identity');
     for (const match of claim.text.matchAll(/(?<![\p{L}\p{N}])[\p{Lu}][\p{L}\p{M}'’-]*/gu)) {
       const name = token(match[0]);
@@ -99,8 +130,7 @@ export function draftGroundingIssues(question: string, draft: GroundedDraft, evi
       // institution. The semantic reviewer must still ground the treatment;
       // this does not license "VIP says..." or an unknown acronym such as FBI.
       if (match[0] === 'VIP' && /^\s+(?:treatment|service|experience)\b/i.test(claim.text.slice(match.index! + match[0].length))) continue;
-      const sentenceStart = !claim.text.slice(0, match.index).trim() || /[.!?][”"'’\)\]]*\s*$/.test(claim.text.slice(0, match.index));
-      if ((!sentenceStart || sourceNames.has(name) || /^[A-Z]{2,}$/.test(match[0])) && !citedWords.has(name)) issues.add('identity');
+      if ((!sentenceStart(claim.text,match.index!) || sourceNames.has(name) || /^[A-Z]{2,}$/.test(match[0])) && !citedWords.has(name)) issues.add('identity');
     }
     // A name being called or mentioned is not a speaker label. Preserve real
     // labels from SDH/WebVTT; never propagate a guessed name across passages.

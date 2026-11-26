@@ -1,0 +1,159 @@
+Recap grounding correction — 26 November 2026
+
+Problem and behaviour
+PR38's live range/season recap checks returned safe fallbacks after identity or
+speaker rejection. The old logs cannot identify the exact rejected wording.
+Private reconstruction exposed a concrete false positive: "Googling" was treated
+as a new identity despite an original receipt naming Google. The independent
+review had already accepted the paragraph. Source-backed grammatical forms now
+match only that explicitly named service; this is not general fuzzy name matching.
+Regression tests also reproduce chronology prefixes such as "Meanwhile Mira"
+being mistaken for the person's complete name. The actual name still needs its
+own original receipt and positive independent attribution review.
+The full-episode test additionally reproduced rejection of "U.S." despite an
+explicit "United States" receipt. Their conventional equivalence is recognized;
+lowercase "us" or a different country's ambassador does not establish it.
+
+If a recap passes its overall boundary/relevance review but a subset of paragraphs
+fails only identity/speaker/action checks, the second writer replaces those sections.
+Previously verified paragraphs retain their exact text. The writer receives
+verified text, failed paragraph indexes, fixed issue codes and permitted source
+IDs. Rejected prose and reviewer explanations are never passed into the retry.
+The ENTIRE combined answer then receives a fresh independent review and all
+original local checks. Earlier verdicts are not supplied to the final reviewer.
+Invalid, missing, duplicate or extra replacement indexes fail closed. Global
+spoiler/relevance failures, other failure types and non-recap requests retain the
+existing full-rewrite behaviour. Maximum attempts/model-call count is unchanged.
+
+Quality and controls
+- Same model/provider, reasoning and output budgets, source selection, full
+  permitted context and timestamp boundaries. No answer streaming or skipped
+  final factual/spoiler review. Recap writer guidance now explicitly distinguishes
+  intercut conversations and unsupported transaction/caller directions, gender,
+  currency and pronoun identities. Successful unrelated first-pass fixtures match.
+- Same production $5 global, $0.35 question and $3 account/month controls and
+  real-purchases-disabled state. No recovery, budget, credential or data migration.
+- Diagnostic events contain only paragraph numbers, fixed failure categories and
+  counts; no questions, captions, drafts or verifier explanations.
+- New work revision prevents old intermediate responses being replayed through
+  changed parsing. Existing valid chapter receipts retain their original checks.
+
+Verification
+- 1,553 automated checks passed across 98 files, including six baseline parity
+  fixtures (only the declared recap writer guidance is removed for that comparison;
+  all source, schema, model parameters, verifier prompts and fixture answers must
+  still match). Coverage includes recap ranges, rewind, episode switches, independent final
+  review rejection, unsupported identities and invalid replacement payloads.
+- Deno typecheck, scoped ESLint and git diff --check passed.
+- Private real-model range recap at S2E7 07:00, requested 05:00–07:00: accepted
+  three paragraphs, with all evidence inside the requested range. The completed
+  writer was reused exactly; a fresh reviewer accepted it on the first attempt
+  after normalization. Fresh review cost $0.0074655; original writer $0.0053948.
+  This is one case, not a general cost or latency guarantee.
+- A controlled repair test seeded an unsupported identity in a third paragraph
+  while retaining two previously verified paragraphs. A fresh repair and complete
+  independent review passed for $0.015044. This is deliberately injected test
+  input, not a historical production draft or independent end-to-end run.
+- Fresh rewind test at S2E7 06:00, range 04:00–06:00: first-attempt pass, two
+  calls, $0.017902, all cited lines inside that range (latest evidence 05:47.065).
+  The result did not reuse or reveal the later 07:00 recap.
+- Private drafts, captions and billing receipts remain outside the repository.
+
+Earlier full-episode result — retained failure evidence
+The private S2E1 full-episode test uses 29 permitted sources in two complete
+source groups. The first group passed. The second group still failed after its
+ordinary two attempts, including with targeted repair and country normalization.
+In the final captured run, the first review accepted seven paragraphs and local
+receipt identity checking rejected one. The repair replaced only that paragraph.
+Fresh full review then rejected paragraphs 2 and 8 for speaker and identity.
+Both had passed the previous review. Their earlier verdicts were not trusted or
+used to override the final rejection; no unchecked or partial recap was returned.
+This was an attribution consistency problem, not a missing source packet,
+exhausted private test cap or transport/deadline failure in that run.
+The original private drafts and exact review/source packets are retained for
+diagnosis. Do not make further random retries or weaken checks to force a pass.
+
+Follow-up diagnosis and v2 correction
+An isolated claim audit distinguished real unsupported links from false warnings:
+the draft asserted a transfer's direction and currency, assigned a reported
+revelation to the adjacent conversation, and inferred gender/caller identity.
+The relevant source block intercuts separate conversations. The new recap writer
+guidance requires those links to be established while retaining named people,
+amounts, reports and stakes that are supported. No extra production model call,
+smaller source packet, additional attempt or reduced review is introduced.
+
+Review hints also used different name normalization from final checks and treated
+ordinary opening words such as "Near" as missing identities. Hints now share the
+source-backed equivalences and sentence-start distinction. Known characters at a
+sentence start, explicit speech subjects and uncited names/acronyms still produce
+warnings. The final local identity and independent semantic gates are unchanged.
+
+Further deterministic false positives were reproduced and corrected: "Recap"
+in a question is an instruction, not a character; plural possessives preserve
+the family token; and a singular family name can match its cited plural only
+when the canonical name also exists in the permitted packet and the claim
+explicitly refers to the family/name/clan. This does not establish an individual
+speaker. Negative tests retain unknown names and unsupported attributions.
+
+The current full-episode quality pipeline passed: 29 eligible source blocks in
+two groups, 16 paragraphs, all evidence within S2E1 before 48:38. The first
+group's captured final repaired draft and positive independent review were
+replayed through corrected local checks with identical sources, text, scope
+and receipts. The second group used four fresh calls, including one repair of
+an unsupported country reference and fresh complete review. Fresh portion cost
+$0.1363615. This was NOT a wholly fresh full-episode generation.
+
+The earlier short and rewind model runs precede the final recap writer guidance;
+the current full-episode run and automated checks include it. After the user
+explicitly authorized the caption transfer, the final fresh short-recap test ran
+on the current code: S2E7 07:00, requested 05:00–07:00. Both writer and reviewer
+were fresh, with no replay or repair. Three paragraphs passed on attempt one;
+all evidence lay between 05:03.108 and 06:58.092 in the selected episode. The
+independent review marked boundarySafe=true, fit=direct, and every paragraph
+supported with no issues. Provider calls took 15.680s and 11.356s (about 27s
+combined), costing $0.011266 and $0.0101635, or $0.0214295 total. Both charges
+settled. This private result is not a live deployment or general latency promise.
+
+Production reservation preflight and readiness
+An offline check used the production reservation calculation on the captured
+eight-call full-episode path, including both repairs. Settled receipts total
+$0.293437 after per-call microUSD rounding, but production would refuse call 6:
+$0.189233 committed plus its $0.168468 reservation exceeds the $0.35 ceiling.
+Later calls ran only in the private harness. The quality pass is NOT a successful
+production-budget end-to-end pass. No reservation calculation or cap was relaxed.
+The fresh second-group calls took about 38s, 37s, 12s and 70s; this is not evidence
+of a speed improvement. Do not call this a complete recap reliability/latency fix.
+
+Keep PR40 draft: the corrective code passes local checks and the final fresh
+short test, but long-recap budget compatibility is not established. The short
+case's reservations fit the unchanged question cap; the eight-call full-episode
+path does not. Do not represent this as a complete long-recap fix.
+Private ledger committed $10.87993115 of $11, leaving about $0.12006885.
+A previous provider body timeout retains its entire $0.18821513 unknown-cost
+reservation. Do not release it, reset a production halt, or alter a spending cap.
+Live production has not been changed by this candidate.
+Read-only live control export at 2026-11-26T10:26:11Z: sales_enabled=false;
+global committed 2310171 of 5000000 microUSD; halt null; no active provider calls;
+question 350000, account/month 3000000; both earlier unknown-cost holds unchanged.
+
+Deployment scope
+After the remaining release gate passes, deploy only spoiler-free-companion from
+the reviewed merged head. Verify the
+complete deployed function/shared-source manifest matches that head and runtime
+revision watch-checks-2026-11-26-recap-v2 appears in the live test logs.
+No SQL, halt reset, secret change, website publication or new iOS build is needed.
+TestFlight 1.0 (39) already supports this backend protocol.
+
+Post-deployment checks
+Before/after: sales_enabled=false; global 5000000 microUSD, per-question 350000,
+per-account/month 3000000; previous unknown provider-cost reservations preserved.
+Run a fresh short recap and a rewind/episode-switch control through the signed-in
+preview. Inspect receipts, final status, charged allowance and settled provider
+costs. Report safe fallbacks or budget stops honestly, without repeated blind
+retries or treating local tests as live production verification.
+
+Limitation
+A multi-episode cold season recap can exceed the unchanged per-question spending
+ceiling even when individual chapters pass. Do not prewarm/split paid requests to
+evade that ceiling, relax source checks, or advertise all season recaps as proven
+by this targeted correction.

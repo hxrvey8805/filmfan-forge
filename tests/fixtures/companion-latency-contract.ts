@@ -6,7 +6,7 @@ import type {ViewingPosition} from '../../supabase/functions/_shared/companion';
 import {createHash} from 'node:crypto';
 
 export const cases=['broad-question','misspelt-name','rewind','episode-switch','recap-range','speech'] as const;
-export async function runLatencyContract(answer:typeof updated,kind:typeof cases[number]) {
+export async function runLatencyContract(answer:typeof updated,kind:typeof cases[number],normalizeSystem?:(system:string,phase:string|undefined)=>string) {
   const p:ViewingPosition={tmdbId:123,mediaType:'tv',seasonNumber:1,episodeNumber:kind==='episode-switch'?2:7,seconds:kind==='rewind'?1500:5000};
   const question=kind==='recap-range'?'Recap between 00:00 and 10:00.':kind==='speech'?'Summarise Mira’s speech.':kind==='misspelt-name'?'Why did mirra discuss the rent?':'What are all the rent jobs?';
   const plan=questionScope(question,p);
@@ -30,5 +30,5 @@ export async function runLatencyContract(answer:typeof updated,kind:typeof cases
     return {boundarySafe:true,fit:'direct',checks:packet.points.map((point:any,index:number)=>({index,supported:true,issue:'none',attribution:'none',support:support(refs[index])}))};
   });
   const result=await answer(question,plan,sources,generate);
-  return {result,requestHashes:generate.mock.calls.map(args=>createHash('sha256').update(JSON.stringify(args)).digest('hex'))};
+  return {result,requestHashes:generate.mock.calls.map(args=>createHash('sha256').update(JSON.stringify(normalizeSystem?[normalizeSystem(args[0],args[3]),...args.slice(1)]:args)).digest('hex'))};
 }
