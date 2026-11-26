@@ -1,6 +1,6 @@
 import {describe,expect,it,vi} from 'vitest';
 import {storyDiscussion,type StoryDiscussionContext} from '../supabase/functions/_shared/story-discussion';
-import {namedSpeechSubjects,captionIdentityWords} from '../supabase/functions/_shared/draft-grounding';
+import {namedSpeechSubjects,captionIdentityWords,groundingContextHints,draftGroundingIssues} from '../supabase/functions/_shared/draft-grounding';
 
 const ctx:StoryDiscussionContext={question:'Recap the last two minutes.',mediaType:'tv',boundary:{season:1,episode:2,seconds:420},
   request:{intent:'recap',target:{season:1,episode:2,start:300,end:420}},sources:[
@@ -131,5 +131,63 @@ describe('explicit country names and their conventional initialism',()=>{
     const gen=vi.fn().mockResolvedValueOnce({points:[{text:'The new U.S. ambassador is introduced.',support:proof('S1')}]})
       .mockResolvedValueOnce({boundarySafe:true,fit:'direct',checks:[accepted(0,proof('S1'))]}).mockResolvedValueOnce({points:[]});
     expect(await storyDiscussion({...ctx,sources:[{...ctx.sources[0],text:source}]},gen)).toBeNull();
+  });
+});
+
+describe('review hints distinguish ordinary prose from missing identities',()=>{
+  it.each(['Near the end, the phone rings.','Next comes an argument.','The reply is “no.” Against that refusal, the demand sounds bold.'])('does not warn of an invented sentence-opening name: %s',text=>{
+    expect(groundingContextHints(text,'The phone rings. An argument follows. No.',[{id:'S1',text:'The phone rings. An argument follows. No.'}]).missingNames).toEqual([]);
+  });
+  it('retains a known character at the start, an unknown speech subject and an uncited name inside a sentence',()=>{
+    const sources=[{id:'S1',text:'Near speaks to Mira.'}];
+    expect(groundingContextHints('Near is present.','The phone rings.',sources)).toEqual({missingNames:['near'],contextCandidates:[{word:'near',sourceIds:['S1']}]});
+    expect(groundingContextHints('UnknownVillain says to wait.','Wait.',sources).missingNames).toContain('unknownvillain');
+    expect(groundingContextHints('The call is from FutureVillain.','Wait.',sources).missingNames).toContain('futurevillain');
+  });
+  it('uses source-backed normalization in hints as well as final checks',()=>{
+    const quotes='The United States ambassador found this on Google.';
+    expect(groundingContextHints('The U.S. ambassador describes Googling.',quotes,[{id:'S1',text:quotes}])).toEqual({missingNames:[],contextCandidates:[]});
+    expect(groundingContextHints('The U.S. ambassador describes Googling.','An ambassador waited.',[{id:'S1',text:quotes}]).missingNames).toEqual(['u','googling']);
+  });
+});
+
+describe('intercut recap facts still require independent attribution',()=>{
+  const sources=[{id:'S1',text:'Mira.\nHello, Rowan.\nWhat is this?\nYour cut.\nThirty grand.\nWait, Alex is whose child?\nAlex is actually Sam’s child.',season:1,episode:2,end:400},
+    {id:'S2',text:'[groaning]\nGive me the name.\nTaylor.\n[phone vibrating]\nRobin.\nWe found her.\nHello, Morgan.\nStart talking.',season:1,episode:2,end:410}];
+  it('does not publish ambiguous transfer direction or caller identity even when all names occur in the source',async()=>{
+    const gen=vi.fn().mockResolvedValueOnce({points:[{text:'Mira gives Rowan thirty grand, then Robin calls to say she found Taylor.',support:[{id:'S1',firstLine:1,lastLine:5},{id:'S2',firstLine:1,lastLine:8}]}]})
+      .mockResolvedValueOnce({boundarySafe:true,fit:'direct',checks:[{index:0,supported:false,issue:'speaker',attribution:'uncertain',support:[{id:'S1',firstLine:3,lastLine:5}]}]})
+      .mockResolvedValueOnce({points:[]});
+    expect(await storyDiscussion({...ctx,sources},gen)).toBeNull();
+  });
+  it('can retain concrete names, amounts and reports without inventing their connections',async()=>{
+    const text='Mira and Rowan discuss a cut of thirty grand; a separate exchange identifies Alex as Sam’s child. Later, Taylor is named under pressure, and a phone exchange reports that someone has been found.';
+    const support=[{id:'S1',firstLine:1,lastLine:7},{id:'S2',firstLine:1,lastLine:7}];
+    const gen=vi.fn().mockResolvedValueOnce({points:[{text,support}]}).mockResolvedValueOnce({boundarySafe:true,fit:'direct',checks:[accepted(0,support,'contextual')]});
+    expect((await storyDiscussion({...ctx,sources},gen))?.answer).toBe(text);
+    expect(gen.mock.calls[0][0]).toContain('adjacency does not establish one scene');
+    expect(gen.mock.calls[0][0]).toContain('do not guess these directions');
+    expect(gen.mock.calls.map(c=>c[3])).toEqual(['writer','verifier']);
+  });
+});
+
+describe('question instructions and grammatical family references are not new identities',()=>{
+  const evidence=[{id:'S1',text:'We are the Marlows! Remember the name.',start:0,end:30},{id:'S2',text:'The Marlow family has arrived.',start:31,end:40}];
+  const issue=(question:string,text:string,rows=evidence)=>draftGroundingIssues(question,{status:'answered',claims:[{text,evidenceIds:['S1']}]},rows);
+  it.each(['Recap','Summary','List','Compare'])('does not turn the instruction %s into a named person',command=>{
+    expect(issue(command+' this episode.',`The ${command.toLowerCase()} concerns a family warning.`)).not.toContain('identity');
+  });
+  it.each(['The Marlows’ warning is forceful.',"The Marlows' warning is forceful."] )('normalizes plural possessives: %s',text=>{
+    expect(issue('What is the warning?',text)).not.toContain('identity');
+    expect(issue('What is the warning?',text,[{...evidence[0],text:'Remember the name.'}])).toContain('identity');
+  });
+  it('accepts a source-backed family inflection but does not stem individual names or invent a canonical name',()=>{
+    expect(issue('Recap this scene.','The warning stresses the Marlow name.')).not.toContain('identity');
+    expect(issue('Recap this scene.','Marlow speaks for the family.')).toContain('identity');
+    expect(issue('Recap this scene.','The warning stresses the Marlow name.',[evidence[0]])).toContain('identity');
+  });
+  it('still requires a question-named person and a real character named like a command to have cited identity evidence',()=>{
+    expect(issue('What does Mira do?','Mira is discussing the warning.')).toContain('identity');
+    expect(issue('What does List do?','List is discussing the warning.',[...evidence,{id:'S3',text:'List is a person.',start:41,end:50}])).toContain('identity');
   });
 });
