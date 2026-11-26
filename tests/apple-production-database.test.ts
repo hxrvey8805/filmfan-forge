@@ -4,6 +4,8 @@ import {PGlite} from '@electric-sql/pglite';
 import {vector} from '@electric-sql/pglite-pgvector';
 import {beforeAll,afterAll,beforeEach,it,expect} from 'vitest';
 import type {VerifiedSandboxPurchase} from '../supabase/functions/_shared/apple-purchase-verification';
+import {companionReleaseFor} from '../supabase/functions/_shared/companion-provider';
+import {beginQuestionAllowance} from '../supabase/functions/_shared/question-allowance';
 
 const pg=new PGlite({extensions:{vector}});
 const migration=(name:string)=>readFileSync(new URL(`../supabase/migrations/${name}.sql`,import.meta.url),'utf8');
@@ -57,6 +59,28 @@ it.each(['free','monthly','annual'])('connects %s to live access and allowance R
   expect(await access()).toMatchObject({plan,purchasesEnabled:false,smartLists:plan!=='free',allSkins:plan==='annual'});
   expect(await allowance()).toMatchObject({plan,included:plan==='free'?0:15,purchased:0});
   expect(await call('get_apple_purchase_configuration',[],'authenticated')).toEqual({environment:'Production',salesEnabled:false,restoreEnabled:true});
+});
+it.each(['free','monthly','annual'])('keeps the public companion entitlement gate for a new %s account',async plan=>{
+  if(plan!=='free')await deliver(receipt({productId:plan==='annual'?annual:monthly}));
+  const release=companionReleaseFor({app_metadata:{}},name=>({
+    COMPANION_AI_PROVIDER:'openrouter-sol',COMPANION_PUBLIC_RELEASE_ENABLED:'true',
+  }[name]));
+  expect(release.answerOptions.captionDiscussion).toBe(true);
+  const before=(await pg.query('SELECT * FROM companion_sol_budget')).rows;
+  const request=randomUUID();
+  const gate=beginQuestionAllowance(async(name,args)=>{
+    try{return {data:await call(name,Object.values(args??{})),error:null};}
+    catch(error){return {data:null,error};}
+  },user,request,{question:'Explain this scene',title_id:1396,media_type:'tv',
+    season_number:1,episode_number:2,position_seconds:1200,companion_version:'fixture'},
+    'openrouter-sol',release.answerOptions.captionDiscussion);
+  if(plan==='free')await expect(gate).rejects.toMatchObject({code:'questions_exhausted'});
+  else {const allowed=await gate;expect(allowed.active).toBe(true);await allowed.end(false);}
+  expect((await allowance()).included).toBe(plan==='free'?0:15);
+  expect((await pg.query('SELECT * FROM companion_sol_budget')).rows).toEqual(before);
+  expect(await call('get_apple_purchase_configuration',[],'authenticated')).toEqual({
+    environment:'Production',salesEnabled:false,restoreEnabled:true,
+  });
 });
 it('blocks receipt delivery while verification is off',async()=>{
   await pg.exec('UPDATE apple_production_policy SET enabled=false');

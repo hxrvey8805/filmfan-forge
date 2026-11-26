@@ -38,6 +38,16 @@ beforeAll(async()=>{
 });
 afterAll(()=>pg.close());
 beforeEach(async()=>{user=randomUUID();now=Date.now()-5000;await enrol(user);});
+it('reads the public-release preflight without changing policies or caps',async()=>{
+  const before=(await pg.query('SELECT to_jsonb(p) AS policy FROM companion_usage_policy p')).rows;
+  const results=await pg.exec(readFileSync(new URL('../supabase/release/public-release-preflight.sql',import.meta.url),'utf8'));
+  const record=results.flatMap(r=>r.rows).find(r=>'release_configuration' in r)?.release_configuration;
+  expect(record).toMatchObject({production_verification_enabled:true,production_sales_enabled:false,
+    review_verification_enabled:true,review_sales_enabled:true,
+    question_policy:{question_limit_micro_usd:350000,user_month_limit_micro_usd:3000000},
+    global_ai_budget:{limit_micro_usd:5000000}});
+  expect((await pg.query('SELECT to_jsonb(p) AS policy FROM companion_usage_policy p')).rows).toEqual(before);
+});
 async function enrol(id:string){await pg.query('INSERT INTO auth.users VALUES($1)',[id]);await pg.query("INSERT INTO apple_review_testers(user_id,expires_at) VALUES($1,now()+interval '7 days')",[id]);}
 async function call<T=Record<string,unknown>>(name:string,args:unknown[]=[],role='service_role',owner=user){return pg.transaction(async tx=>{
   await tx.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[owner]);await tx.exec(`SET LOCAL ROLE ${role}`);

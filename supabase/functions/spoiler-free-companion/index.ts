@@ -169,7 +169,7 @@ serve(async req => {
     const fullShow = mediaType === 'tv' && wholeShowRecap(question);
     const recall = mediaType === 'tv' && storyRecallRequest(question) && release.answerOptions.captionDiscussion;
     if (fullShow && (!release.answerOptions.captionDiscussion || body.recapProtocol !== 1)) {
-      return json({error:'Whole-show recaps are available in the updated CineGeek private beta.'},409);
+      return json({error:'Whole-show recaps are not available in this version. Please update CineGeek.'},409);
     }
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const answerVersion = companionVersionFor(position);

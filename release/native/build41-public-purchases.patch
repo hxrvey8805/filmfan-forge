@@ -1,0 +1,168 @@
+--- a/ios/App/App/Info.plist
++++ b/ios/App/App/Info.plist
+@@ -2,6 +2,8 @@
+ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+ <plist version="1.0">
+ <dict>
++	<key>CineGeekProductionPurchasesEnabled</key>
++	<true/>
+ 	<key>CineGeekReviewPurchasesEnabled</key>
+ 	<true/>
+ 	<key>SKIncludeConsumableInAppPurchaseHistory</key>
+--- a/ios/App/App/CineGeekPurchasesPlugin.swift
++++ b/ios/App/App/CineGeekPurchasesPlugin.swift
+@@ -212,12 +212,15 @@
+     }
+ }
+ 
+-// Production adapter is prepared but disabled in the app configuration.
++// Release-capable adapter. The app must be verified as Production, and the
++// authenticated server sales policy is checked by the client before purchase.
++// TestFlight/App Review continue to use the separate verified Sandbox adapter.
+ @available(iOS 16.0, *)
+ enum CineGeekProductionStore {
+     static let products: Set<String> = ["app.cinegeek.mobile.pro.monthly", "app.cinegeek.mobile.pro.annual"]
+     // Missing configuration is OFF in every build. JS/local storage cannot
+-    // enable this flag. A reviewed future release must opt in explicitly.
++    // enable this flag. The release candidate opts in; server sales stay off
++    // until launch is approved. Restore remains independent of new sales.
+     static var optedIn: Bool { Bundle.main.object(forInfoDictionaryKey: "CineGeekProductionPurchasesEnabled") as? Bool == true }
+     static func allowed(configured: Bool, environment: AppStore.Environment, bundleID: String) -> Bool {
+         configured && environment == .production && bundleID == "app.cinegeek.mobile"
+--- a/ios/App/App.xcodeproj/project.pbxproj
++++ b/ios/App/App.xcodeproj/project.pbxproj
+@@ -272,7 +272,7 @@
+ 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+ 				GCC_WARN_UNUSED_FUNCTION = YES;
+ 				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
++				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+ 				MTL_ENABLE_DEBUG_INFO = YES;
+ 				ONLY_ACTIVE_ARCH = YES;
+ 				SDKROOT = iphoneos;
+@@ -323,7 +323,7 @@
+ 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+ 				GCC_WARN_UNUSED_FUNCTION = YES;
+ 				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
++				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+ 				MTL_ENABLE_DEBUG_INFO = NO;
+ 				SDKROOT = iphoneos;
+ 				SWIFT_COMPILATION_MODE = wholemodule;
+@@ -340,10 +340,10 @@
+ 				CODE_SIGN_STYLE = Automatic;
+ 				CODE_SIGN_ENTITLEMENTS = "$(CINEGEEK_FOCUS_ENTITLEMENTS)";
+ 				CINEGEEK_FOCUS_ENTITLEMENTS = App/WatchFocus.entitlements;
+-				CURRENT_PROJECT_VERSION = 23;
++				CURRENT_PROJECT_VERSION = 41;
+ 				DEVELOPMENT_TEAM = RAG9TBP6L8;
+ 				INFOPLIST_FILE = App/Info.plist;
+-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
++				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+ 				LD_RUNPATH_SEARCH_PATHS = (
+ 					"$(inherited)",
+ 					"@executable_path/Frameworks",
+@@ -365,10 +365,10 @@
+ 				CODE_SIGN_STYLE = Automatic;
+ 				CODE_SIGN_ENTITLEMENTS = "$(CINEGEEK_FOCUS_ENTITLEMENTS)";
+ 				CINEGEEK_FOCUS_ENTITLEMENTS = App/WatchFocus.entitlements;
+-				CURRENT_PROJECT_VERSION = 23;
++				CURRENT_PROJECT_VERSION = 41;
+ 				DEVELOPMENT_TEAM = RAG9TBP6L8;
+ 				INFOPLIST_FILE = App/Info.plist;
+-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
++				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+ 				LD_RUNPATH_SEARCH_PATHS = (
+ 					"$(inherited)",
+ 					"@executable_path/Frameworks",
+--- a/ios/App/StoreKitTests/StoreKitTests.swift
++++ b/ios/App/StoreKitTests/StoreKitTests.swift
+@@ -43,10 +43,10 @@
+         }
+         return false
+     }
+-    func testProductionAdapterStaysDisabledInCurrentBuild() async throws {
+-        XCTAssertFalse(CineGeekProductionStore.optedIn)
++    func testReleaseCandidateStillRejectsNonProductionInstallation() async throws {
++        XCTAssertTrue(CineGeekProductionStore.optedIn)
+         do { try await CineGeekProductionStore.requireProduction(); XCTFail("Production enabled") }
+-        catch CineGeekStoreError.disabled { }
++        catch CineGeekStoreError.unverified { }
+         XCTAssertFalse(CineGeekProductionStore.products.contains(pack))
+     }
+     func testProductionGateRejectsSandboxXcodeAndWrongBundle() {
+@@ -133,7 +133,14 @@
+     func testRefundAppearsInVerifiedHistory() async throws {
+         let t = try await buy(monthly)
+         try session.refundTransaction(identifier: UInt(t.id))
+-        let latest = try await CineGeekTestStore.history(account: account)
++        var latest = try await CineGeekTestStore.history(account: account)
++        // StoreKit publishes the signed revocation asynchronously after the
++        // test session accepts the refund. Wait for that receipt, not a delay
++        // that assumes the first history read has already caught up.
++        for _ in 0..<40 where latest.first?["revokedAt"] as? Int64 == nil {
++            try await Task.sleep(nanoseconds: 50_000_000)
++            latest = try await CineGeekTestStore.history(account: account)
++        }
+         XCTAssertEqual(latest.count, 1)
+         XCTAssertNotNil(latest.first?["revokedAt"] as? Int64)
+     }
+--- a/tests/apple-production-database.test.ts
++++ b/tests/apple-production-database.test.ts
+@@ -4,6 +4,8 @@
+ import {vector} from '@electric-sql/pglite-pgvector';
+ import {beforeAll,afterAll,beforeEach,it,expect} from 'vitest';
+ import type {VerifiedSandboxPurchase} from '../supabase/functions/_shared/apple-purchase-verification';
++import {companionReleaseFor} from '../supabase/functions/_shared/companion-provider';
++import {beginQuestionAllowance} from '../supabase/functions/_shared/question-allowance';
+ 
+ const pg=new PGlite({extensions:{vector}});
+ const migration=(name:string)=>readFileSync(new URL(`../supabase/migrations/${name}.sql`,import.meta.url),'utf8');
+@@ -57,6 +59,28 @@
+   expect(await access()).toMatchObject({plan,purchasesEnabled:false,smartLists:plan!=='free',allSkins:plan==='annual'});
+   expect(await allowance()).toMatchObject({plan,included:plan==='free'?0:15,purchased:0});
+   expect(await call('get_apple_purchase_configuration',[],'authenticated')).toEqual({environment:'Production',salesEnabled:false,restoreEnabled:true});
++});
++it.each(['free','monthly','annual'])('keeps the public companion entitlement gate for a new %s account',async plan=>{
++  if(plan!=='free')await deliver(receipt({productId:plan==='annual'?annual:monthly}));
++  const release=companionReleaseFor({app_metadata:{}},name=>({
++    COMPANION_AI_PROVIDER:'openrouter-sol',COMPANION_PUBLIC_RELEASE_ENABLED:'true',
++  }[name]));
++  expect(release.answerOptions.captionDiscussion).toBe(true);
++  const before=(await pg.query('SELECT * FROM companion_sol_budget')).rows;
++  const request=randomUUID();
++  const gate=beginQuestionAllowance(async(name,args)=>{
++    try{return {data:await call(name,Object.values(args??{})),error:null};}
++    catch(error){return {data:null,error};}
++  },user,request,{question:'Explain this scene',title_id:1396,media_type:'tv',
++    season_number:1,episode_number:2,position_seconds:1200,companion_version:'fixture'},
++    'openrouter-sol',release.answerOptions.captionDiscussion);
++  if(plan==='free')await expect(gate).rejects.toMatchObject({code:'questions_exhausted'});
++  else {const allowed=await gate;expect(allowed.active).toBe(true);await allowed.end(false);}
++  expect((await allowance()).included).toBe(plan==='free'?0:15);
++  expect((await pg.query('SELECT * FROM companion_sol_budget')).rows).toEqual(before);
++  expect(await call('get_apple_purchase_configuration',[],'authenticated')).toEqual({
++    environment:'Production',salesEnabled:false,restoreEnabled:true,
++  });
+ });
+ it('blocks receipt delivery while verification is off',async()=>{
+   await pg.exec('UPDATE apple_production_policy SET enabled=false');
+--- a/tests/apple-review-database.test.ts
++++ b/tests/apple-review-database.test.ts
+@@ -36,6 +36,16 @@
+ });
+ afterAll(()=>pg.close());
+ beforeEach(async()=>{user=randomUUID();now=Date.now()-5000;await enrol(user);});
++it('reads the public-release preflight without changing policies or caps',async()=>{
++  const before=(await pg.query('SELECT to_jsonb(p) AS policy FROM companion_usage_policy p')).rows;
++  const results=await pg.exec(readFileSync(new URL('../supabase/release/public-release-preflight.sql',import.meta.url),'utf8'));
++  const record=results.flatMap(r=>r.rows).find(r=>'release_configuration' in r)?.release_configuration;
++  expect(record).toMatchObject({production_verification_enabled:true,production_sales_enabled:false,
++    review_verification_enabled:true,review_sales_enabled:true,
++    question_policy:{question_limit_micro_usd:350000,user_month_limit_micro_usd:3000000},
++    global_ai_budget:{limit_micro_usd:5000000}});
++  expect((await pg.query('SELECT to_jsonb(p) AS policy FROM companion_usage_policy p')).rows).toEqual(before);
++});
+ async function enrol(id:string){await pg.query('INSERT INTO auth.users VALUES($1)',[id]);await pg.query("INSERT INTO apple_review_testers(user_id,expires_at) VALUES($1,now()+interval '7 days')",[id]);}
+ async function call<T=Record<string,unknown>>(name:string,args:unknown[]=[],role='service_role',owner=user){return pg.transaction(async tx=>{
+   await tx.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[owner]);await tx.exec(`SET LOCAL ROLE ${role}`);

@@ -1,0 +1,67 @@
+{
+  "build": 41,
+  "version": "1.0",
+  "baseline": "Verified TestFlight build 40 private native staging; do not apply this patch to the web-only native scaffold.",
+  "backend_base_commit": "9c6754f",
+  "backend_overlay": {
+    "supabase/functions/_shared/companion-provider.ts": "061b213eabcec525d383f92004986d7cff7f80452fa73e9b43f97a05b62b0647",
+    "supabase/functions/_shared/companion.ts": "4f727bc6e9e05f6409dd89eb30d6d30f79a26f52a8531dab380da2daf84cc8f3",
+    "supabase/functions/_shared/draft-grounding.ts": "040cf3b0fdce685a7bd57521f9215417b03b78a6f8abc30d03ce2d8f67e44335",
+    "supabase/functions/_shared/story-discussion.ts": "2c05fe64ce63763db3cfb4296e1c8031c7d50f3a946e9413eb160b7e9ce52a49",
+    "supabase/functions/_shared/watch-answer.ts": "d43eca818c385b153a315bf68d91d76e8ada2ebf5b7e3c4a08a05d71932d8d89",
+    "supabase/functions/_shared/watch-checkpoints.ts": "ac989660c02891ea88c63fdc134eb86aa3d1369f3a5ab143e51ee9e7cd2baf0c",
+    "supabase/functions/_shared/watch-diagnostic-store.ts": "3479dbb19ab85154ef11385609307e0d7fd06513cd3643ee78f3db0575511393",
+    "supabase/functions/_shared/watch-diagnostics.ts": "d66cdf8ad2bad1181b28b4394155c23f7b7aa7ea220c62b19dca5f183492ba38",
+    "supabase/functions/_shared/watch-identity-context.ts": "f8e73cc81b24532a91fa2918f59c09befcf70dad729101f64f65c9f233a41929",
+    "supabase/functions/spoiler-free-companion/index.ts": "0ac8f96ede505f51204965b5dc7c722a7a5be4e874d56d788c86565517d3512f",
+    "supabase/migrations/20261126160000_companion_diagnostics.sql": "277bb5ddda5d155871580b1b08892b1ffb688c565069af08a8d51240efcc0a66",
+    "supabase/migrations/20261126180000_private_companion_test_budget.sql": "a31f4e4b29c29fa94ea099a080c3b6a2536c7dc83aecaf99e039367cd8d3e064",
+    "tests/companion-latency-parity.test.ts": "5797f7233b94d8fe42d5ba0ac2a8141dc5bf40893752a15b0f3cc080fe45b0e3",
+    "tests/companion-provider-selection.test.ts": "59caa0f1c751b4bd3270e85a360612d7c0e1cf3db8e8ff4875998f60e792ce77",
+    "tests/discussion-citation-contract.test.ts": "5ec357dcd6039eea9b809f4629a0599cfee89a079df41a8f39d47d0a46d5645c",
+    "tests/discussion-name-tokens.test.ts": "cba06e9ff42ce7f8446ad28537d8fb9f928dfba3d23d34a034d8422eea28ba05",
+    "tests/fixtures/companion-latency-contract.ts": "f1d502eeda7d980a9f3a36f1e53f3a3386f436cfcb9425ffac938f25780c697f",
+    "tests/question-allowance.test.ts": "44423e3934c723d2bd49b268a086796fa7945c26cb21f692b44e4678a79e5844",
+    "tests/story-discussion-retry.test.ts": "dee218d33c3651c6fdc9fae7b068acb2e5e0b30f67de65db540aa894b8602d8e",
+    "tests/story-discussion.test.ts": "6ed716977623a09394b20fc6399e35874897254808656c61d856040bec3ac3b0",
+    "tests/watch-diagnostic-store.test.ts": "30c534d65455f1fc50ab169f71b9ded403fec03e820c260a3a472d62a1590f7a",
+    "tests/watch-diagnostics.test.ts": "b633dc7374afa1be4e5b4d94355925112e97bb622c07352c3d05482de530fbaf",
+    "tests/watch-flow.test.ts": "6a8d7231516323080ec56a895d9e34397dd88b13b890ebc8642a2c6e1d8a6b12",
+    "tests/watch-identity-context.test.ts": "35cf1c3fe2766b4b4c337d2b3f230a9f7c6efa5a977aed4c74a2f2694c7d28c1"
+  },
+  "native_patch": {
+    "file": "build41-public-purchases.patch",
+    "sha256": "63e5c4b8bfad4f9ab6481a6f48dc8179bae73cdf30482c2fd0bd29d763cfb926"
+  },
+  "files": {
+    "ios/App/App/Info.plist": {
+      "before_sha256": "eb3bc60a330afde9bb102f85708d15c75029d15d466f91a4b9ead2038ec4c7c9",
+      "after_sha256": "58a465c5ff6579a10a3328f1199a40fa7ae21d5aa28932315718a96e55751c95"
+    },
+    "ios/App/App/CineGeekPurchasesPlugin.swift": {
+      "before_sha256": "92cf2b2a836b4e8802367a30895d5cdaf6f206751ff39c3160a5ca1a2b761234",
+      "after_sha256": "5d964d4bec56c8e2f0fc1df83c70854160d2b332f6e98fe799d97b8e090a1093"
+    },
+    "ios/App/App.xcodeproj/project.pbxproj": {
+      "before_sha256": "14782d72bd4ded43007a484d095a96537844a53f0681e80a3049d2f43adc208f",
+      "after_sha256": "4f8ae43d4aaeec820b314b29ef5861eaacfcab3c38ecb68e2f619c5fe8ac8858"
+    },
+    "ios/App/StoreKitTests/StoreKitTests.swift": {
+      "before_sha256": "8fd52b3a465861e58afc439f3b88c289722cb5982d65eca1693190a88ef6cb8d",
+      "after_sha256": "fc11573fd7ab87d397c8cf4009d792d49c2103c5f75fd98ace32c7c858e9e845"
+    },
+    "tests/apple-production-database.test.ts": {
+      "before_sha256": "713d42848162e7bcadd0e6ddc48ab8df4c8a93b679dcadd05c3846edf31a73ac",
+      "after_sha256": "93d726b8ea1de75a2dcce013dc23c58bc1e68635cb3d8d8dcc5237dccba0c11e"
+    },
+    "tests/apple-review-database.test.ts": {
+      "before_sha256": "ab98516136ca108dcfceb40ce463412e501c1bf80ae5fb0612e029ae439a9551",
+      "after_sha256": "e17a1786877bf136cb9dacf5c34166303580596a41ccaeb65b0cb039bbb8d277"
+    }
+  },
+  "ipa_sha256": "601692d0295110071a6c23c751504aff4e03962e822c3c8a698542a1a3d10e9b",
+  "production_adapter_opted_in": true,
+  "server_sales_activated": false,
+  "uploaded": false,
+  "spending_caps_changed": false
+}

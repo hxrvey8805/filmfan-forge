@@ -7,6 +7,35 @@ const completion = () => new Response(JSON.stringify({
 }));
 
 describe('server companion provider selection', () => {
+  it('gives ordinary accounts the identical reviewed pipeline after public release', () => {
+    const beta = companionReleaseFor({ app_metadata: { cinegeek_visual_beta: true } },
+      env({ COMPANION_AI_PROVIDER: 'openrouter-sol' }));
+    const account = { app_metadata: {}, user_metadata: {} };
+    expect(companionReleaseFor(account, env({ COMPANION_AI_PROVIDER: 'openrouter-sol',
+      COMPANION_PUBLIC_RELEASE_ENABLED: 'true' }))).toEqual(beta);
+    expect(account).toEqual({ app_metadata: {}, user_metadata: {} });
+  });
+  it('does not accept user metadata or malformed values as a public release switch', () => {
+    const account = { app_metadata: {}, user_metadata: {
+      cinegeek_visual_beta: true, COMPANION_PUBLIC_RELEASE_ENABLED: true, plan: 'annual',
+    } };
+    for (const flag of [undefined, 'false', '1', 'TRUE', ' true ']) {
+      expect(companionReleaseFor(account, name => name === 'COMPANION_PUBLIC_RELEASE_ENABLED'
+        ? flag : name === 'COMPANION_AI_PROVIDER' ? 'openrouter-sol' : undefined)).toEqual({
+        noteTables: ['companion_scene_notes'], answerOptions: { captionDiscussion: false },
+      });
+    }
+  });
+  it('retains provider selection and private enrolment when the release is off', () => {
+    for (const provider of ['groq', 'openrouter', 'unknown']) {
+      expect(companionReleaseFor({ app_metadata: {} }, env({
+        COMPANION_PUBLIC_RELEASE_ENABLED: 'true', COMPANION_AI_PROVIDER: provider,
+      })).answerOptions.captionDiscussion).toBe(false);
+    }
+    expect(companionReleaseFor({ app_metadata: { cinegeek_visual_beta: true } }, env({
+      COMPANION_PUBLIC_RELEASE_ENABLED: 'false', COMPANION_AI_PROVIDER: 'openrouter-sol',
+    })).answerOptions.captionDiscussion).toBe(true);
+  });
   it('limits visual sources and expanded discussions to accounts enrolled by the server', () => {
     const sol = env({ COMPANION_AI_PROVIDER: 'openrouter-sol' });
     for (const flag of [undefined, false, 'true']) {
