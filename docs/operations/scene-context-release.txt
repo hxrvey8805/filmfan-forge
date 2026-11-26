@@ -1,0 +1,70 @@
+Scene explanations with earlier-episode background — 26 November 2026
+
+Behaviour
+TV scene questions now use the same earlier-episode preparation path as ordinary
+character/story questions. Explicit requests for only the current episode/scene
+still exclude previous episodes. Recap routing is unchanged.
+
+For example, at episode 2, 05:00, "Explain this scene" can use the current
+exchange and an earlier episode's promise to explain the present decision.
+The source selector receives the actual target exchange while choosing relevant
+background, including when the historical sources span multiple batches or
+require search expansion. Current scene sources remain in the selected packet.
+Global narrowing also retains their adjacent qualifying exchanges. The existing
+20,000-character and 55-source final limits still apply; overflow fails closed.
+
+The answer still needs current-scene evidence. A verified earlier-episode
+paragraph alone cannot be published as an explanation of what is happening now.
+Historical dialogue remains marked as historical; the existing independent
+reviewer must establish its connection without treating it as a current action.
+Missing current evidence and missing earlier coverage remain explicit limitations.
+
+Unchanged
+Source title/episode/edition checks, timestamp and reveal boundaries, writer and
+independent factual/spoiler reviewer prompts, model/provider, reasoning/output
+settings and attempt bounds are unchanged. No prior AI prose becomes evidence.
+Production limits remain $5 global, $0.35/question and $3/account/calendar month;
+private test cap stays $11. No purchase setting, SQL, key or live configuration
+is changed. Real purchases remain disabled.
+
+Work/check revision is watch-work-2026-11-26-scene-context-v1 /
+watch-checks-2026-11-26-scene-context-v1, so old intermediate selection results
+cannot be resumed through the changed selection logic.
+
+Verification
+- 1,524 automated checks passed across 98 files, including 18 new scene tests.
+  Coverage includes earlier reasons, current-scene retention, adjacent context,
+  explicit restrictions, missing scene data, rewinds, stricter requested cutoffs,
+  episode switches, rejected timing/spoiler claims and forged selection IDs.
+- Six existing golden fixtures for ordinary questions, misspellings, speech,
+  recaps, rewind and episode-switch answers retain byte-identical model inputs,
+  checks and final fixture answers.
+- Deno typecheck, scoped ESLint and git diff --check passed.
+- Real-model selection test used an invented two-episode story and 54 unrelated
+  earlier passages. The selector found the relevant earlier promise from a batch
+  containing only old material, using the supplied target scene, and retained
+  current-episode evidence. No future/foreign-title sentinel entered a model call.
+  The first completed call was captured and reused exactly after the private
+  test transport failed during concurrent budget-file access; only the remaining
+  batch was sent on continuation. Both paid calls settled: $0.0094285 and
+  $0.001032, total $0.0104605. Private committed total is $10.89039165 of $11.
+  No unknown-cost hold was released.
+- This was a real-model SOURCE-SELECTION test, not a fresh writer/reviewer answer
+  test or an iPhone/live-production test. Full answer flow is covered by automated
+  fixtures and the unchanged writer/reviewer contracts.
+
+Scope and release
+This branch starts from main at 92c15af and is independent of draft recap PR40.
+It does not restrict or repair full-episode/season recaps. If both branches later
+merge, retain both changes and use a new combined work/check revision.
+No deployment is included in this task. After approval, deploy only
+spoiler-free-companion and its shared files, verify the complete deployed manifest
+and runtime revision, then inspect a current-scene/earlier-context live answer
+and rewind/episode-switch controls. No UI change or new TestFlight binary is
+required for this backend change.
+
+Limits
+Retrieving earlier episodes can need additional preparation and source-selection
+work. The existing spending/coverage guards may still stop large or unavailable
+histories. This change does not establish full-show coverage, a fixed response
+time, or readiness of the separate long-recap feature.
