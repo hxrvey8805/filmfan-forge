@@ -1,5 +1,4 @@
 .pack-reveal-dialog.pack-reveal-dialog{width:min(420px,calc(100vw - 28px));max-height:calc(100dvh - max(28px,env(safe-area-inset-top)) - max(28px,env(safe-area-inset-bottom)));overflow:auto;overscroll-behavior:contain;gap:0;padding:30px 24px 20px;border:1px solid #ffffff15;border-radius:24px;background:radial-gradient(ellipse at 50% 30%,#24323e45,transparent 68%),#171a1f;box-shadow:0 28px 100px #000b;text-align:center}
-.pack-reveal-dialog .pack-close{position:absolute;display:grid!important;place-items:center;right:10px;top:10px;width:36px;height:36px;color:#aab5c2;border-radius:50%;background:#ffffff06}
 .pack-kicker{font-size:8px;letter-spacing:.18em;font-weight:500;color:#91a0ad;text-transform:uppercase;margin:3px 25px 10px}
 .pack-reveal-dialog .pack-heading{font-size:24px;line-height:1.2;letter-spacing:-.025em;margin:0;font-weight:600}
 .pack-reveal-dialog .pack-subtitle{font-size:12px;color:#aab4c2;line-height:1.45;margin:9px 0 0}
@@ -13,7 +12,6 @@
 .pack-edition{position:absolute;top:28px;font-size:8px;font-weight:500;text-transform:uppercase;letter-spacing:.2em;color:#99b0c0}
 .pack-envelope-loading{animation:pack-breathe 1.8s ease-in-out infinite}
 .collectible-card{--card-accent:#a3bed0;position:relative;min-width:0;overflow:hidden;border-radius:14px;background:#202c39;border:1px solid color-mix(in srgb,var(--card-accent) 32%,transparent);box-shadow:0 16px 35px #0004;text-align:left;margin:0;isolation:isolate}
-.collectible-card[data-rarity=star]{--card-accent:#81c4f7}.collectible-card[data-rarity=icon]{--card-accent:#f4cf7c}
 .collectible-photo{position:relative;aspect-ratio:2/3;background:radial-gradient(ellipse at 50% 30%,#3b5268,#1a2330);display:grid;place-items:center}
 .collectible-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 20%}
 .collectible-initials{color:#a9c8df55;font-size:48px;font-weight:750;letter-spacing:-.07em}
@@ -47,3 +45,5 @@
 @media(max-height:740px){.pack-reveal-dialog.pack-reveal-dialog{padding-top:25px}.pack-stage{padding:22px 0}.pack-stage>.collectible-card,.pack-envelope{width:180px}.pack-heading{font-size:22px!important}}
 @media(max-width:350px){.pack-reveal-dialog.pack-reveal-dialog{padding-inline:16px}.pack-stage>.collectible-card,.pack-envelope{width:175px}.collection-grid{gap:7px}.collection-grid .collectible-card figcaption strong{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.pack-envelope-loading,.pack-stage>.collectible-card{animation:none;transform:none}}
+
+.pack-odds-pool{padding:7px 0;border-bottom:1px solid #ffffff08}.pack-odds-pool summary{color:#d8e1e9}.pack-odds-pool ul{list-style:none;padding:0;margin:6px 0;overflow-wrap:anywhere}.pack-odds-pool li{padding:2px 0}

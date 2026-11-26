@@ -5,12 +5,11 @@ import {supabase} from '@/integrations/supabase/client';
 import {tierRpc} from '@/lib/tier-rpc';
 import type {Tables} from '@/integrations/supabase/types';
 import {accountChanged} from '@/lib/pro-access';
-import {X} from 'lucide-react';
 import {CollectibleCard} from './CollectibleCard';
 import {PackOdds} from './PackOdds';
-import {COLLECTION_LIMIT,isRarity,type PackType} from '../../supabase/functions/_shared/pack-catalogue';
+import {COLLECTION_LIMIT,type PackType} from '../../supabase/functions/_shared/pack-catalogue';
 import './collectibles.css';
-type Reveal={id:number;name:string;profile_path:string|null;rarity?:unknown};
+type Reveal={id:number;name:string;profile_path:string|null;catalogue_version?:unknown};
 export default function PackOpeningModal({isOpen,onClose,packId,onPackOpened}:{isOpen:boolean;onClose:()=>void;packId:string;onPackOpened?:()=>void}){
   const [person,setPerson]=useState<Reveal|null>(null),[type,setType]=useState<PackType>('actor'),[revealed,setRevealed]=useState(false);
   const [cards,setCards]=useState<Tables<'user_collection'>[]>([]);
@@ -47,13 +46,12 @@ export default function PackOpeningModal({isOpen,onClose,packId,onPackOpened}:{i
   }
   const close=()=>{if(!deciding.current)onClose();};
   return <Dialog open={isOpen} onOpenChange={open=>{if(!open)close();}}>
-    <DialogContent hideClose className="pack-reveal-dialog" onEscapeKeyDown={e=>{if(deciding.current)e.preventDefault();}} onPointerDownOutside={e=>{if(deciding.current)e.preventDefault();}}>
-      <button className="pack-close" aria-label="Close" disabled={busy} onClick={close}><X size={18}/></button>
+    <DialogContent closeDisabled={busy} className="pack-reveal-dialog" onEscapeKeyDown={e=>{if(deciding.current)e.preventDefault();}} onPointerDownOutside={e=>{if(deciding.current)e.preventDefault();}}>
       <p className="pack-kicker">The CineGeek collection</p>
       <DialogTitle className="pack-heading">{person?(type==='actor'?'Actor pack':'Director pack'):'Your pack'}</DialogTitle>
       <DialogDescription className="sr-only">{revealed?'Keep this card, skip it, or close to decide later.':person?'Reveal your collectible.':'Getting your pack ready…'}</DialogDescription>
       <div className="pack-stage">
-        {revealed&&person?<CollectibleCard name={person.name} photo={person.profile_path} type={type} rarity={person.rarity}/>:
+        {revealed&&person?<CollectibleCard name={person.name} photo={person.profile_path} type={type}/>:
           <div className={`pack-envelope${!person&&!error?' pack-envelope-loading':''}`} aria-hidden="true">
             <span className="pack-edition">{person?(type==='actor'?'Actors':'Directors'):'Collection'}</span><img src="/cinegeek-glasses.svg" alt=""/><strong>cinegeek<span>.</span></strong>
           </div>}
@@ -75,7 +73,7 @@ export default function PackOpeningModal({isOpen,onClose,packId,onPackOpened}:{i
       </>}
       {error&&<div className="pack-error" role="alert">{error}{!person&&<Button variant="outline" onClick={()=>setAttempt(n=>n+1)}>Try again</Button>}</div>}
       {revealed&&<p className="pack-later">Not sure? You can decide later.</p>}
-      <PackOdds type={person?type:undefined} legacy={!!person&&!isRarity(person.rarity)}/>
+      <PackOdds type={person?type:undefined} drawn={!!person} version={person?.catalogue_version}/>
     </DialogContent>
   </Dialog>;
 }

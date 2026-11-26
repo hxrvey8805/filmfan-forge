@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {Clapperboard, Layers3, Shirt, Sparkles, Star, X, Zap} from 'lucide-react';
+import {Clapperboard, Layers3, Shirt, Sparkles, Star, Zap} from 'lucide-react';
 import {useProAccess} from '@/hooks/use-pro-access';
 import {accountChanged} from '@/lib/pro-access';
 import {tierRpc} from '@/lib/tier-rpc';
@@ -51,8 +51,7 @@ export function DailyReward(){
   return <>
     {!open&&offered.current&&phase!=='done'&&<Button variant="outline" onClick={()=>setOpen(true)} className="w-full gap-2"><Sparkles size={16}/>Your daily spin is ready</Button>}
     <Dialog open={open} onOpenChange={next=>{if(!busy.current)setOpen(next);}}>
-      <DialogContent className="daily-spin-dialog [&>button:last-child]:hidden" onEscapeKeyDown={event=>{if(working)event.preventDefault();}} onPointerDownOutside={event=>{if(working)event.preventDefault();}}>
-        {!working&&<button className="daily-spin-close" aria-label="Close daily spin" onClick={()=>setOpen(false)}><X size={19}/></button>}
+      <DialogContent className="daily-spin-dialog" hideClose={working} closeLabel="Close daily spin" onEscapeKeyDown={event=>{if(working)event.preventDefault();}} onPointerDownOutside={event=>{if(working)event.preventDefault();}}>
         <p className="daily-spin-kicker">First win of the day</p>
         <DialogTitle className="daily-spin-title">{title}</DialogTitle>
         <DialogDescription className="daily-spin-description">{phase==='done'?(prize?.kind==='skin'?'Added to your wardrobe.':prize?.kind==='pack'?'Open it in Your collection.':prize?.kind==='badge'?'Saved to your badges.':prize?.kind==='xp'&&prize.xp===0?'You’ve earned today’s 225 XP. Come back tomorrow.':'Added to your XP balance.'):'Nice connection. Your bonus is ready.'}</DialogDescription>

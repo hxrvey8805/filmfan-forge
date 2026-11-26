@@ -1,0 +1,50 @@
+.popup-close {
+  position: absolute;
+  top: var(--popup-close-top, 10px);
+  right: var(--popup-close-right, 10px);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #bac5d0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.popup-close::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px solid #d8e6f012;
+  border-radius: inherit;
+  background: #a8bace0d;
+  transition: background .15s ease, border-color .15s ease;
+}
+.popup-close > svg { position: relative; width: 18px; height: 18px; pointer-events: none; }
+.popup-close:focus-visible { outline: 2px solid #91cbef; outline-offset: -4px; }
+.popup-close:enabled:active::before { background: #a8bace26; border-color: #d8e6f02b; }
+.popup-close:disabled { opacity: .4; cursor: default; }
+@media (hover: hover) {
+  .popup-close:enabled:hover { color: #f1f6fa; }
+  .popup-close:enabled:hover::before { background: #a8bace1a; border-color: #d8e6f026; }
+}
+/* Keep titles out of the close target, including long custom list names. */
+[data-has-popup-close=true] > [data-dialog-title] { padding-inline-end: 34px; }
+[data-has-popup-close=true] > [data-dialog-header] > [data-dialog-title],
+[data-has-popup-close=true] > [data-sheet-header] > h2 { padding-inline: 34px; }
+@media (min-width: 640px) {
+  [data-has-popup-close=true] > [data-dialog-header] > [data-dialog-title],
+  [data-has-popup-close=true] > [data-sheet-header] > h2 { padding-inline-start: 0; }
+}
+/* Reveal dialogs reserve the top row for the kicker and close control. */
+.random-skin-dialog[data-has-popup-close=true] > [data-dialog-title],
+.daily-spin-dialog[data-has-popup-close=true] > [data-dialog-title],
+.pack-reveal-dialog[data-has-popup-close=true] > [data-dialog-title] { padding-inline: 0; }
+@media (prefers-reduced-motion: reduce) { .popup-close::before { transition: none; } }

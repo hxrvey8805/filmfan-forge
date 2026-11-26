@@ -28,7 +28,7 @@ beforeAll(async()=>{
     '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance']) await pg.exec(migration(name));
   for(const name of ['20251114214139_cac7e901-0afa-4a2d-9233-df3d7be49a29','20251114215942_67f42c53-f7a7-40eb-9c4c-76f082338a1b',
     '20251126204536_add_pack_tier','20261112160000_smart_list_interpreter','20261113200000_pro_xp_collections',
-    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout','20261121150000_game_connection_recheck','20261121170000_daily_skin_rewards','20261122220000_six_card_pack_catalogue'])await pg.exec(migration(name));
+    '20261114120000_companion_spending_safeguards','20261116100000_private_grant_tier_rollout','20261121150000_game_connection_recheck','20261121170000_daily_skin_rewards','20261122220000_six_card_pack_catalogue','20261124180000_pack_catalogue_v2','20261124190000_random_skin_redemption'])await pg.exec(migration(name));
 });
 
 afterAll(()=>pg.close());
@@ -54,9 +54,9 @@ it.each(['free','monthly','annual'])('enforces %s without enabling payments or g
  expect((await access()).xp).toBe(1000);
 });
 it('revoked and expired subscriptions return to default Free without deleting skins',async()=>{
- await pro();await wallet(2000);await call('redeem_cinegeek_xp',[randomUUID(),'skin:jedi']);
+ await pro();await wallet(2000);const unlocked=await call('redeem_cinegeek_xp',[randomUUID(),'skin:random']);
  await pg.query('UPDATE companion_pro_entitlements SET revoked=true WHERE user_id=$1',[user]);
- expect(await access()).toMatchObject({plan:'free',smartLists:false,unlockedSkins:['jedi']});
+ expect(await access()).toMatchObject({plan:'free',smartLists:false,unlockedSkins:[unlocked.skin]});
  await pg.query("UPDATE companion_pro_entitlements SET revoked=false,anchor=now()-interval '2 days',valid_until=now()-interval '1 day' WHERE user_id=$1",[user]);
  expect((await access()).plan).toBe('free');
 });
@@ -66,7 +66,7 @@ it('redemption retries charge once and cannot redeem for another user',async()=>
  await expect(call('redeem_cinegeek_xp',[id,'pack:director'])).rejects.toThrow();
  await expect(call('redeem_cinegeek_xp',[id,'pack:actor'],'authenticated',randomUUID())).rejects.toThrow();
 });
-it.each(['free','annual'])('%s cannot spend XP on a skin',async plan=>{if(plan==='annual')await pro(plan);await wallet(2000);await expect(call('redeem_cinegeek_xp',[randomUUID(),'skin:jedi'])).rejects.toThrow();});
+it.each(['free','annual'])('%s cannot spend XP on a skin',async plan=>{if(plan==='annual')await pro(plan);await wallet(2000);await expect(call('redeem_cinegeek_xp',[randomUUID(),'skin:random'])).rejects.toThrow();});
 it('insufficient XP leaves both inventory and balance unchanged',async()=>{await wallet(149);await expect(call('redeem_cinegeek_xp',[randomUUID(),'pack:actor'])).rejects.toThrow('Not enough');expect((await access()).xp).toBe(149);});
 it('Free gets one game start per UTC day even after abandon; a retry does not consume twice',async()=>{
  const id=randomUUID();await call('start_cinegeek_game',[id,1,2]);await call('start_cinegeek_game',[id,1,2]);expect((await access()).gamesRemaining).toBe(0);
@@ -298,4 +298,100 @@ it('the table guard itself permits the sixth but refuses the seventh in either c
    await expect(card(offset+7,type)).rejects.toThrow('Collection limit');
  }
  expect((await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows).toHaveLength(12);
+});
+
+
+it.each(['discovery','featured','star','icon'])('accepts and keeps a v2 %s draw for each pack type',async rarity=>{
+ for(const type of ['actor','director']){
+  const id=(await pg.query<{id:string}>('INSERT INTO user_packs(user_id,pack_type) VALUES($1,$2) RETURNING id',[user,type])).rows[0].id;
+  const token=randomUUID(),pick={name:'Verified '+type,packType:type,rarity,version:'cinegeek-cast-2'};
+  await call('claim_cinegeek_pack',[user,id,token],'service_role');
+  expect(await call('store_cinegeek_pack_pick',[user,id,token,JSON.stringify(pick)],'service_role')).toEqual(pick);
+  await call('store_cinegeek_reveal',[user,id,token,JSON.stringify({id:type==='actor'?101:102,name:pick.name,rarity,catalogue_version:pick.version})],'service_role');
+  await call('decide_cinegeek_pack',[id,true]);
+ }
+ expect((await pg.query('SELECT card_rarity,catalogue_version FROM user_collection WHERE user_id=$1',[user])).rows)
+  .toEqual(Array(2).fill({card_rarity:rarity,catalogue_version:'cinegeek-cast-2'}));
+});
+it.each([
+ ['cinegeek-cast-1','discovery'],['cinegeek-cast-1','featured'],['cinegeek-cast-2','established'],['unknown','icon'],[null,'icon'],['cinegeek-cast-2',null]
+])('rejects mismatched catalogue %s / rarity %s before saving',async(version,rarity)=>{
+ const id=(await pg.query<{id:string}>("INSERT INTO user_packs(user_id,pack_type) VALUES($1,'actor') RETURNING id",[user])).rows[0].id;
+ const token=randomUUID();await call('claim_cinegeek_pack',[user,id,token],'service_role');
+ await expect(call('store_cinegeek_pack_pick',[user,id,token,JSON.stringify({name:'Actor',packType:'actor',rarity,version})],'service_role')).rejects.toThrow('Invalid pack draw');
+ expect((await pg.query('SELECT reveal_pick FROM user_packs WHERE id=$1',[id])).rows[0].reveal_pick).toBeNull();
+});
+it('can reapply v2 schema without rewriting collected cards or outstanding v1 draws',async()=>{
+ const id=(await pg.query<{id:string}>("INSERT INTO user_packs(user_id,pack_type) VALUES($1,'actor') RETURNING id",[user])).rows[0].id;
+ const token=randomUUID(),pick={name:'Florence Pugh',packType:'actor',rarity:'established',version:'cinegeek-cast-1'};
+ await call('claim_cinegeek_pack',[user,id,token],'service_role');
+ await call('store_cinegeek_pack_pick',[user,id,token,JSON.stringify(pick)],'service_role');
+ await card(77);
+ await pg.query("UPDATE user_collection SET card_rarity='established',catalogue_version='cinegeek-cast-1' WHERE user_id=$1",[user]);
+ const cards=(await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows;
+ const packs=(await pg.query('SELECT * FROM user_packs WHERE user_id=$1',[user])).rows;
+ await pg.exec(migration('20261124180000_pack_catalogue_v2'));
+ expect((await pg.query('SELECT * FROM user_collection WHERE user_id=$1',[user])).rows).toEqual(cards);
+ expect((await pg.query('SELECT * FROM user_packs WHERE user_id=$1',[user])).rows).toEqual(packs);
+});
+
+
+it('blocks fresh requests for a specific skin without spending XP or unlocking it',async()=>{
+ await pro();await wallet(3000);
+ await expect(call('redeem_cinegeek_xp',[randomUUID(),'skin:jedi'])).rejects.toThrow('only be unlocked at random');
+ expect((await access()).xp).toBe(3000);expect((await access()).unlockedSkins).toEqual([]);
+});
+it('random skin purchases exhaust only the unowned pool and never include Arcade or duplicates',async()=>{
+ await pro();await wallet(30000);const received:string[]=[];
+ for(let i=0;i<skinKeys.length;i++){
+  const request=randomUUID(),receipt=await call('redeem_cinegeek_xp',[request,'skin:random']);
+  expect(receipt).toMatchObject({item:'skin:random',xpBalance:30000-(i+1)*1500});
+  expect(await call('redeem_cinegeek_xp',[request,'skin:random'])).toEqual(receipt);
+  received.push(receipt.skin);
+ }
+ expect([...received].sort()).toEqual([...skinKeys].sort());
+ expect(new Set(received).size).toBe(skinKeys.length);
+ expect((await access()).xp).toBe(0);
+ await expect(call('redeem_cinegeek_xp',[randomUUID(),'skin:random'])).rejects.toThrow('Every skin');
+ expect((await pg.query('SELECT * FROM cinegeek_xp_events WHERE user_id=$1',[user])).rows).toHaveLength(20);
+});
+it('does not charge for insufficient XP and excludes skins already won from the spinner',async()=>{
+ await pro();await wallet(1499);
+ await pg.query("INSERT INTO cinegeek_unlocks(user_id,item,kind) SELECT $1,unnest($2::text[]),'skin'",[user,skinKeys.filter(k=>k!=='jedi')]);
+ const request=randomUUID();
+ await expect(call('redeem_cinegeek_xp',[request,'skin:random'])).rejects.toThrow('Not enough XP');
+ expect((await access()).xp).toBe(1499);
+ expect((await pg.query('SELECT * FROM cinegeek_xp_events WHERE id=$1',[request])).rows).toHaveLength(0);
+ await wallet(1500);
+ const result=await call('redeem_cinegeek_xp',[request,'skin:random']);
+ expect(result).toMatchObject({skin:'jedi',xpBalance:0});
+ await pg.query('UPDATE companion_pro_entitlements SET revoked=true WHERE user_id=$1',[user]);
+ // A receipt lookup after expiry only returns the original result; it grants nothing again.
+ expect(await call('redeem_cinegeek_xp',[request,'skin:random'])).toEqual(result);
+ expect((await access()).unlockedSkins).toHaveLength(20);
+});
+it('serializes two requests for the final missing skin and charges exactly once',async()=>{
+ await pro();await wallet(3000);
+ await pg.query("INSERT INTO cinegeek_unlocks(user_id,item,kind) SELECT $1,unnest($2::text[]),'skin'",[user,skinKeys.filter(k=>k!=='spider')]);
+ const results=await Promise.allSettled([call('redeem_cinegeek_xp',[randomUUID(),'skin:random']),call('redeem_cinegeek_xp',[randomUUID(),'skin:random'])]);
+ expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+ expect((await access()).xp).toBe(1500);
+ expect((await access()).unlockedSkins).toHaveLength(20);
+});
+it('preserves completed old direct-skin receipts without allowing a fresh direct-skin unlock',async()=>{
+ await pro();await wallet(500);const request=randomUUID(),details={item:'skin:jedi',packId:null};
+ await pg.query("INSERT INTO cinegeek_unlocks(user_id,item,kind) VALUES($1,'jedi','skin')",[user]);
+ await pg.query("INSERT INTO cinegeek_xp_events(id,user_id,kind,amount,details) VALUES($1,$2,'redeem',-1500,$3::jsonb)",[request,user,JSON.stringify(details)]);
+ expect(await call('redeem_cinegeek_xp',[request,'skin:jedi'])).toEqual(details);
+ expect((await access()).xp).toBe(500);
+ expect((await access()).unlockedSkins).toEqual(['jedi']);
+ await expect(call('redeem_cinegeek_xp',[request,'skin:random'])).rejects.toThrow('already used');
+ const stranger=randomUUID();await pg.query('INSERT INTO auth.users VALUES($1)',[stranger]);
+ await expect(call('redeem_cinegeek_xp',[request,'skin:jedi'],'authenticated',stranger)).rejects.toThrow('already used');
+});
+
+it('passes the exact rollback-only release verification script without retaining fixture users',async()=>{
+ const before=(await pg.query<{n:number}>('SELECT count(*)::int n FROM auth.users')).rows[0].n;
+ await pg.exec(readFileSync(new URL('../docs/operations/packs-skin-live-checks.sql',import.meta.url),'utf8'));
+ expect((await pg.query<{n:number}>('SELECT count(*)::int n FROM auth.users')).rows[0].n).toBe(before);
 });

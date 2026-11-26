@@ -32,5 +32,6 @@ footer { padding: 4px 20px 10px; text-align: center; color: #a7aaa7; font-size: 
 <script type="module">
 if (import.meta.env.MODE !== 'mobile-preview') document.querySelector('.stage').textContent = 'Start this preview with npm run preview:mobile.';
 if(new URLSearchParams(location.search).get('sampleCollection')==='full') document.querySelector('iframe').src='/dashboard?tab=play&view=packs&sampleCollection=full';
+if(new URLSearchParams(location.search).get('sampleSkins')==='random') document.querySelector('iframe').src='/dashboard?tab=play&view=store&samplePlan=monthly&sampleXp=2000';
 document.querySelectorAll('[data-width]').forEach(button=>button.addEventListener('click',()=>{document.querySelector('iframe').style.width=button.dataset.width+'px';document.querySelectorAll('[data-width]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));}));
 </script></body></html>

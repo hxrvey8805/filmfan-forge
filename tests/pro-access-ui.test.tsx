@@ -62,7 +62,8 @@ it.each([false,true])('Monthly shows only owned skins in each picker (compact=%s
  expect(screen.queryByRole('radio',{name:'Spider-Geek'})).toBeNull();expect(screen.queryByText(/1,500 XP/)).toBeNull();
  fireEvent.click(screen.getByRole('radio',{name:'Jedi Geek'}));expect((screen.getByRole('radio',{name:'Jedi Geek'}) as HTMLInputElement).checked).toBe(true);
  fireEvent.click(screen.getByRole('button',{name:'Unlock with XP'}));
- expect(screen.getByRole('dialog')).toBeTruthy();expect(screen.getByRole('button',{name:'Unlock Spider-Geek for 1,500 XP'})).toBeTruthy();
+ expect(screen.getByRole('dialog')).toBeTruthy();expect(screen.getByRole('button',{name:'Unlock for 1,500 XP'})).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'Unlock Spider-Geek for 1,500 XP'})).toBeNull();
  expect(screen.queryByRole('button',{name:'Unlock Jedi Geek for 1,500 XP'})).toBeNull();
 });
 it('a newly granted skin appears only after confirmed access refresh',()=>{
