@@ -1,0 +1,46 @@
+Temporary companion test allowance — 26 November 2026
+
+User authorization: up to $2 extra for the existing owner test account only,
+run the final live scene test, then leave remaining test capacity for the owner.
+Normal user limits, the global $5 ceiling and real-purchase disablement stay intact.
+
+Reviewed migration: supabase/migrations/20261126180000_private_companion_test_budget.sql
+SHA-256: a31f4e4b29c29fa94ea099a080c3b6a2536c7dc83aecaf99e039367cd8d3e064
+Apply atomically with the existing transactional migration runner. It has no
+outer transaction wrapper. It refuses to replace either reservation RPC unless
+its existing body matches the reviewed prior body. Stop on any mismatch.
+
+The migration creates no grant. It adds an operator-only, RLS-protected table
+with no browser/service-role read or write permission. A grant is limited to
+$2, one row per account/UTC month, and a maximum 24-hour window. There is no
+renewal API. Existing reservation RPC privileges are retained. Both sequential
+and parallel reservation paths use the same effective account-month ceiling.
+All old spend, failed calls, unknown holds and current reservations still count.
+Question, call-count, optional daily, global, halt and entitlement checks remain.
+No AI code, prompts, source context, model, spoiler rules or frontend changed.
+
+After migration, apply ONE idempotent private grant only to the approved test
+UUID supplied separately, after confirming its exact auth email and existing
+test entitlement. Acquire the global budget lock then its account lock. Verify
+normal policy is enabled, $3/month, $0.35/question, 64 calls; global $5,
+no halt, and sales_enabled=false. INSERT additional_micro_usd=2000000 for the
+current UTC month, starts_at=now(), expires_at=now()+interval '24 hours',
+reason='Owner-approved $2 final companion test allowance, 2026-11-26'.
+ON CONFLICT DO NOTHING: never extend, regrant or reset a pre-existing grant.
+Do not put the account email or UUID in the source-controlled receipt.
+
+Read back exactly one matching grant, its exact expiry, unchanged ordinary
+policies, old committed spend and both unknown holds. Save a deployment receipt
+with migration hash, prior-function checks, table/RPC privileges and anonymized
+before/after policy values. No edge-function deployment, TestFlight, web publish,
+AI call, credit purchase or private CLI ledger increase during this rollout.
+The separate $11 private CLI budget remains unchanged. The final question will
+use the real signed-in app and the existing live provider ledger.
+
+Validation: 1,588 tests across 102 files passed. After adding the fail-closed
+prior-RPC body check, all 74 PostgreSQL/PGlite allowance tests passed again.
+Sixteen new cases cover owner isolation, expiry/revocation/month, concurrent
+reservations, unknown costs, unchanged question/global/daily/call/halt limits,
+duplicate/oversized/overlong grants and denied browser/service-role access.
+PGlite serializes connections; existing production global-then-account locks
+remain unchanged, so this is not a multi-connection scheduling simulation.
