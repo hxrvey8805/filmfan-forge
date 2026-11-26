@@ -26,7 +26,7 @@ beforeAll(async()=>{
   for(const name of ['20261013120000_companion_evidence_and_memory','20261015153000_caption_context_revision',
     '20261015195500_companion_answer_revision','20261106093000_quarantine_subtitle_editions','20261106163000_shared_cut_revision',
     '20261105170000_companion_sol_budget','20261113190000_companion_monthly_allowance',
-    '20261114120000_companion_spending_safeguards','20261125120000_companion_work_checkpoints','20261126160000_companion_diagnostics']) await pg.exec(migration(name));
+    '20261114120000_companion_spending_safeguards','20261125120000_companion_work_checkpoints','20261126160000_companion_diagnostics','20261126180000_private_companion_test_budget']) await pg.exec(migration(name));
 });
 
 describe('spending safeguards',()=>{
@@ -238,7 +238,7 @@ describe('spending safeguards',()=>{
 afterAll(()=>pg.close());
 beforeEach(async()=>{
   user=randomUUID();
-  await pg.exec(`TRUNCATE companion_work_checkpoints,companion_question_calls,companion_question_requests,companion_usage_accounts,companion_question_packs,
+  await pg.exec(`TRUNCATE companion_private_test_budget_grants,companion_work_checkpoints,companion_question_calls,companion_question_requests,companion_usage_accounts,companion_question_packs,
     companion_pro_entitlements,companion_sol_calls,ai_conversations;
     UPDATE companion_usage_policy SET enabled=true,question_limit_micro_usd=500000,user_month_limit_micro_usd=2000000,
       user_day_limit_micro_usd=null,question_call_limit=64;
@@ -340,7 +340,7 @@ async function pack(count=5,transaction=randomUUID(),owner=user){
 async function complete(charge=true){const id=randomUUID();const gate=await begin(id);const result=await gate.finish(answer(id),charge);if(result.error)throw result.error;return result;}
 
 describe('retained private verification diagnostics',()=>{
-  const read=async(id:string)=>(await pg.query<{check_diagnostics:any[]}>('SELECT check_diagnostics FROM companion_question_requests WHERE id=$1',[id])).rows[0].check_diagnostics;
+  const read=async(id:string)=>(await pg.query<{check_diagnostics:Record<string,unknown>[]}>('SELECT check_diagnostics FROM companion_question_requests WHERE id=$1',[id])).rows[0].check_diagnostics;
   const args=(id:string,attempt:string,events:unknown[],owner=user)=>({p_user_id:owner,p_request_id:id,p_attempt:attempt,
     p_revision:'watch-checks-test',p_events:events,p_dropped:0});
   it('retains failure categories after checkpoint cleanup without charging or changing budgets',async()=>{
@@ -548,5 +548,88 @@ describe('request scope, retries and spending enforcement',()=>{
       return (await tx.query('SELECT get_companion_allowance() a')).rows[0].a;
     });
     expect(own).toMatchObject({included:15});
+  });
+});
+
+describe('temporary private-account testing allowance',()=>{
+  const seed=async(amount=2950000,status='settled')=>{
+    await pro();
+    await pg.exec('UPDATE companion_usage_policy SET question_limit_micro_usd=350000,user_month_limit_micro_usd=3000000');
+    await pg.query('INSERT INTO companion_usage_accounts(user_id) VALUES($1) ON CONFLICT DO NOTHING',[user]);
+    await pg.query(`INSERT INTO companion_sol_calls(id,user_id,request_id,reserved_micro_usd,actual_micro_usd,status)
+      VALUES($1,$2,$3,$4::bigint,CASE WHEN $5::text='unknown' THEN NULL ELSE $4::bigint END,$5::text)`,[randomUUID(),user,randomUUID(),amount,status]);
+    await pg.query('UPDATE companion_sol_budget SET committed_micro_usd=$1',[amount]);
+  };
+  const grant=async()=>pg.query(`INSERT INTO companion_private_test_budget_grants
+    (user_id,month_start,additional_micro_usd,starts_at,expires_at,reason)
+    VALUES($1,date_trunc('month',now() AT TIME ZONE 'UTC')::date,2000000,now(),now()+interval '24 hours','Authorized private test')`,[user]);
+  const deniedReason=async(id:string)=>(await pg.query('SELECT budget_block_reason FROM companion_question_requests WHERE id=$1',[id])).rows[0].budget_block_reason;
+  it.each([false,true])('admits the granted account with parallel mode %s and keeps shared policies unchanged',async parallel=>{
+    await seed();await grant();
+    const gate=await beginQuestionAllowance(rpc,user,randomUUID(),scope,'openrouter-sol',parallel);
+    const call=randomUUID();expect(await gate.budget.reserve(call,350000)).toBe(true);
+    await gate.budget.settle(call,100000,call,null);await gate.end(false);
+    expect((await pg.query('SELECT user_month_limit_micro_usd,question_limit_micro_usd FROM companion_usage_policy')).rows[0])
+      .toEqual({user_month_limit_micro_usd:3000000,question_limit_micro_usd:350000});
+    expect((await pg.query('SELECT limit_micro_usd,committed_micro_usd FROM companion_sol_budget')).rows[0])
+      .toEqual({limit_micro_usd:5000000,committed_micro_usd:3050000});
+  });
+  it('does not give another account the operator grant',async()=>{
+    await seed();await grant();user=randomUUID();await seed();
+    const id=randomUUID(),gate=await begin(id);
+    expect(await gate.budget.reserve(randomUUID(),50001)).toBe(false);
+    expect(await deniedReason(id)).toBe('user_month_limit');
+  });
+  it.each(['expired','revoked','previous-month','future'])('ignores a %s grant',async kind=>{
+    await seed();await grant();
+    if(kind==='expired')await pg.exec("UPDATE companion_private_test_budget_grants SET starts_at=now()-interval '24 hours',expires_at=now()-interval '1 second'");
+    if(kind==='revoked')await pg.exec('UPDATE companion_private_test_budget_grants SET revoked=true');
+    if(kind==='previous-month')await pg.exec("UPDATE companion_private_test_budget_grants SET month_start=(month_start-interval '1 month')::date");
+    if(kind==='future')await pg.exec("UPDATE companion_private_test_budget_grants SET starts_at=now()+interval '1 hour',expires_at=now()+interval '2 hours'");
+    const id=randomUUID(),gate=await begin(id);
+    expect(await gate.budget.reserve(randomUUID(),50001)).toBe(false);
+    expect(await deniedReason(id)).toBe('user_month_limit');
+  });
+  it('expires between calls without erasing old spend or renewing the same request',async()=>{
+    await seed();await grant();const id=randomUUID(),gate=await begin(id),call=randomUUID();
+    expect(await gate.budget.reserve(call,100000)).toBe(true);await gate.budget.settle(call,100000,call,null);
+    await pg.exec("UPDATE companion_private_test_budget_grants SET starts_at=now()-interval '24 hours',expires_at=now()-interval '1 second'");
+    expect(await gate.budget.reserve(randomUUID(),1)).toBe(false);expect(await deniedReason(id)).toBe('user_month_limit');
+    expect((await pg.query('SELECT committed_micro_usd FROM companion_sol_budget')).rows[0].committed_micro_usd).toBe(3050000);
+  });
+  it.each(['question_limit','platform_budget','call_limit','user_day_limit','halt'])('retains the %s protection',async kind=>{
+    await seed();await grant();
+    if(kind==='platform_budget')await pg.exec('UPDATE companion_sol_budget SET committed_micro_usd=4999999');
+    if(kind==='call_limit')await pg.exec('UPDATE companion_usage_policy SET question_call_limit=1');
+    if(kind==='user_day_limit')await pg.exec('UPDATE companion_usage_policy SET user_day_limit_micro_usd=2950000');
+    if(kind==='halt')await pg.exec("UPDATE companion_sol_budget SET halted_reason='unknown_cost'");
+    const id=randomUUID(),gate=await begin(id);
+    if(kind==='call_limit'){
+      const call=randomUUID();expect(await gate.budget.reserve(call,1)).toBe(true);await gate.budget.settle(call,0,call,null);
+    }
+    expect(await gate.budget.reserve(randomUUID(),kind==='question_limit'?350001:2)).toBe(false);
+    expect(await deniedReason(id)).toBe(kind==='halt'?'platform_budget':kind);
+  });
+  it('counts unknown bills at their full reservation against the extended ceiling',async()=>{
+    await seed(4999999,'unknown');await grant();const id=randomUUID(),gate=await begin(id);
+    expect(await gate.budget.reserve(randomUUID(),2)).toBe(false);expect(await deniedReason(id)).toBe('user_month_limit');
+    expect((await pg.query("SELECT reserved_micro_usd,actual_micro_usd FROM companion_sol_calls WHERE status='unknown'")).rows)
+      .toEqual([{reserved_micro_usd:4999999,actual_micro_usd:null}]);
+  });
+  it('uses the grant for concurrent reservations without waiting on the ordinary ceiling',async()=>{
+    await seed();await grant();const id=randomUUID(),gate=await begin(id);
+    expect(await gate.budget.reserve(randomUUID(),100000)).toBe(true);
+    const attempt=(await pg.query<{attempt:string}>('SELECT attempt FROM companion_question_requests WHERE id=$1',[id])).rows[0].attempt;
+    expect((await rpc('try_reserve_companion_question_call',{p_call_id:randomUUID(),p_user_id:user,p_request_id:id,p_attempt:attempt,p_micro_usd:100000})).data).toBe('reserved');
+  });
+  it('allows only one bounded grant per account and month',async()=>{
+    await seed();await grant();await expect(grant()).rejects.toThrow(/duplicate key/);
+    await expect(pg.exec('UPDATE companion_private_test_budget_grants SET additional_micro_usd=2000001')).rejects.toThrow();
+    await expect(pg.exec("UPDATE companion_private_test_budget_grants SET expires_at=starts_at+interval '25 hours'")).rejects.toThrow();
+    for(const role of ['anon','authenticated','service_role'])for(const command of [
+      'SELECT * FROM companion_private_test_budget_grants',
+      'UPDATE companion_private_test_budget_grants SET revoked=false',
+      `INSERT INTO companion_private_test_budget_grants(user_id,month_start,additional_micro_usd,starts_at,expires_at,reason) VALUES('${user}',current_date,1,now(),now()+interval '1 hour','not authorized')`,
+    ])await expect(pg.transaction(async tx=>{await tx.exec(`SET LOCAL ROLE ${role}`);await tx.exec(command);})).rejects.toThrow(/permission denied/);
   });
 });
