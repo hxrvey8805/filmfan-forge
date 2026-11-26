@@ -107,3 +107,28 @@ ae215b53d8a5ae8a1ed4b8beb7b19ffb68228ca4a3c6e4a2f36a72145ea366f9  supabase/funct
 65d9df725c284c6fbd8a4f186f272d1409d3060aa1fc8f63e30ab6133e301eca  supabase/functions/_shared/watch-service.ts
 169495ca44c3c2bf88e28a58305998fd37abd0d4d56b5fc0fbef7d3bdd61b94a  supabase/functions/_shared/wordplay.ts
 86a792a9108f913faf049433c6b488df431d8859b1ccfaf50f516d149c8b222b  supabase/functions/spoiler-free-companion/index.ts
+
+---
+PR41 live scene test diagnostic (read-only) — 2026-11-26T13:02Z
+Request ID: b67e69b7-1356-41c7-8aa4-bad9d80b9b90 (created 2026-11-26T13:00:05.299862Z)
+Live runtime revision confirmed: watch-checks-2026-11-26-scene-context-v1
+Source/episode counts: sources=55, episodes=2 (logged on initial pass 13:00:05Z and resumed pass 13:00:49Z)
+
+Stage & timing timeline (non-content metadata only):
+- 13:00:05Z sources_ready (sources: 55, episodes: 2)
+- 13:00:05Z–13:00:11Z call 1 analyst returned: 6,010 ms (settled 13,194 microUSD)
+- 13:00:05Z–13:00:11Z call 2 analyst returned: 5,911 ms (settled 15,162 microUSD)
+- 13:00:11Z–13:00:25Z call 3 writer returned: 13,424 ms (settled 26,981 microUSD)
+- 13:00:25Z–13:00:47Z call 4 verifier returned: 22,197 ms (settled 31,576 microUSD)
+- 13:00:47Z attempt 1 review_invalid (reason: receipt_count) + review_rejected (issues: ["citation"])
+- 13:00:47Z call 5 verifier started -> failed (0 ms, no provider call row; headroom defer)
+- 13:00:49Z resumed pass: sources_ready (sources: 55, episodes: 2); replayed attempt 1 review_invalid (receipt_count) + review_rejected (["citation"])
+- 13:00:49Z–13:01:14Z call 1 verifier returned: 24,945 ms (same inputHash as deferred call 5; settled 33,624 microUSD)
+- 13:01:14Z attempt 2 review_rejected (issues: ["identity"])
+- 13:01:14Z answer_exhausted -> answer_gap (reason: explanation_rejected)
+
+Completion & spend-block state:
+- companion_question_requests.status = released (completed; no longer running)
+- All 5 provider calls settled; total 120,537 microUSD
+- companion_sol_budget (sol-beta): enabled=true, committed_micro_usd=2430708 / 5000000, halted_reason=NULL (updated_at 2026-11-26T13:01:14.431688Z)
+- No spend-block reason, no new halt, and no new unknown-cost hold.
