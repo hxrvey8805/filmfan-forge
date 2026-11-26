@@ -1,0 +1,42 @@
+Complete identity tokens — 2026-11-26
+
+Observed failure
+The controlled Breaking Bad S1E2 20:00 scene question produced an independently
+approved two-paragraph answer, but the local identity condition rejected its
+second paragraph. The capital-word pattern parsed Krazy-8 as Krazy-, whereas
+source words contained the complete token. The unnecessary rewrite subsequently
+failed independent attribution/relevance review. The answer was withheld and
+the question allowance was released correctly.
+
+Correction
+Use complete alphanumeric compound tokens consistently for identity warnings,
+identity validation and named-speech detection. Unknown or different numeric
+suffixes still fail exact evidence matching. All source/timestamp boundaries,
+independent review, required exact receipts, attribution and future-hint checks
+remain in place. No model, reasoning, writer/reviewer prompt, source-selection,
+output-limit, budget, entitlement or purchase change. Version the private work
+checkpoint and diagnostic revision for this parsing change.
+
+Validation
+1,559 tests across 101 files passed. Entry-point Deno check, changed-file lint
+and diff checks passed. Private captured-output replay rejected the original
+draft before the correction and accepted the identical draft and original
+independent review afterward. Model prompts, full permitted packet, draft,
+schema and token settings were identical; only the corrected local warning
+tokens differ. No provider call was made for that replay. The private captured
+material is not included in this repository.
+
+Known limit
+Another controlled run failed receipt_count twice. Its raw receipt shape was
+not retained, so this correction must not be described as proving all verifier
+failures impossible or repairing that separate formatting failure. Read the
+retained diagnostics after the fresh live test; do not blindly repeat failures.
+
+Rollout
+Deploy only spoiler-free-companion from this reviewed revision. No migration,
+frontend publication, TestFlight build, secret or other-function deployment.
+Verify live caps remain global $5, question $0.35, account/month $3, and real
+sales disabled. Existing uncertain-cost holds remain fully reserved. Run one
+fresh signed-in scene check, then read its saved answer/diagnostics and audit
+source cutoff, earlier-episode evidence, rewind and episode-switch isolation.
+Do not claim ready until the live result is checked.
