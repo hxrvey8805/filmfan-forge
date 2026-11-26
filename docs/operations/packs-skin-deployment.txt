@@ -1,0 +1,43 @@
+PR #39 packs and random skins — preflight STOPPED
+Checked: 2026-11-26T08:54:45Z
+Source merge/HEAD: a3cfc8a24fb3735057fb050e1a2a38ed30d00c96
+Tested head: 40e72e1b513e15b0945afda28889be53268f4228
+Both trees: 5e613ed5a9ea705f29de4f9394404eeb128e289e
+All six transitive open-pack local files match tested source byte-for-byte.
+Existing open-pack verify_jwt=false inspected, unchanged.
+
+Live preflight: 31 collection cards, 250 packs, 9 XP wallets, 0 unlocks,
+4 redemption events; matches owner-reported 00:40:15 UTC backup counts.
+Both timestamped migrations absent from schema_migrations; exact file hashes
+also absent from the Drizzle journal. Live v2 draw/random redemption absent.
+20261124180000 SHA256: ecd08b84d31d9505a4e396044821891cd0560dce97f4ec0f059f23cdf301498c
+20261124190000 SHA256: f8de735aeb2c6fd354c2a09ad6ee368c50a874c8e6a65235663e406c20c3d4fc
+Both reviewed migration bodies have no outer transaction statements.
+Production enabled=true, sales_enabled=false.
+AI enabled=true; global cap 5000000 micro-USD, committed 1955001,
+halt unknown_cost; question cap 350000; account-month cap 3000000;
+daily cap NULL; provider-call limit 64.
+Unknown calls: 2, reserved total 275217 micro-USD, actual cost NULL.
+These are observations only; no companion deployment, halt or hold changed.
+
+Blockers discovered before any migration/deployment:
+1. Owner reports a complete private backup saved at 00:40:15 UTC, but that
+   backup is not accessible in this sandbox's project or mounted documents.
+   Only the older PR32 private backup was located. Matching aggregate counts
+   do not establish exact row preservation against the release backup.
+2. packs-skin-live-checks.sql creates a temporary PL/pgSQL function, inserts
+   disposable auth users and changes local roles before exception rollback.
+   Available read_query supports SELECT only; run_sql supports data changes
+   only; sandbox psql is restricted and cannot execute database functions.
+   No supported privileged execution path for this exact script was found.
+   The check script was not submitted to the migration runner or rewritten.
+   Live-check SHA256: 4f05f3b5a0518062204c480692997b0e1163708012d7d718b1fc7d0a577cd938
+
+Result: neither migration applied; open-pack not deployed; no unsigned POST
+post-deployment check, new-grant verification or before/after row comparison.
+Deployment ID/version/time: not applicable (no deployment attempted).
+Implementation, secrets, policies, payment settings, AI caps, other functions,
+frontend publication and existing user XP/packs remain untouched.
+No purchases, AI calls, or native/TestFlight operations performed.
+Continuation requires accessible private backup evidence and a supported
+execution path or owner-run exact rollback-only validation.

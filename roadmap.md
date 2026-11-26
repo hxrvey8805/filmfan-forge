@@ -1,3 +1,8 @@
+# Approved PR #39 — packs and random skins release
+
+- [x] Reviewed merge/tested trees match; all six open-pack local dependencies match byte-for-byte; counts and live purchase/AI gates inspected.
+- [ ] Apply only the two reviewed migrations in order, deploy only open-pack, verify exact rollback checks and preservation. BLOCKED before changes: owner-reported release backup inaccessible here; available database tools cannot execute the exact temporary-function/role-switch rollback script. Receipt: docs/operations/packs-skin-deployment.txt.
+
 # Approved PR #36 — companion-only deployment
 
 - [x] Synced merge and tested head share tree 401bf555ba65e9caa87720df15491e73c802126b; all 56 transitive local files match; reviewed speech routing, receipt splitting and structured error cleanup inspected.
