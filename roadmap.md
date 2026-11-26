@@ -1,8 +1,14 @@
+# Approved PR #38 — companion dispatch headroom deployment
+
+- [x] Verified all 60 companion imports match tested head byte-for-byte; source revision latency-v2 and 60-second admission floor confirmed; live checkpoint permissions/caps/purchases/unknown holds inspected.
+- [x] Deployed only spoiler-free-companion; unsigned POST returned 401; postflight matches caps, sales=false, committed 1955001, unknown_cost and both holds. Receipt: docs/operations/companion-dispatch-headroom-deployment.txt. Runtime revision/deployment ID/version/time unavailable; no AI execution or recovery performed.
+- Operator separately owns exact-state recovery and live AI retesting; not part of this deployment request.
+
 # Approved PR #39 — packs and random skins release
 
 - [x] Reviewed merge/tested trees match; all six open-pack local dependencies match byte-for-byte; counts and live purchase/AI gates inspected.
 - [x] Operator confirmed private backup is held locally and took responsibility for comparison/rollback SQL. Applied exact migrations once in order (journal IDs 11/12), deployed only open-pack; live grants and unsigned POST 401 verified. Counts, purchases, AI caps, halt and unknown holds unchanged. Receipt: docs/operations/packs-skin-deployment.txt.
-- [ ] Operator: compare archived records and run exact rollback-only live checks through Cloud SQL editor; Build39/TestFlight handled separately. Pending operator execution, not sandbox work.
+- [x] Operator reports exact rollback checks passed, existing records compared unchanged and build39 released; these are operator results, not sandbox verification.
 
 # Approved PR #36 — companion-only deployment
 

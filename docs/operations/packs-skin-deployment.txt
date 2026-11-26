@@ -56,11 +56,10 @@ halt unknown_cost; question cap 350000; account-month cap 3000000;
 daily cap NULL; provider-call limit 64, unchanged from preflight.
 Unknown calls still 2, reserved total 275217 micro-USD, actual cost NULL.
 
-PENDING RELEASE OPERATOR:
-- Compare all archived private records and old function definitions as needed.
-- Execute exact docs/operations/packs-skin-live-checks.sql in Cloud SQL editor.
-  SHA256: 4f05f3b5a0518062204c480692997b0e1163708012d7d718b1fc7d0a577cd938
-- Build39/TestFlight handled separately; no distribution validation claimed.
+OPERATOR COMPLETION REPORTED at 2026-11-26 09:19 UTC:
+- Exact rollback-only checks passed and existing records compared unchanged.
+- Build39 released by operator; no sandbox/native verification claimed.
+- Live-check SHA256: 4f05f3b5a0518062204c480692997b0e1163708012d7d718b1fc7d0a577cd938
 No rollback fixtures or normal user's XP/packs consumed by this session.
 No tested implementation rewrites, unrelated functions, companion deployment,
 halt/hold changes, secrets, policy rewrites, AI calls, purchases, payment/cap

@@ -1,0 +1,56 @@
+PR38 companion dispatch headroom — backend deployment receipt
+Postflight observed: 2026-11-26T09:20:15Z
+Reviewed merge: 4357228245df4f8323cd98a4322395774331ea79
+Tested head: 7dff0b18549d696cf432ac5ad1661fc310b45bae
+Deployment checkout: 2a1d0d571d18089f0a9f58635a9b4caa8e9ff0e6
+Reviewed merge is an ancestor of the checkout.
+All 60 transitive local spoiler-free-companion source files independently
+compared byte-for-byte to tested head: 60 MATCH, 0 mismatches.
+Source manifest SHA256 (path/match/file-hash JSON):
+7c10b93efb93f39bb6897d16ae05a778ef77f707ead99456ff5b245957b144e7
+Entry index.ts SHA256:
+86a792a9108f913faf049433c6b488df431d8859b1ccfaf50f516d149c8b222b
+Source inspection confirms WATCH_CHECK_REVISION:
+watch-checks-2026-11-25-latency-v2
+Source companion-work.ts uses MIN_CALL_WINDOW_MS=60000; dispatch is checked
+in openrouter-sol.ts before reservation and after reservation. This is an
+admission floor, not a changed provider timeout or a live timing measurement.
+Read docs/companion-dispatch-headroom-2026-11-25.txt; no recovery executed.
+Authentication config matches tested source; existing verify_jwt=false kept.
+
+Deployment tool: Successfully deployed edge functions: spoiler-free-companion
+Only spoiler-free-companion requested/deployed, with reviewed imports.
+Submitted source SHA256 (files and settings):
+c4d77ea1d33e5a3c35fb4492431db0ecef9e2d15762fbe353b210ec24ba81bc2
+No deployment ID, numeric version or exact deployment time exposed by tool.
+Submitted fingerprint/revision are source evidence, not independent live
+bundle/revision readback. No authenticated AI or timing replay was performed.
+
+Live unsigned POST /spoiler-free-companion, body {}, explicitly empty
+Authorization: HTTP 401 {"error":"Please log in."}
+Tool confirms no preview-user token was added.
+
+Read-only live checkpoint permissions:
+companion_work_checkpoints RLS=true; direct SELECT=false for anon,
+authenticated and service_role. ACL: postgres=arwdDxtm, sandbox_exec=ar.
+All three RPCs security-definer, EXECUTE only postgres/service_role;
+no PUBLIC/anon/authenticated EXECUTE:
+- load_companion_work(uuid,uuid,uuid,text)
+- save_companion_work(uuid,uuid,uuid,text,text,jsonb)
+- try_reserve_companion_question_call(uuid,uuid,uuid,uuid,bigint)
+No permission changes performed.
+
+Live preflight/postflight state matches requested gates:
+Production enabled=true; sales_enabled=false.
+Global sol-beta enabled=true; cap 5000000 microUSD; committed 1955001;
+halted_reason=unknown_cost, retained.
+Usage enabled=true; question cap 350000; account-month cap 3000000;
+question_call_limit=64; daily cap NULL.
+Two unknown holds retained: 137380 and 137837 microUSD;
+actual_micro_usd NULL for both; combined reservation 275217 microUSD.
+No ledger writes, hold settlement, halt recovery, migrations, source rewrites,
+prompts/model/context/safety changes, secrets, purchases/top-ups, AI calls,
+other function deployments or public frontend publication in PR38 rollout.
+
+Operator separately owns exact-state guarded recovery and any live AI retest.
+No claim of runtime latency-v2 revision readback or live season-recap success.
