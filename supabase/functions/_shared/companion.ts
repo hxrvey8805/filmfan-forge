@@ -271,13 +271,18 @@ export function conversationMemory(rows: Conversation[], position: ViewingPositi
 }
 
 export function questionIntent(question: string): 'scene' | 'recap' | 'explanation' {
-  if (wholeShowRecap(question) || /\b(catch me up|recap|summari[sz]e|summary|(?:story|happened|happening) so far|story up to|what(?: has)? happened (?:up (?:to|until)|before))\b/i.test(question)) return 'recap';
-  // A temporal modifier on a specific question does not turn it into a scene recap.
-  if (/^\s*(?:why|who|whose|which|what does|what did|what do)\b/i.test(question) &&
-      !/^\s*what (?:does|did|do) (?:this|that|the) (?:scene|moment)\b/i.test(question)) return 'explanation';
+  // Explicit recap requests keep their route (including "Can you recap...").
+  if (wholeShowRecap(question) || /\b(catch me up|recap|summari[sz]e|summary)\b/i.test(question)) return 'recap';
+  // Strip an assistant-directed request wrapper before reading its subject.
+  const focused=question.replace(/^\s*(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|please\s+)?(?:tell me\s+|explain\s+)?/i,'');
+  // A background qualifier such as "based on what's happened so far" does
+  // not replace the leading why/who/how question with a chronological recap.
+  if (/^\s*(?:why|who|whose|which|what does|what did|what do|how (?:did|does|do|has|have|had|is|are|was|were|can|could|would|will|should))\b/i.test(focused) &&
+      !/^\s*what (?:does|did|do) (?:this|that|the) (?:scene|moment)\b/i.test(focused)) return 'explanation';
   // A yes/no question about a fact stays specific even when it contains
   // "this scene" (for example, whether a masked identity is established).
-  if (/^\s*(?:has|have|is|are|was|were|did|does|do|can|could|will|would|should)\b/i.test(question)) return 'explanation';
+  if (/^\s*(?:has|have|is|are|was|were|did|does|do|can|could|will|would|should)\b/i.test(focused)) return 'explanation';
+  if (/\b((?:story|happened|happening) so far|story up to|what(?: has)? happened (?:up (?:to|until)|before))\b/i.test(question)) return 'recap';
   if (/\b(right now|this moment|this scene|what just happened|what happened here|what'?s happening|what is happening)\b/i.test(question)) return 'scene';
   return 'explanation';
 }

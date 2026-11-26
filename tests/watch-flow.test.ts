@@ -14,6 +14,30 @@ const row=(p=movie,changes:Partial<SubtitleRecord>={}):SubtitleRecord=>({id:'r',
 const conversation=(changes:Partial<Conversation>={}):Conversation=>({id:'c',title_id:456,media_type:'tv',season_number:3,episode_number:2,position_seconds:20,companion_version:3,question:'Why did Mira suggest sharing the rent?',answer:'DO_NOT_REUSE_THIS_MODEL_ANSWER',context:'',timestamp:'00:00:20',created_at:'2026-11-11T00:00:00Z',answer_status:'answered',evidence:[{id:'r',label:'r',start:10,end:16,season:3,episode:2}],...changes});
 
 describe('fresh scope and explicit recap windows',()=>{
+  it.each([
+    "Why are people worried about Mikkel, based on what's happened so far?",
+    'Why did Mira leave, given what has happened so far?',
+    'Who is Niko, based on the story so far?',
+    'What does her decision mean in light of what has happened so far?',
+    'How did Mira reach that conclusion, based on what happened so far?',
+    'Did she trust him, considering what has happened so far?',
+    "Can you tell me why people are worried about Mikkel, based on what's happened so far?",
+    "Please explain why people are worried about Mikkel, based on what's happened so far?",
+  ])('keeps a focused question with a story-so-far modifier on the answer route: %s',q=>{
+    const plan=questionScope(q,tv);
+    expect(plan).toMatchObject({intent:'answer',earlierStory:true,boundary:tv});
+    expect(plan.collection).toBeUndefined();
+  });
+  it('keeps the focused question boundary and explicit earlier-episode restriction',()=>{
+    const q="Why are people worried about Mikkel, based on what's happened so far? Only this episode. No spoilers after 15:00.";
+    expect(questionScope(q,tv)).toMatchObject({intent:'answer',earlierStory:false,boundary:{seconds:900}});
+  });
+  it.each(['What has happened so far?', 'How about a recap of the last two minutes?',
+    'Recap everything so far.', 'Summarise the whole show so far.',
+    'Can you tell me what has happened so far?', 'Could you please explain the story so far?'])('retains actual recap requests: %s',q=>{
+    expect(questionScope(q,tv).intent).toBe('recap');
+  });
+
   it.each(['Can you summarise kats speech to cooper?', 'Summarize Mira’s conversation with Sam.',
     'Give me a summary of the argument.', 'Recap the proposal.'])('keeps a subject summary focused instead of recapping the whole episode: %s',q=>{
     expect(questionScope(q,tv)).toMatchObject({intent:'answer',earlierStory:true,boundary:tv});
