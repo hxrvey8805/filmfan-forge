@@ -104,10 +104,15 @@ an unsupported country reference and fresh complete review. Fresh portion cost
 $0.1363615. This was NOT a wholly fresh full-episode generation.
 
 The earlier short and rewind model runs precede the final recap writer guidance;
-the current full-episode run and automated checks include it. A final fresh
-short-recap test has NOT started: automatic approval review blocked caption
-transfer and AI spending despite the user's direct instruction to run it.
-No call or charge was recorded for that attempt. Do not report it as passed.
+the current full-episode run and automated checks include it. After the user
+explicitly authorized the caption transfer, the final fresh short-recap test ran
+on the current code: S2E7 07:00, requested 05:00–07:00. Both writer and reviewer
+were fresh, with no replay or repair. Three paragraphs passed on attempt one;
+all evidence lay between 05:03.108 and 06:58.092 in the selected episode. The
+independent review marked boundarySafe=true, fit=direct, and every paragraph
+supported with no issues. Provider calls took 15.680s and 11.356s (about 27s
+combined), costing $0.011266 and $0.0101635, or $0.0214295 total. Both charges
+settled. This private result is not a live deployment or general latency promise.
 
 Production reservation preflight and readiness
 An offline check used the production reservation calculation on the captured
@@ -119,9 +124,11 @@ production-budget end-to-end pass. No reservation calculation or cap was relaxed
 The fresh second-group calls took about 38s, 37s, 12s and 70s; this is not evidence
 of a speed improvement. Do not call this a complete recap reliability/latency fix.
 
-Keep PR40 draft: the corrective code passes local checks, but the final fresh
-short test remains blocked and long-recap budget compatibility is not established.
-Private ledger committed $10.85850165 of $11, leaving about $0.14149835.
+Keep PR40 draft: the corrective code passes local checks and the final fresh
+short test, but long-recap budget compatibility is not established. The short
+case's reservations fit the unchanged question cap; the eight-call full-episode
+path does not. Do not represent this as a complete long-recap fix.
+Private ledger committed $10.87993115 of $11, leaving about $0.12006885.
 A previous provider body timeout retains its entire $0.18821513 unknown-cost
 reservation. Do not release it, reset a production halt, or alter a spending cap.
 Live production has not been changed by this candidate.
