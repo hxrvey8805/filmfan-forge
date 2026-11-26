@@ -1,0 +1,60 @@
+Scene verification repair — 26 November 2026
+
+Problem
+The live Breaking Bad S1E2 20:00 question, "Explain this scene and why they are
+blaming each other.", failed with review_invalid/receipt_count, followed by an
+identity rejection on the receipt retry. The shared two-pass loop counted that
+receipt retry as the writer's repair opportunity, so it exhausted without ever
+asking the writer to repair the identified problem. No answer was saved or
+question used. Source selection had included two episodes. Completed private
+checkpoints are deleted on terminal request status, so the original model prose
+is not available: the regression reproduces the recorded failure sequence with
+an invented two-episode scene, not an exact replay of the lost draft.
+
+Change
+Allow at most two writer drafts and one independent receipt retry in up to three
+passes (at most five writer/reviewer calls, excluding unchanged source selection).
+A receipt retry no longer consumes the semantic repair. Repeated invalid proof
+still stops without a third review or unnecessary writer call. Every repaired
+answer must pass the full independent factual, attribution, relevance, citation
+and spoiler checks. Only fixed issue categories and already-permitted source
+hints cross into a new writer call; rejected prose or reviewer explanations do
+not. A temporary deadline defer resumes identical completed calls at zero new
+model cost, then performs the remaining repair/review normally.
+
+The successful two-call path, model/provider/reasoning/output settings, complete
+source packet, source selection, system prompts and all acceptance predicates
+are unchanged. The failure path can cost more and take longer because it now
+gets the previously-missing repair, but existing per-question, account, global
+and call limits still gate every call. There is no guarantee every answer passes.
+Work/check revisions advance to verification-repair-v1 to avoid mixing old work.
+
+Validation
+- The new regression failed before the fix. Nine targeted cases cover a local
+  identity failure and an independent review rejection after receipt retry,
+  spoiler-safe rewrite input, full re-review, two-draft/one-receipt bounds, budget
+  rejection, timestamp rejection and checkpoint continuation without duplicate
+  calls. Invented source text only; no real captions committed to the repository.
+- 1,534 tests passed in 99 files, including the existing caption attribution,
+  answer relevance, rewind/history and episode-switch checks.
+- Deno function typecheck, changed production/new test ESLint and diff checks pass.
+- No paid AI test or live deployment is claimed by this local validation record.
+
+Backend-only rollout and live acceptance
+Deploy only spoiler-free-companion and its reviewed transitive imports after
+confirming the tree matches the reviewed PR. Save the full source manifest and
+deployment receipt in docs/operations/pr43-scene-verification-deployment.txt.
+Verify unsigned access stays 401. Read-only preflight/postflight checks must keep
+real purchases disabled (sales_enabled=false), global cap $5, question cap $0.35,
+account/month cap $3, call cap 64, and both existing unknown-cost holds unchanged.
+Do not change secrets, schema, policies, AI settings, or recover/reset any halt.
+Do not deploy the separate draft long-recap PR40 or upload TestFlight.
+
+Then run the same question once in the authenticated private beta at S1E2 20:00,
+under its existing production accounting, as with the earlier live attempts.
+Inspect saved answer, evidence, actual runtime revision, review result, elapsed
+time and settled cost. Confirm current-scene anchoring, relevant earlier context
+and no evidence past 20:00; do not call it ready if it returns another fallback.
+Use the saved answer to recheck rewind/episode boundaries without extra AI calls.
+The separate $11 private evaluation ledger remains untouched. A blocked live
+request must stay blocked; do not raise limits or route around a spending guard.

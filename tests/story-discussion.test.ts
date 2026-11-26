@@ -101,12 +101,10 @@ describe('contextual story explanations with independent receipts',()=>{
     const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValue(check({support:[receipt]}));
     expect(await storyDiscussion(context,gen)).toBeNull();
   });
-  it('still rejects repeated malformed receipts and a spoiler verdict on the citation retry',async()=>{
+  it('still rejects repeated malformed receipts on the citation retry',async()=>{
     const bad=check({support:[{id:'R2',quote:'Mira suggests sharing a flat to reduce the rent!'}]});
-    for(const last of [bad,{...check(),boundarySafe:false}]) {
-      const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(bad).mockResolvedValueOnce(last);
-      expect(await storyDiscussion(context,gen)).toBeNull();expect(gen).toHaveBeenCalledTimes(3);
-    }
+    const gen=vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(bad).mockResolvedValueOnce(bad);
+    expect(await storyDiscussion(context,gen)).toBeNull();expect(gen).toHaveBeenCalledTimes(3);
   });
   it('does not reuse a draft with a semantic rejection even if another receipt is malformed',async()=>{
     const bad={...check({support:[{id:'R2',quote:'Mira suggests sharing a flat to reduce the rent!'}]}),boundarySafe:false};
