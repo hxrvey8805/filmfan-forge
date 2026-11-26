@@ -12,11 +12,15 @@ export function companionAnswerOptions(env: (name: string) => string | undefined
 // The caller passes the user returned by Auth.getUser(), never the request
 // body or user-editable profile metadata.
 export function companionReleaseFor(user: { app_metadata: Record<string, unknown> }, env: (name: string) => string | undefined) {
-  const enrolled = user.app_metadata.cinegeek_visual_beta === true;
-  const noteTables = enrolled
+  // Select the already-tested pipeline for ordinary accounts only after the
+  // server release switch is explicitly enabled. This does not grant access:
+  // consent, question allowance and spending reservations still run before AI.
+  const released = env('COMPANION_PUBLIC_RELEASE_ENABLED') === 'true'
+    || user.app_metadata.cinegeek_visual_beta === true;
+  const noteTables = released
     ? ['companion_scene_notes', 'companion_visual_notes']
     : ['companion_scene_notes'];
-  return { noteTables, answerOptions: { captionDiscussion: enrolled && companionAnswerOptions(env).captionDiscussion } };
+  return { noteTables, answerOptions: { captionDiscussion: released && companionAnswerOptions(env).captionDiscussion } };
 }
 
 export function companionEvidenceBudget(env: (name: string) => string | undefined): number {

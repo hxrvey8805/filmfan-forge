@@ -1,0 +1,58 @@
+CineGeek public-release preparation — 26 November 2026
+
+Status: prepared locally; no deployment, live flag change, upload or submission.
+
+Companion
+- COMPANION_PUBLIC_RELEASE_ENABLED=true selects the existing reviewed companion
+  pipeline for ordinary authenticated accounts. The default remains off.
+- Existing server-enrolled beta accounts retain their current behaviour.
+- This selects the pipeline only. It does not grant Pro, questions, consent or
+  spending permission. The existing allowance/reservation gate still runs before
+  provider calls. Free has zero included questions; Monthly and Annual have 15
+  per subscription month. Refund/expiry and restore rules are unchanged.
+- The selected provider, evidence budgets, prompts, model parameters, factual
+  review, timestamp checks and spending limits are unchanged.
+- Generated live-schema types and all existing migrations are untouched.
+
+Native release candidate
+- Prepared separately from the verified build 40 staging, with the backend
+  source updates through 9c6754f and this public-release selector.
+- Build 41 opts into the existing Production purchase adapter. A verified
+  Production AppTransaction is still required; TestFlight and App Review remain
+  on the verified Sandbox adapter and its scoped test-account ledger.
+- The authenticated server configuration is checked when showing controls and
+  again before opening a purchase sheet. Its sales switch remains OFF.
+- Restore is independent of new sales. No question packs/trials are activated.
+- Minimum iOS 16 matches the existing purchase and Focus API requirements.
+- This native preparation is NOT a change to the current installed build.
+
+Before deployment
+1. Review this diff and the local native patch/artifact audit. Use the normal
+   explicit Lovable deployment approval process; this preparation spends no credits.
+2. Run supabase/release/public-release-preflight.sql as a read-only operator
+   check. Compare current limits and owner grants to their saved baseline. Do not
+   reset any budget, cost reservation or transaction record.
+3. Deploy the companion selector with the current openrouter-sol provider and
+   explicitly set COMPANION_PUBLIC_RELEASE_ENABLED=true. Recheck ordinary-account
+   access and privacy consent. Keep Production sales false.
+4. Upload the verified candidate for TestFlight, then use the same reviewed build
+   in the App Store submission. Include Monthly, Annual and their group together.
+
+Before enabling real sales
+- Obtain a public operating-budget decision. The unchanged $5 global beta cap
+  can stop answers for all subscribers, even if individual questions remain.
+  The $0.35/question and $3/account/month caps can also stop an answer without
+  consuming a question. This preparation does not raise or disable any cap.
+- Reconfirm the deployed verifier/recovery worker and billing configuration,
+  and finish the multi-connection PostgreSQL concurrency check recorded as
+  outstanding in the original billing rollout. PGlite tests are not that proof.
+- Complete screenshots, remaining store declarations and Apple review. Keep a
+  manual release so the launch configuration can be checked before availability.
+- Activate Production sales only after explicit launch approval. No live charge
+  is needed for these local/Apple Sandbox checks.
+
+Rollback
+Keep sales false and leave verification/restore/recovery running. Disable the
+public companion selector only before launch or with a suitable customer-facing
+service plan; existing beta enrolments remain unaffected. Never delete purchases
+or undo paid entitlements to roll back a release.
