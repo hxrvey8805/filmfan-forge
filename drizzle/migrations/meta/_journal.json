@@ -85,6 +85,13 @@
       "when": 1795683418174,
       "tag": "0011_random_skin_redemption",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795707071568,
+      "tag": "0012_companion_diagnostics",
+      "breakpoints": true
     }
   ]
 }

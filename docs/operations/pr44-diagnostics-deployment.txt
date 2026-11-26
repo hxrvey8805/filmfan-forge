@@ -1,0 +1,51 @@
+PR #44 Retained Companion Diagnostics Deployment Receipt
+Date (UTC): 2026-11-26T15:31:44Z
+Scope: Diagnostics only (additive private column/RPC + spoiler-free-companion deployment). Does NOT claim to fix the Breaking Bad S1E2 20:00 scene answer.
+
+1. Source Verification
+- Reviewed merge commit: 49d2fae68e9bafd0d305bffa0aa0351437fae483
+- Local HEAD: 49d2fae68e9bafd0d305bffa0aa0351437fae483
+- Transitive local files for spoiler-free-companion: 61
+- Mismatches vs 49d2fae68e9bafd0d305bffa0aa0351437fae483: 0 (byte-for-byte match)
+- Transitive manifest SHA-256: 048192c364521abc0c753ca30ac93f3c54344c7d4144c5e3a71338e7c168f5eb
+- Key PR #44 file SHA-256 hashes:
+  - supabase/functions/spoiler-free-companion/index.ts: aaeffdc209250caf45d499e5a51d7759beaab38c673c42af56d965ef0f301062
+  - supabase/functions/_shared/story-discussion.ts: 4177d85887b4447a12c10b72bc6c5cede0e2e544724d400ed5850094c3df55be
+  - supabase/functions/_shared/watch-diagnostic-store.ts: 3479dbb19ab85154ef11385609307e0d7fd06513cd3643ee78f3db0575511393
+  - supabase/functions/_shared/watch-diagnostics.ts: 50cc90569c4764975f8c14c3625f460bf8a96778da35c2a3b50be2a4f29047f4
+
+2. Migration Result (Option 2: outer BEGIN;/COMMIT; stripped for transactional runner)
+- Reviewed source file (unchanged): supabase/migrations/20261126160000_companion_diagnostics.sql
+  - Reviewed file SHA-256: 277bb5ddda5d155871580b1b08892b1ffb688c565069af08a8d51240efcc0a66
+- Submitted interior SQL body (lines 2-64 verbatim):
+  - Submitted body SHA-256: c691a7170e86227feff7ddc6b64ef3afea3b0eb765735530b1670d5ec4edffe6
+- Applied Drizzle migration file: drizzle/migrations/0012_companion_diagnostics.sql
+  - Applied file SHA-256: c691a7170e86227feff7ddc6b64ef3afea3b0eb765735530b1670d5ec4edffe6
+- Status: Applied successfully to project Lovable Database; verified committed before edge function deployment.
+
+3. Private Diagnostic Access & Service-Only RPC Verification (Live DB Readback)
+- public.companion_question_requests.check_diagnostics: exists=true (jsonb NOT NULL)
+- public.companion_question_requests table access:
+  - rls_enabled=true, rls_forced=false, policy_count=0
+  - direct SELECT: anon=false, authenticated=false, service_role=false
+- public.save_companion_diagnostics(uuid,uuid,uuid,text,jsonb,integer):
+  - exists=true, security_definer=true
+  - EXECUTE: public=false, anon=false, authenticated=false, service_role=true
+
+4. Edge Function Deployment
+- Function deployed: spoiler-free-companion (only)
+- Submitted source SHA-256: b5f18d85368dae34a4df761383529fc4a407bae5fb75a99767487d09b27df8b7
+- Live deployment ID / active runtime revision: not exposed by deployment tool.
+- Unsigned POST check: HTTP 401 {"error":"Please log in."}
+
+5. Unchanged Controls Verification (Live DB Readback)
+- apple_production_policy: enabled=true, sales_enabled=false
+- companion_sol_budget (id=sol-beta): enabled=true, limit_micro_usd=5000000 ($5.00), committed_micro_usd=2656690, halted_reason=NULL
+- companion_usage_policy: enabled=true, question_limit_micro_usd=350000 ($0.35), user_month_limit_micro_usd=3000000 ($3.00), user_day_limit_micro_usd=NULL, question_call_limit=64
+- companion_sol_calls non-settled rows: 2 unknown holds preserved
+  - 201c2b2a-d6ce-4795-9921-c730d4add05b: status=unknown, reserved_micro_usd=137837, actual_micro_usd=NULL
+  - 0d3d498d-2ca9-4b4d-8b59-87e986dcef3d: status=unknown, reserved_micro_usd=137380, actual_micro_usd=NULL
+
+6. Exclusions Confirmed
+- No changes to prompts, models, source context, acceptance checks, secrets, or other functions.
+- No frontend publication, TestFlight upload, draft recap PR40 deployment, or AI calls.
