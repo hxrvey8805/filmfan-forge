@@ -1,0 +1,68 @@
+Companion citation contract — 2026-11-26
+
+Problem and evidence
+A controlled scene run failed receipt_count twice after the independent
+reviewer approved its paragraphs. The raw failing receipts were not retained;
+the available trace cannot distinguish an empty/oversized reference list from
+overflow caused by splitting selected source ranges. Do not claim that subtype
+was recovered from the live run.
+
+Two concrete contract defects are reproduced locally:
+1. The reviewer schema allowed supported=true with an empty support array,
+   although the runtime correctly rejected that combination.
+2. Two valid selected ranges could expand into ten <=700-character fragments
+   and then be rejected against a limit intended for eight selected references.
+
+Correction
+- Use a nested schema union: approvals require nonempty exact references,
+  issue=none and non-uncertain attribution. Rejections have their own route
+  permitting empty references, so a refusal never requires fabricated proof.
+- Retain the maximum eight model-selected references. Keep the original
+  maximum eight fragments per selected range, each <=700 characters; bound
+  the internal representation to 64 fragments overall. Preserve every selected
+  original line. Do not truncate, add sources, repair quotations or accept an
+  unknown source/range. Receipt retries reparse the original references rather
+  than treating already-split fragments as extra model-selected references.
+- All independent factual, identity, speaker, relevance and spoiler conditions
+  remain in force. Source selection, full context, writer/reviewer prompts,
+  model, reasoning and output-token settings are unchanged. No extra model
+  calls or retries are introduced. Work/check revisions are updated.
+
+Validation
+1,572 tests across 102 files passed, along with Deno entry-point checking,
+changed-file lint and diff checks.
+The synthetic split-reference case fails against the prior implementation and
+passes after the correction with every original word retained. The captured
+Breaking Bad draft and original independent review still produce the identical
+answer and evidence. Nine replay boundary/history checks pass, including
+earlier-episode context, current scene, timestamp, rewind and episode isolation.
+The original six request/answer baseline fixtures are preserved: only the
+explicitly asserted new verifier schema is normalized for their old hashes;
+all prompts, context, call counts/order and answers must still match exactly.
+
+A single real provider compatibility test passed using the actual new schema,
+unchanged production model/reasoning/token settings and tiny invented data.
+It cost $0.00168, bringing private test committed spend to $10.89207165/$11.
+This is a schema compatibility check, NOT a fresh production answer. The actual
+full-reviewer preflight required a $0.11135250 reservation and did not fit the
+remaining cap; it was not sent. No cap was increased or bypassed.
+
+Provider format references consulted:
+https://openrouter.ai/docs/guides/features/structured-outputs
+https://developers.openai.com/api/docs/guides/structured-outputs
+Nested anyOf objects are supported; the schema root remains an object.
+
+Release scope
+Deploy only spoiler-free-companion and its exact reviewed shared imports.
+No migration, other function, frontend publication, TestFlight upload, secret,
+purchase, entitlement or budget-policy change. Read-only verify caps remain
+$5 global, $0.35/question, $3/account/calendar month, 64 calls/question; preserve
+both uncertain-cost holds and sales_enabled=false. Do not run another live
+question while the account-month guard prevents its final verification.
+
+Readiness
+Full fresh scene verification remains blocked by existing spending guards.
+Do not label this as a completed fresh end-to-end live test or invite broad
+new-question testing yet. Keep TestFlight unchanged until that final check
+passes. The fixed code and local replays alone cannot prove every future
+model response will verify successfully.
