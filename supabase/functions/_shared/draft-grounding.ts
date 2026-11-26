@@ -21,6 +21,10 @@ const words = (text: string) => new Set((text.match(/[\p{L}\p{N}]+(?:['’-][\p{
 // This is not fuzzy name matching or a substitute for attribution review.
 export function captionIdentityWords(text:string) {
   const result=words(text);
+  // The ordinary verb "Googling" is not a new person called Googling. Only
+  // recognize its grammatical forms when the cited source names Google;
+  // do not stem arbitrary character names or infer a service from "search".
+  if(result.has('google'))for(const form of ['googles','googled','googling'])result.add(form);
   // A hyphenated acronym+noun descriptor can be the same phrase as the
   // spaced plural in a caption ("TV-show" / "TV shows"). This does not
   // fuzzy-match personal names or supply an acronym absent from the source.
@@ -58,7 +62,7 @@ const speechMatches = (text: string) => [...text.matchAll(namedSpeech)].filter(m
 export function namedSpeechSubjects(text: string): string[] {
   // A capitalized clause opener is not part of the person's name: "When Mira
   // says..." refers to Mira, not a character called "When Mira".
-  return speechMatches(text).map(match => normalized(match[1]).replace(/^(?:when|while|as|if|because|although|but|and|then|later)\s+/, ''))
+  return speechMatches(text).map(match => normalized(match[1]).replace(/^(?:when|while|as|if|because|although|but|and|then|later|now|meanwhile|earlier|finally)\s+/, ''))
     .map(name=>name.replace(/['’]s$/i,''))
     .filter(name => !genericSubjects.has(name));
 }
@@ -99,7 +103,7 @@ export function draftGroundingIssues(question: string, draft: GroundedDraft, evi
       // institution. The semantic reviewer must still ground the treatment;
       // this does not license "VIP says..." or an unknown acronym such as FBI.
       if (match[0] === 'VIP' && /^\s+(?:treatment|service|experience)\b/i.test(claim.text.slice(match.index! + match[0].length))) continue;
-      const sentenceStart = !claim.text.slice(0, match.index).trim() || /[.!?][”"'’\)\]]*\s*$/.test(claim.text.slice(0, match.index));
+      const sentenceStart = !claim.text.slice(0, match.index).trim() || /[.!?][”"'’)\]]*\s*$/.test(claim.text.slice(0, match.index));
       if ((!sentenceStart || sourceNames.has(name) || /^[A-Z]{2,}$/.test(match[0])) && !citedWords.has(name)) issues.add('identity');
     }
     // A name being called or mentioned is not a speaker label. Preserve real
