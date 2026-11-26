@@ -1,0 +1,148 @@
+PR #51 Public Release Configuration Deployment Receipt
+======================================================
+Timestamp (UTC): 2026-11-26T20:50:56Z
+Merged PR: #51
+Commit: 78bd32ce69663b724c974bcb3e9908f6effbcd7e
+Deployed Function: spoiler-free-companion (ONLY)
+
+1. Source Verification (62 Transitive Files)
+--------------------------------------------
+Transitive file count: 62
+Byte-for-byte mismatches vs 78bd32ce69663b724c974bcb3e9908f6effbcd7e: 0
+Expected path-sorted newline-terminated manifest SHA-256:
+  591cd94262943f12a0a507ec6e664b989acc424f46218ee2134565a7f85e1a99
+Computed path-sorted newline-terminated manifest SHA-256:
+  591cd94262943f12a0a507ec6e664b989acc424f46218ee2134565a7f85e1a99
+Manifest match: PASS
+
+2. Runtime Flag Configuration
+-----------------------------
+Action: Set non-secret runtime flag COMPANION_PUBLIC_RELEASE_ENABLED=true via secrets--set_secret.
+Pre-change secret count: 13 (COMPANION_PUBLIC_RELEASE_ENABLED absent; COMPANION_AI_PROVIDER present and untouched)
+Post-change secret count: 14 (COMPANION_PUBLIC_RELEASE_ENABLED present; COMPANION_AI_PROVIDER untouched)
+Note: The secret store encrypts values and does not display them on readback; presence is confirmed by secrets--fetch_secrets and the value "true" was written by secrets--set_secret. No other runtime flags or secrets were modified.
+
+3. Edge Function Deployment
+---------------------------
+Function deployed: spoiler-free-companion
+Result: Successfully deployed
+Submitted source SHA-256 (files and settings):
+  168626f34263009df841b133027c44f759e0758ec76b0317167ea9a4705c5301
+Note: Live deployment ID/version is not exposed by the deployment tool.
+
+4. Unsigned Access Verification
+-------------------------------
+Request: POST /functions/v1/spoiler-free-companion (empty Authorization header, body {})
+HTTP Status: 401
+Response Body: {"error":"Please log in."}
+
+5. Read-Only Preflight & Post-Deployment Control Readbacks
+----------------------------------------------------------
+Source query: supabase/release/public-release-preflight.sql (SELECT statement run read-only)
+
+Preflight (before flag change and deployment):
+- production_verification_enabled: true
+- production_sales_enabled: false
+- review_verification_enabled: true
+- review_sales_enabled: true
+- question_policy:
+  - enabled: true
+  - question_limit_micro_usd: 350000
+  - user_month_limit_micro_usd: 3000000
+  - user_day_limit_micro_usd: null
+- global_ai_budget (sol-beta):
+  - enabled: true
+  - limit_micro_usd: 5000000
+  - committed_micro_usd: 3731658
+  - halted_reason: null
+
+Post-deployment (2026-11-26T20:50:56Z):
+- production_verification_enabled: true
+- production_sales_enabled: false
+- review_verification_enabled: true
+- review_sales_enabled: true
+- question_policy:
+  - enabled: true
+  - question_limit_micro_usd: 350000
+  - user_month_limit_micro_usd: 3000000
+  - user_day_limit_micro_usd: null
+- global_ai_budget (sol-beta):
+  - enabled: true
+  - limit_micro_usd: 5000000
+  - committed_micro_usd: 3731658
+  - halted_reason: null
+
+Comparison: Identical before and after deployment.
+
+6. Scope & Unchanged Controls Confirmation
+------------------------------------------
+- Real production sales: remain false (unchanged)
+- Plans, questions, budgets, reservations, private grants: unchanged
+- Model, prompts, secrets, safety checks, COMPANION_AI_PROVIDER: unchanged
+- SQL migrations, other edge functions, website publication, AI calls: none performed
+- Native build 41: handled separately in Xcode
+
+7. Full Path-Sorted Transitive Source Manifest (62 Files)
+---------------------------------------------------------
+c393ab5c5ab97aff4ef023239e768b8f189ccb07163ac59aadd60ffddd4fc9cd  supabase/functions/_shared/action-grounding.ts
+3cee0d89452793a49b89992ace5425d701842ed245df724ca92bd8002b7ef87b  supabase/functions/_shared/ai-privacy.ts
+1111ee65bec589d296f199b8b31d6720a7a9a8b6d73ea78e965bc08a79fcb169  supabase/functions/_shared/answer-schema.ts
+a61ff1b7477d487cc03510d5938d2e54828a885cd7badafd37a7697c53d75fd3  supabase/functions/_shared/answer.ts
+d8c4aa7a95ca3867b6ee036ff09f3c73a43539ba4fa8aeb7ff43d868ea4b9cf4  supabase/functions/_shared/caption-cards.ts
+508112f216e39ba8e8a315a2dad04fcd8bd38bef6ff69246ef018ab6d47bb924  supabase/functions/_shared/caption-excerpts.ts
+f4ee485fe34f210e6e1d94456deddbd0a8ee94b1fcd552db06b471d7a49e5f38  supabase/functions/_shared/caption-lines.ts
+a63de4cd8e6460e87461c4896da0d62de24278888618fff61beb941e73c683df  supabase/functions/_shared/caption-order.ts
+c82d43a18d02e669500f2ab48f3f97b2ba1e82d26dd871366026072384607bde  supabase/functions/_shared/comic-exchange.ts
+eb3309035fa36e85d462deb5a1e6f9d7b519f440c14538f7bd5bb40a7db0b79b  supabase/functions/_shared/companion-answer-error.ts
+061b213eabcec525d383f92004986d7cff7f80452fa73e9b43f97a05b62b0647  supabase/functions/_shared/companion-provider.ts
+2e8efdcf7fde3ccf000714d093132f56c40177e3a0534ec5fdd92bc0c19c378e  supabase/functions/_shared/companion-response.ts
+18e75a78ee3db44bda63f97a6805aabfe787636931765504a58c307e40bdc1eb  supabase/functions/_shared/companion-work.ts
+4f727bc6e9e05f6409dd89eb30d6d30f79a26f52a8531dab380da2daf84cc8f3  supabase/functions/_shared/companion.ts
+39acaa721132acd047898715fbe4f0b88e603ada6cf9ae7cedb8e5edf9059323  supabase/functions/_shared/cut-scope.ts
+a22008665cd942cdbfaacb44116c798c3c80dde9cc84ae94527bfc55b554f9c1  supabase/functions/_shared/detail-explanation.ts
+ff93b77430eaf1eab58873b43fb365e33e4bc58b6965f1449b3abd5c9a3e819c  supabase/functions/_shared/dialogue-evidence.ts
+303ddf2235eb41a3e324c894e4b53d4762fe31d88bf429869c695acb0d0cb14b  supabase/functions/_shared/direct-dialogue.ts
+040cf3b0fdce685a7bd57521f9215417b03b78a6f8abc30d03ce2d8f67e44335  supabase/functions/_shared/draft-grounding.ts
+6b768d5ac16f59ee3fd307392cc1140913506f00659444fef32a05d7ac57fc21  supabase/functions/_shared/earlier-watch-data.ts
+642155b0587b8e46da8259913ed8acae4797c53caee552145d8cb345f4e2a17a  supabase/functions/_shared/exchange-commentary.ts
+f5dba2537a0b33c900793701a7da91923176c0d00978624155eac981c8514922  supabase/functions/_shared/geek-voice.ts
+153cd369b031f0ae967f966c80e8599f761bd42768b7a464a0a11f63b363abc8  supabase/functions/_shared/groq.ts
+009cdce962abf55a9630b6c97c41d170ec4df42b552e6edb0143d2da3ea47da6  supabase/functions/_shared/note-excerpt.ts
+a02deaf800c1bab9135adf2dd3e1940940fdf409e09f611c8d82976ef1420c7a  supabase/functions/_shared/openrouter-sol.ts
+b655eaf3da1ced17703b0e07bf35279bb99415fb13c767ac3f9be23dce4f094f  supabase/functions/_shared/openrouter.ts
+b418ddab5eaea0f89d1d2ba2ddd294ec12dd19784f611871f5b3da9b5328a65a  supabase/functions/_shared/ordered-work.ts
+4685a27be6e0af8279a5cfe329a7a4ef6364bc330352cafe29f9e7a39c19c2e9  supabase/functions/_shared/paged-data.ts
+c05d4c62f9d726fddf2ea76586372ddcfdd71e1baa6a59c464dd9b673f7c9861  supabase/functions/_shared/paragraph-sources.ts
+ca2700c54432c89deea7af6fde9f43982c25deed59a4814f3598ff4fde948fb2  supabase/functions/_shared/parallel-budget.ts
+1e57733aada2b75e989eb0f1628d35a549d23274888d8f586cdd08b46938ecfb  supabase/functions/_shared/prefix-recap.ts
+ac979666fa800e7fa8b885c84cbe38ad6496afe7559cda0b7690fa7f7bb3691b  supabase/functions/_shared/provider-unavailable.ts
+45c3c44e204cef4dad549b4b4564fd20ae813a68ee2c8abfe5081f1fd52d2fdc  supabase/functions/_shared/question-allowance.ts
+2687304c60a31bf4110b8fb6c56f95590f9512d41c8ae400fe33363deda6b981  supabase/functions/_shared/question-fit.ts
+6c29e54c6ff60b48ddf6e025f10584978ca8b558c1504ac187669928008d19e5  supabase/functions/_shared/question-focus.ts
+5eaad6269169bd7e20b32808119ac6cec8ab66cf4a542b2064136c67d11f1db6  supabase/functions/_shared/question-scope.ts
+b59dcadc1e19555bd538801badb12cff1f1240a27d5eb207cd6e9769e50b461a  supabase/functions/_shared/reviewed-attribution.ts
+2418b034624bbf8975836a87bcb6e179d37d665174b96f8cb80c71c1572082c4  supabase/functions/_shared/reviewed-scenes.ts
+a8cb0157273667c2b2c802d213081323cd37f448a93cca7da3203e47e0871f40  supabase/functions/_shared/scene-discussion.ts
+b20a8cb8fbbf20989d728fdbb7a9a0e9cbb0c83c9c323dc7074c17bd45a8f8a9  supabase/functions/_shared/scene-evidence.ts
+648d5591ebffb50f9d9efdcbcc6266841fee48278035e24e925077d116cecba5  supabase/functions/_shared/series-recap.ts
+5d969778adc9ff7bc3383d83d984e0a4515beb247367d346dcda0212db322208  supabase/functions/_shared/shared-cut-story.ts
+d3e461122ac273c25409c455ed024fac9d6a69bb0e7a51cecd5a6d7f47870871  supabase/functions/_shared/sol-budget.ts
+2c05fe64ce63763db3cfb4296e1c8031c7d50f3a946e9413eb160b7e9ce52a49  supabase/functions/_shared/story-discussion.ts
+239f7e04b63f43b4f85f11450ce9d522b4a42239150647a548d3a42dbfd1f9cf  supabase/functions/_shared/story-explanation.ts
+27c5b777191c401053adb403fa2f1df6bc91979a091b1f455c2e4d418c05120e  supabase/functions/_shared/story-facts.ts
+9e7be14fd64c5e02a74c0bf27cb7fa87f2de1327daa28cb51dc39205d640a7ec  supabase/functions/_shared/story-recall.ts
+fbb070299787d01e9f29ebb366b3a51d4fb6b24650c9b9624b637ddf7db94606  supabase/functions/_shared/story-speech-grounding.ts
+5acaf22f7a2f77f0b979e7207e0b4740ef3c14971537f98bf27702902cf1c8d0  supabase/functions/_shared/story-wire.ts
+45096d7d90e7168cb353d2a8079b9f19c18fb8834f14c1388342883c6a5e801b  supabase/functions/_shared/subtitle-provider.ts
+7591b92e5407cf5545c527baf234a0e129eb0fbcfe738db029125699eb1d5e54  supabase/functions/_shared/subtitle-source.ts
+ae215b53d8a5ae8a1ed4b8beb7b19ffb68228ca4a3c6e4a2f36a72145ea366f9  supabase/functions/_shared/verification.ts
+00bdd839f2514dfb49e2984872f7f993588906e873f7cc2893a654d14ab3d266  supabase/functions/_shared/visual-context.ts
+d43eca818c385b153a315bf68d91d76e8ada2ebf5b7e3c4a08a05d71932d8d89  supabase/functions/_shared/watch-answer.ts
+ac989660c02891ea88c63fdc134eb86aa3d1369f3a5ab143e51ee9e7cd2baf0c  supabase/functions/_shared/watch-checkpoints.ts
+151f1076b18b632e95549e71d1a28915f261f49c9c1bbd9ee4445ae9472b2e85  supabase/functions/_shared/watch-context.ts
+3479dbb19ab85154ef11385609307e0d7fd06513cd3643ee78f3db0575511393  supabase/functions/_shared/watch-diagnostic-store.ts
+d66cdf8ad2bad1181b28b4394155c23f7b7aa7ea220c62b19dca5f183492ba38  supabase/functions/_shared/watch-diagnostics.ts
+f8e73cc81b24532a91fa2918f59c09befcf70dad729101f64f65c9f233a41929  supabase/functions/_shared/watch-identity-context.ts
+65d9df725c284c6fbd8a4f186f272d1409d3060aa1fc8f63e30ab6133e301eca  supabase/functions/_shared/watch-service.ts
+169495ca44c3c2bf88e28a58305998fd37abd0d4d56b5fc0fbef7d3bdd61b94a  supabase/functions/_shared/wordplay.ts
+0ac8f96ede505f51204965b5dc7c722a7a5be4e874d56d788c86565517d3512f  supabase/functions/spoiler-free-companion/index.ts
