@@ -1,0 +1,48 @@
+Scene identity context retrieval — 26 November 2026
+
+Problem
+The live scene question's selector retained the argument and earlier causes,
+but omitted permitted earlier dialogue that explicitly names the participants.
+The last fresh run failed independent speaker/identity review. Citation parsing
+now passes; this is a separate evidence-selection deficiency, not a reason to
+relax the reviewer. The released request no longer retains its raw draft, so
+the exact rejected wording of that request cannot be reconstructed.
+
+Change
+After relevance selection and any packet narrowing, scene questions can retain
+complete original introductions for names already present in selected sources.
+Only spare capacity in the existing 20,000-character/55-source packet is used.
+No selected passage is removed. Immediate qualifying dialogue stays attached.
+At most three introduction bundles are added; no additional AI call is made.
+Only already-permitted sources are considered; the helper additionally checks
+the viewing boundary and explicit exclusions of previous episodes.
+Labels nominate evidence only. They do not create aliases, identify speakers
+in another exchange, or bypass the independent model/local receipt checks.
+
+Writer/reviewer prompts, model, reasoning, retries, source filters, history
+rules and spoiler checks are unchanged. Runtime checkpoint and diagnostic
+revisions become watch-{work,checks}-2026-11-26-identity-context-v1.
+
+Verification
+- 1,596 tests / 103 files passed, including 8 new retrieval/boundary tests.
+- Changed files linted; shared watch-answer Deno type check.
+- Private reconstruction: 17 selected sources / 14,519 serialized characters
+  become 20 / 17,703. All original sources are retained. The three added
+  original passages establish explicit named dialogue and self-identification
+  before the selected 20:00 boundary. No new plot facts were authored.
+- Captured approved response still passes unchanged; 9 offline boundary and
+  conversation-history checks pass. This is not a fresh live success.
+
+Rollout
+Deploy only spoiler-free-companion from the reviewed merge. Confirm its full
+transitive source SHA-256 manifest, save a deployment receipt, then verify the
+fresh scene question on the owner's approved test account. Capture private
+work checkpoints while running if needed to diagnose actual draft rejections.
+Do not repeat until success without investigating any failure.
+
+Unchanged controls
+Normal policy: $3/account/month, $0.35/question, 64 calls/question, $5 global.
+Existing owner-only $2 expiring grant remains as recorded in PR #47; do not
+renew, extend, or increase it. Private CLI test cap stays $11. Preserve unknown
+cost holds and committed spend. Real purchases stay disabled. No migration,
+secret, frontend publication, TestFlight upload, or draft recap deployment.
