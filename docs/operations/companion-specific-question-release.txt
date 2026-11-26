@@ -1,0 +1,38 @@
+Specific questions with background qualifiers — 26 November 2026
+
+Observed failure
+At Dark S1E2 20:00, “Why are people worried about Mikkel, based on what's
+happened so far?” was misrouted to a chronological recap. The implicit
+“happened so far” match ran before the leading specific-question guards.
+The captured writer produced seven paragraphs across the current episode;
+independent/local verification ultimately rejected it. No question was used.
+
+Correction
+Keep explicit recap requests first. Read focused why/who/how/yes-no questions
+before treating a background phrase as an implicit recap. Remove a polite
+assistant-directed request wrapper for this classification only; the full
+original question still goes to the writer/reviewer. Actual “Can you tell me
+what has happened so far?” and “How about a recap?” remain recaps.
+The ordinary question route can retrieve permitted earlier-episode context.
+No story fact is inferred by routing, and the viewing ceiling/restrictions
+remain enforced by the existing source and independent spoiler checks.
+
+Verification
+Seven initial regressions failed before the correction; focused and polite
+forms plus genuine recap controls now pass. 1,614 tests across 103 files pass,
+changed-file ESLint passes, and shared watch-answer passes Deno type checking.
+The unchanged live Dark question must pass after deployment before marking
+this fresh-title test set complete. Three other fresh title/type cases passed.
+
+Rollout
+Deploy only spoiler-free-companion and verify its full 62-file transitive
+manifest against the merged commit. Record unsigned 401 probe and unchanged
+spending/sales/grant readback. No SQL migration, secrets, website publication,
+TestFlight, other functions or draft long-recap PR40 deployment.
+
+Unchanged controls
+Same model, reasoning, writer/reviewer prompts, retry limits, factual/speaker/
+identity/spoiler checks. $5 global, $3 monthly, $0.35 question, 64 calls/question.
+Keep the existing owner-only $2 grant and its expiry, both unknown-cost holds
+and committed spend. Private CLI cap stays $11; no CLI paid calls. Real
+purchases remain disabled. Runtime work/check revision: specific-question-v1.
