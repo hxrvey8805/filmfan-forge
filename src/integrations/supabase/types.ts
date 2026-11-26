@@ -631,6 +631,7 @@ export type Database = {
       companion_private_test_budget_grants: {
         Row: {
           additional_micro_usd: number
+          approved_base_micro_usd: number
           expires_at: string
           month_start: string
           reason: string
@@ -640,6 +641,7 @@ export type Database = {
         }
         Insert: {
           additional_micro_usd: number
+          approved_base_micro_usd?: number
           expires_at: string
           month_start: string
           reason: string
@@ -649,6 +651,7 @@ export type Database = {
         }
         Update: {
           additional_micro_usd?: number
+          approved_base_micro_usd?: number
           expires_at?: string
           month_start?: string
           reason?: string
@@ -954,6 +957,7 @@ export type Database = {
           id: boolean
           question_call_limit: number
           question_limit_micro_usd: number
+          subscription_budget_started_at: string
           user_day_limit_micro_usd: number | null
           user_month_limit_micro_usd: number
         }
@@ -962,6 +966,7 @@ export type Database = {
           id?: boolean
           question_call_limit?: number
           question_limit_micro_usd?: number
+          subscription_budget_started_at?: string
           user_day_limit_micro_usd?: number | null
           user_month_limit_micro_usd?: number
         }
@@ -970,6 +975,7 @@ export type Database = {
           id?: boolean
           question_call_limit?: number
           question_limit_micro_usd?: number
+          subscription_budget_started_at?: string
           user_day_limit_micro_usd?: number | null
           user_month_limit_micro_usd?: number
         }
@@ -1477,6 +1483,17 @@ export type Database = {
       claim_cinegeek_win: {
         Args: { p_game: string; p_proof: Json; p_token: string; p_user: string }
         Returns: Json
+      }
+      companion_account_spending_limit: {
+        Args: { p_base: number; p_user_id: string }
+        Returns: number
+      }
+      companion_account_spending_window: {
+        Args: { p_user_id: string }
+        Returns: {
+          period_end: string
+          period_start: string
+        }[]
       }
       companion_allowance_for: { Args: { p_user_id: string }; Returns: Json }
       companion_answer_revision: {
