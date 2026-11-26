@@ -39,7 +39,7 @@ export function questionScope(question: string, position: ViewingPosition): Ques
   const subjectSummary = !chronologicalRecap && /\b(?:recap|summari[sz]e|summary)\b/.test(q) &&
     /\b(?:speech|monologue|conversation|discussion|exchange|argument|explanation|letter|message|plan|proposal)\b/.test(q);
   const intent = characterArc || subjectSummary ? 'answer' : questionIntent(q) === 'recap' || rangeLike || /\bremind me what happened\b/.test(q) ? 'recap' : questionIntent(q) === 'scene' ? 'scene' : 'answer';
-  const plan: QuestionScope = {intent,boundary,earlierStory:position.mediaType === 'tv' && intent === 'answer' && allowsEarlierStory(q),
+  const plan: QuestionScope = {intent,boundary,earlierStory:position.mediaType === 'tv' && intent !== 'recap' && allowsEarlierStory(q),
     window:{season:position.seasonNumber ?? null,episode:position.episodeNumber ?? null,start:0,end:boundary.seconds}};
   const invalid = (message: string) => ({...plan,clarification:message});
   const episode = q.match(/\bs(\d+)\s*e(\d+)\b/) ?? q.match(new RegExp('\\bseason '+number+'[, ]+(?:episode|ep) '+number+'\\b'));

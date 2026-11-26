@@ -71,7 +71,7 @@ describe('earlier episode preparation and completeness',()=>{
   await expect(answerWatchRequest('What were the other jobs?',p,[],gen,f.store)).rejects.toThrow('quota');expect(gen).not.toHaveBeenCalled();
  });
  it('does not prepare earlier episodes for an explicit current-only question or scene',async()=>{
-  for(const q of ['What happened here?', 'Why is he here? Only this episode.']) {
+  for(const q of ['What happened here? Only this episode.', 'Why is he here? Only this episode.']) {
    const f=fixture();await answerWatchRequest(q,p,[],vi.fn(async()=>({points:[]})),f.store);
    expect(f.store.earlier).not.toHaveBeenCalled();expect(f.preparations).toEqual([5]);
   }
