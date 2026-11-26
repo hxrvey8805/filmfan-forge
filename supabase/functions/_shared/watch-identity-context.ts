@@ -15,14 +15,19 @@ function labels(text:string) {
 // space for those complete exchanges, without replacing any selected evidence
 // or spending another model call. Writer and independent reviewer still have
 // to establish the actual link, with exact receipts, from these original words.
-export function withIdentityContext(selected:WatchSource[],eligible:WatchSource[],plan:QuestionScope,characterLimit:number):WatchSource[] {
-  if(plan.intent!=='scene')return selected;
+export function withIdentityContext(selected:WatchSource[],eligible:WatchSource[],plan:QuestionScope,characterLimit:number,question=''):WatchSource[] {
+  // Recaps have a lower as well as an upper story boundary. Do not append
+  // events outside their requested interval. Other questions can need an
+  // introduction even when they ask about an earlier cause, not this scene.
+  if(plan.intent==='recap')return selected;
   const p=plan.boundary;
   const permitted=(s:WatchSource)=>s.season===(p.seasonNumber??0)&&s.episode===(p.episodeNumber??0)
     ? s.end<=p.seconds
     : p.mediaType==='tv'&&plan.earlierStory&&(s.season<p.seasonNumber!||s.season===p.seasonNumber&&s.episode<p.episodeNumber!);
   const pool=eligible.filter(permitted);
-  const text=' '+normal(selected.map(s=>s.text).join('\n'))+' ';
+  // A name in a question can nominate an original source for inspection, but
+  // never establishes identity or an alias. Only the source text is appended.
+  const text=' '+normal([question,...selected.map(s=>s.text)].join('\n'))+' ';
   const covered=new Set(selected.flatMap(s=>labels(s.text)));
   const ids=new Set(selected.map(s=>s.id));
   const candidates=pool.filter(s=>!ids.has(s.id)&&s.kind==='dialogue').map(s=>({s,names:labels(s.text).filter(name=>text.includes(' '+name+' '))}))
