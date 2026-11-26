@@ -1,0 +1,73 @@
+PR #47 Private Companion Test Budget Rollout Receipt
+====================================================
+Date (UTC): 2026-11-26T16:43:32Z
+Merge HEAD: 6c87eb76fbdb620c531835e03c45fe06bb618f33
+Tested Source Commit (owner-stated): 3b63dc540836a9dda24ed651ba8cd0a37d19f21a
+
+1. Migration Verification & Application
+---------------------------------------
+Reviewed file: supabase/migrations/20261126180000_private_companion_test_budget.sql
+Reviewed file SHA-256: a31f4e4b29c29fa94ea099a080c3b6a2536c7dc83aecaf99e039367cd8d3e064
+Applied via transactional runner: drizzle/migrations/0013_private_companion_test_budget.sql
+Applied runner file SHA-256: b42d0649f868962076a56116cd8637580a360d3784cb0f71311cbda8e5ec7492
+(Runner wraps submitted verbatim SQL; no edits made to reviewed SQL.)
+
+Prior-RPC MD5 preflight checks (enforced inside migration):
+- reserve_companion_question_call(uuid,uuid,uuid,uuid,bigint): matched a23673b3353fd7b191e126d15447e3e1 -> updated to 6c282d6ea85e94987a5c721ef9170c59
+- try_reserve_companion_question_call(uuid,uuid,uuid,uuid,bigint): matched aabf866d5a8d513b5d640f77bfa46c0e -> updated to 18ad54b3c50b984961068bbfd45a5119
+
+2. Guarded Private Grant Insertion (Anonymized)
+-----------------------------------------------
+Target account: [REDACTED owner test account — exact auth email and active annual private test entitlement verified before insert]
+Lock order: companion_sol_budget ('sol-beta') FOR UPDATE -> companion_usage_accounts (target account) FOR UPDATE
+Insert mode: ON CONFLICT (user_id, month_start) DO NOTHING (no renewal/reset)
+Total rows in companion_private_test_budget_grants: 1
+Granted row readback:
+- month_start: 2026-11-01
+- additional_micro_usd: 2000000 ($2.00)
+- starts_at: 2026-11-26T16:43:17.166609+00:00
+- expires_at: 2026-11-27T16:43:17.166609+00:00
+- revoked: false
+- reason: Owner-approved $2 final companion test allowance, 2026-11-26
+Account current UTC-month spend readback: 2856410 micro-USD ($2.856410)
+Effective temporary monthly ceiling for target account: 5000000 micro-USD ($5.00; capped by remaining global budget)
+
+3. Table & RPC Privileges Readback
+----------------------------------
+Table: public.companion_private_test_budget_grants
+- RLS enabled: true
+- RLS policy count: 0
+- anon SELECT / INSERT: false / false
+- authenticated SELECT / INSERT: false / false
+- service_role SELECT / INSERT: false / false
+
+RPCs (both SECURITY DEFINER):
+- public.reserve_companion_question_call(uuid,uuid,uuid,uuid,bigint):
+  anon EXECUTE=false, authenticated EXECUTE=false, service_role EXECUTE=true
+- public.try_reserve_companion_question_call(uuid,uuid,uuid,uuid,bigint):
+  anon EXECUTE=false, authenticated EXECUTE=false, service_role EXECUTE=true
+
+4. Before / After Controls (Unchanged)
+--------------------------------------
+Global budget (companion_sol_budget id='sol-beta'):
+- Before: enabled=true, limit_micro_usd=5000000, committed_micro_usd=2933048, halted_reason=NULL
+- After:  enabled=true, limit_micro_usd=5000000, committed_micro_usd=2933048, halted_reason=NULL
+
+Normal usage policy (companion_usage_policy id=true):
+- Before: enabled=true, user_month_limit_micro_usd=3000000, question_limit_micro_usd=350000, user_day_limit_micro_usd=NULL, question_call_limit=64
+- After:  enabled=true, user_month_limit_micro_usd=3000000, question_limit_micro_usd=350000, user_day_limit_micro_usd=NULL, question_call_limit=64
+
+Apple production policy (apple_production_policy id=true):
+- Before: enabled=true, sales_enabled=false
+- After:  enabled=true, sales_enabled=false
+
+Non-settled / unknown-cost holds (companion_sol_calls):
+- Before: 2 unknown holds (reserved_micro_usd: 137837 and 137380; actual_micro_usd: NULL)
+- After:  2 unknown holds (reserved_micro_usd: 137837 and 137380; actual_micro_usd: NULL)
+
+5. Scope Exclusions Confirmed
+-----------------------------
+- No edge function deployment, website publication, or TestFlight upload
+- No AI questions or model/prompt/context/spoiler changes
+- No credit purchases, secret/key changes, or private $11 CLI ledger changes
+- No account UUID or email recorded in this repository receipt

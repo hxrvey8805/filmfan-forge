@@ -92,6 +92,13 @@
       "when": 1795707071568,
       "tag": "0012_companion_diagnostics",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795711374602,
+      "tag": "0013_private_companion_test_budget",
+      "breakpoints": true
     }
   ]
 }

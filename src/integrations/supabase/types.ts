@@ -628,6 +628,44 @@ export type Database = {
         }
         Relationships: []
       }
+      companion_private_test_budget_grants: {
+        Row: {
+          additional_micro_usd: number
+          expires_at: string
+          month_start: string
+          reason: string
+          revoked: boolean
+          starts_at: string
+          user_id: string
+        }
+        Insert: {
+          additional_micro_usd: number
+          expires_at: string
+          month_start: string
+          reason: string
+          revoked?: boolean
+          starts_at: string
+          user_id: string
+        }
+        Update: {
+          additional_micro_usd?: number
+          expires_at?: string
+          month_start?: string
+          reason?: string
+          revoked?: boolean
+          starts_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companion_private_test_budget_grants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "companion_usage_accounts"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       companion_pro_entitlements: {
         Row: {
           anchor: string
