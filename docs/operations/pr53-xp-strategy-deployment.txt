@@ -1,0 +1,80 @@
+CineGeek PR #53 XP Collection Strategy Deployment Receipt
+Date: 2026-11-27 UTC
+
+1. Source & Commit Verification
+- Main commit: 12cf3438d2253a4fc5fb90946632bd9fcea3112c (tested head: 20d0a48a5b7bbc57a630e786f1a8adac39a04047)
+- Reviewed migration file: supabase/migrations/20261127120000_xp_collection_strategy.sql (unchanged)
+  SHA-256: c223ee7ab9dbc5acac5f539fa41ca8ae163eae3a10224da4f59eecd849cab096
+- Live checks script: docs/operations/packs-skin-live-checks.sql (unchanged)
+  SHA-256: a62ea96d803dcd50bb31e79d8d7a19902cc3a5b168a318136c69b39901c3be50
+
+2. Migration Application & Journal
+- Applied file: drizzle/migrations/0015_xp_collection_strategy.sql
+  SHA-256: fb0231b9ab888dc4bede75a6c738de0c9ba157fd2483ba15102df238b3ad22c7
+- Transport adjustment: outer BEGIN; and COMMIT; removed for transactional migration runner; interior SQL preserved verbatim.
+- Journal entry (drizzle/migrations/meta/_journal.json):
+  idx: 15, version: "7", when: 1795775560416, tag: "0015_xp_collection_strategy", breakpoints: true
+- Column added: public.user_packs.replacement_xp_cost integer NOT NULL DEFAULT 0 (CHECK replacement_xp_cost IN (0, 450))
+
+3. Function & Permission Readbacks
+- public.decide_cinegeek_pack_v2(p_pack uuid, p_keep boolean, p_replace uuid, p_expected_cost integer)
+  security_definer=true, md5=18293a3d096b0e984e2fcb20d64b580e
+  EXECUTE: authenticated=true, public=false, anon=false, service_role=false
+- public.decide_cinegeek_pack(p_pack uuid, p_keep boolean, p_replace uuid)
+  security_definer=true, md5=7beadb4d1f07d52167a5043d28ead7bb
+  EXECUTE: authenticated=true, public=false, anon=false, service_role=false
+- public.redeem_cinegeek_xp(p_request uuid, p_item text)
+  security_definer=true, md5=0b883bccc4a37a34516c8b34ee950f8f
+  EXECUTE: authenticated=true, public=false, anon=false, service_role=false
+- Direct table write privileges (INSERT, UPDATE, DELETE) for public / anon / authenticated:
+  public.user_collection: false / false / false
+  public.user_packs: false / false / false
+  public.cinegeek_xp: false / false / false
+  public.cinegeek_xp_events: false / false / false
+
+4. Row Fingerprint Comparisons (Before -> After; user_packs excludes new replacement_xp_cost)
+- public.user_collection:
+  before: count=31, sha256=f9fbad9e30b24b0bdc6abe5a4e2ec576fb87cf085f8ee65c624b594fb45b5eef
+  after:  count=31, sha256=f9fbad9e30b24b0bdc6abe5a4e2ec576fb87cf085f8ee65c624b594fb45b5eef (MATCH)
+- public.user_packs:
+  before: count=250, sha256=a9c426bf65fe34010f1ad64fdf37b65936bd1758d51d8fd2da08020fee90e512
+  after:  count=250, sha256=a9c426bf65fe34010f1ad64fdf37b65936bd1758d51d8fd2da08020fee90e512, nonzero_replacement_xp_cost=0 (MATCH)
+- public.cinegeek_xp:
+  before: count=9, sha256=93ebd3df17403f3c64edbf9869c1ff0062e74eeafc3fbbeda1e5e1d232b18358
+  after:  count=9, sha256=93ebd3df17403f3c64edbf9869c1ff0062e74eeafc3fbbeda1e5e1d232b18358 (MATCH)
+- public.cinegeek_xp_events:
+  before: count=20, sha256=103175051e3b9bc4d8f44a72105fab0612533ffeda63db3620fd2f4b7f0b142a
+  after:  count=20, sha256=103175051e3b9bc4d8f44a72105fab0612533ffeda63db3620fd2f4b7f0b142a (MATCH)
+- public.cinegeek_unlocks:
+  before: count=0, sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  after:  count=0, sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (MATCH)
+
+5. Rollback-Only Live Check Receipt (docs/operations/packs-skin-live-checks.sql)
+- checked_at: 2026-11-27T10:33:22.132045+00:00
+- passed: true
+- fixtures_rolled_back: true
+- checks:
+  1. Monthly random unlock: one skin, 750 XP once, receipt replay stable
+  2. Insufficient XP and specific-skin requests rejected without debit
+  3. Free, Annual, full wardrobe and cross-account receipt denied; no debit
+  4. v1 and v2 saved draws, reveals, keep and retries preserved
+  5. 450 XP full-shelf swap charged once; legacy free-swap request refused
+  6. Insufficient XP preserves reveal and card; direct edits and unauthenticated swaps denied
+  7. Service-only draw and authenticated-only XP redemption permissions
+
+6. Unchanged Controls (Before & After Identical)
+- apple_production_policy: enabled=true, sales_enabled=false
+- companion_sol_budget (sol-beta): enabled=true, limit_micro_usd=50000000 ($50), committed_micro_usd=3731658, halted_reason=null
+- companion_usage_policy: enabled=true, question_limit_micro_usd=350000 ($0.35), user_month_limit_micro_usd=4000000 ($4), user_day_limit_micro_usd=null, question_call_limit=64
+- companion_allowance_for: md5=d1c777fd78a24e1134cc44e6d1080825 (10-question allowance)
+- unknown_holds: count=2, amounts=[137380, 137837]
+
+7. Web Publication
+- Publishing requested for existing address: https://cinegeek.lovable.app
+- Status: scheduled (deployment typically takes about a minute as an estimate; completion not yet confirmed)
+- Security scan note: 2 pre-existing unresolved critical findings (subtitle_chunks and season_summaries permissive SELECT policies); did not block publishing.
+
+8. Out-of-Scope Confirmation
+- No AI functions, models, prompts, captions, context, safety checks, limits, secrets, sales flags, grants, pack odds, XP earnings, or unrelated code were modified.
+- No AI calls, real purchases, new keys, or normal-user XP consumption occurred.
+- TestFlight build 43 left for separate handling.
