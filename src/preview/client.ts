@@ -1,3 +1,4 @@
+import {CARD_REPLACEMENT_PRICE,RANDOM_SKIN_PRICE} from '@/lib/xp-prices';
 // In-memory design fixtures. Vite aliases this file only when serving the
 // explicit mobile-preview mode. It never imports a real client or uses fetch.
 import { previewActorConnect } from "./actor-connect";
@@ -160,18 +161,30 @@ export const supabase = {
   },
   from,
   rpc: async (name: string,args:Record<string,unknown>={}) => {
-    if(name==='decide_cinegeek_pack'){
-      const pack=tables.user_packs.find(p=>p.id===args.p_pack&&!p.is_opened);if(!pack)return unavailable();
-      const person=previewPackPeople[String(pack.id)],cards=tables.user_collection;
-      if(args.p_keep){
-        if(cards.some(c=>c.person_id===person.id))return {data:null,error:{message:'Already in your collection'}};
-        const old=cards.find(c=>c.id===args.p_replace&&c.person_type===pack.pack_type);
-        if(args.p_replace&&!old)return unavailable();
-        if(!old&&cards.filter(c=>c.person_type===pack.pack_type).length>=6)return {data:null,error:{message:'Choose a card to replace'}};
-        tables.user_collection=[...cards.filter(c=>c!==old),{id:crypto.randomUUID(),user_id:user.id,person_id:person.id,
-          person_name:person.name,person_type:pack.pack_type,profile_path:person.profile_path,card_rarity:person.rarity}];
+    if(name==='decide_cinegeek_pack'||name==='decide_cinegeek_pack_v2'){
+      const fail=(message:string)=>({data:null,error:{message,code:'P0001'}});
+      const pack=tables.user_packs.find(p=>p.id===args.p_pack);if(!pack||!currentSession())return unavailable();
+      const decision=args.p_keep?'kept':'skipped',cost=name==='decide_cinegeek_pack_v2'?args.p_expected_cost:0;
+      if(pack.is_opened){
+        if(pack.decision!==decision||pack.replaced_card_id!==args.p_replace||pack.replacement_xp_cost!==cost)return fail('Pack already decided');
+        return {data:{decision,replacementXp:cost},error:null};
       }
-      pack.is_opened=true;return {data:{decision:args.p_keep?'kept':'skipped'},error:null};
+      const person=previewPackPeople[String(pack.id)],cards=tables.user_collection;
+      const old=cards.find(c=>c.id===args.p_replace&&c.person_type===pack.pack_type);
+      const full=cards.filter(c=>c.person_type===pack.pack_type).length===6;
+      const price=args.p_keep&&args.p_replace?CARD_REPLACEMENT_PRICE:0;
+      if(!args.p_keep&&args.p_replace)return fail('Invalid replacement');
+      if(args.p_keep){
+        if(cards.some(c=>c.person_id===person.id))return fail('Already in your collection');
+        if(args.p_replace&&(!old||!full))return fail('Replacement requires six cards and one of your own cards');
+        if(!old&&full)return fail('Choose a card to replace');
+      }
+      if(cost!==price)return fail('Update CineGeek and confirm the replacement price');
+      if(previewXp<price)return fail('You need 450 XP to replace a card. Your reveal is saved; earn more XP or skip it.');
+      if(args.p_keep)tables.user_collection=[...cards.filter(c=>c!==old),{id:crypto.randomUUID(),user_id:user.id,person_id:person.id,
+        person_name:person.name,person_type:pack.pack_type,profile_path:person.profile_path,card_rarity:person.rarity}];
+      previewXp-=price;pack.is_opened=true;pack.decision=decision;pack.replaced_card_id=args.p_replace;pack.replacement_xp_cost=price;
+      return {data:{decision,replacementXp:price},error:null};
     }
     if (name === 'move_cinegeek_library_title') {
       const title = args.p_title as {id:number;type:string;title:string;posterPath?:string;year?:number};
@@ -206,8 +219,8 @@ export const supabase = {
       if(plan!=='monthly'||item!=='skin:random')return {data:null,error:{message:'Monthly Pro random skins only',code:'P0001'}};
       const skins=['breaking','stranger','trek','matrix','jurassic','jedi','chucky','karate','mha','peaky','spider','hogwarts','thrones','pulp','social','squid','dune','scar','gladiator','wolf'];
       const skin=skins.find(key=>!previewSkins.has(key));
-      if(!skin||previewXp<1500)return {data:null,error:{message:skin?'Not enough XP':'Every skin is already unlocked',code:'P0001'}};
-      previewXp-=1500;previewSkins.add(skin);
+      if(!skin||previewXp<RANDOM_SKIN_PRICE)return {data:null,error:{message:skin?'Not enough XP':'Every skin is already unlocked',code:'P0001'}};
+      previewXp-=RANDOM_SKIN_PRICE;previewSkins.add(skin);
       const receipt={item,skin,packId:null,xpBalance:previewXp};previewRedemptions.set(request,receipt);
       return {data:receipt,error:null};
     }

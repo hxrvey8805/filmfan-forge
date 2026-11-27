@@ -1,7 +1,7 @@
 import {DEFAULT_OUTFIT,outfits,type Outfit} from '@/hooks/use-geek-outfit';
 
 export const RANDOM_SKIN_ITEM='skin:random';
-export const RANDOM_SKIN_PRICE=1500;
+export {RANDOM_SKIN_PRICE} from './xp-prices';
 export const unlockableSkins=(Object.keys(outfits) as Outfit[]).filter(key=>key!==DEFAULT_OUTFIT);
 export type RandomSkinResult={item:typeof RANDOM_SKIN_ITEM;skin:Outfit;xpBalance:number};
 export function requireRandomSkinResult(value:unknown):RandomSkinResult{

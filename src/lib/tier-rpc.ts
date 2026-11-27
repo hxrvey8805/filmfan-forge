@@ -10,6 +10,10 @@ type TierFunctions = {
     Args: { p_pack: string; p_keep: boolean; p_replace?: string | null };
     Returns: Json;
   };
+  decide_cinegeek_pack_v2: {
+    Args: { p_pack:string; p_keep:boolean; p_replace:string|null; p_expected_cost:number };
+    Returns: Json;
+  };
   redeem_cinegeek_xp: { Args: { p_request: string; p_item: string }; Returns: Json };
   start_cinegeek_game: {
     Args: { p_game: string; p_start: number; p_target: number };

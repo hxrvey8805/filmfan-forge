@@ -1,0 +1,66 @@
+CineGeek XP collection strategy — 27 November 2026
+
+Status: implemented and locally verified; not merged, deployed or uploaded to TestFlight.
+Branch: feat/xp-collection-strategy-2026-11-27
+Base: origin/main 710fcac
+
+Behaviour
+- Monthly: 750 XP for one random unowned skin. No specific-skin purchases.
+- Free retains the default Geek. Annual still includes every skin.
+- Card packs remain 150 XP. Capacity remains six actors and six directors.
+- Empty-slot acceptance and skipping a reveal cost no additional XP.
+- Only a full same-type shelf can replace a card: 450 XP extra, explicitly
+  displayed and confirmed by the replacement button. No standalone removal,
+  selling, XP refund, early replacement or cross-shelf replacement.
+- Insufficient XP preserves both the existing card and the pending reveal.
+- A lost response retains the exact choice across closing/reopening. Receipts
+  prevent repeat charges. Cards, existing skins and historic receipts remain intact.
+
+Server implementation
+Apply supabase/migrations/20261127120000_xp_collection_strategy.sql once.
+Wallet locking serializes debit, card replacement and receipt in one transaction.
+The new decide_cinegeek_pack_v2 RPC requires explicit expected cost. The older
+RPC retains historical receipt reads and free keep/skip, but refuses new swaps
+with an update instruction rather than charging clients that do not show 450 XP.
+The new user_packs replacement_xp_cost column defaults to zero for old decisions.
+Direct client INSERT/UPDATE/DELETE remains revoked. Sell endpoints remain retired.
+Generated Supabase types are unchanged; reviewed contracts live in tier-rpc.ts.
+
+Rollout preparation
+1. Deploy the migration before distributing the updated client. Do not restore
+   the old free-replacement function or enable real purchases.
+2. Run docs/operations/packs-skin-live-checks.sql. It uses disposable fixtures
+   and rolls back all fixture rows, including skin and replacement debits.
+3. Verify the existing production-sales flag remains false before and after.
+4. Publish the matching client / prepare its next TestFlight build when requested.
+   No TestFlight build number has been changed here.
+5. If rollout fails, stop rather than release a client with mismatched prices.
+   Preserve completed receipts; do not refund or rewrite historical transactions.
+
+Validation
+- 1,653 automated tests across 103 files passed.
+- 112 focused economy, wardrobe, collection and UI checks passed (included above).
+- Four PostgreSQL 16.16 concurrency scenarios passed in a network-disabled,
+  disposable container: twelve duplicate swap requests debit once; different
+  replacements cannot overspend 450 XP; the same old card cannot be replaced
+  twice; concurrent skins cannot overspend 750 XP.
+- TypeScript, scoped ESLint and native Vite build passed. Existing bundle-size
+  and dependency-freshness notices remain; no new build errors.
+- Mobile preview at 375 x 812: confirmed 750 XP skin dialog, clear 450 XP swap
+  button and permanent-card notice. Sample balance 2000 -> 1250 -> 800; shelf
+  stayed six cards, with the selected old card replaced by the revealed card.
+- Updated rollback-only live check script passes against migrated local database.
+
+Boundaries
+No real charges, live database mutation, AI/provider calls, Lovable credits,
+TestFlight upload, entitlement changes or spending-cap changes were made.
+The companion model/context/spoiler checks, pack odds, XP earning cap and
+subscription prices/allowances are untouched. Real purchases remain disabled.
+
+Reproduction
+npx vitest run
+npx tsc -p tsconfig.app.json --noEmit
+npm run build:native
+node scripts/test-xp-concurrency.mjs
+(The last command requires Docker and existing pgvector/pgvector:pg16 image;
+networking is disabled, no host volumes or credentials are mounted.)
