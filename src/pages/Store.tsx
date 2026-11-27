@@ -1,3 +1,4 @@
+import {CARD_REPLACEMENT_PRICE} from '@/lib/pack-decision';
 import {redeemXp} from "@/lib/xp-redemption";
 import {useState} from 'react';
 import {useProAccess} from '@/hooks/use-pro-access';
@@ -16,7 +17,7 @@ const Store=({onBalance}:{onBalance?:(n:number)=>void})=>{
     finally{setBusy(false);}
   }
   return <div className="max-w-2xl mx-auto space-y-6"><header><p className="eyebrow">Earn it. Collect it.</p><h1 className="screen-heading">XP store</h1><p className="text-primary mt-3">{access?.xp.toLocaleString()??'—'} XP available</p></header>
-    <p className="text-sm text-muted-foreground">Six actors. Six directors. Build a collection that’s yours.</p>
+    <p className="text-sm text-muted-foreground">Six actors. Six directors. Once a shelf is full, keeping a new card costs {CARD_REPLACEMENT_PRICE} XP extra to replace one. Cards can’t be removed or sold.</p>
     <div className="grid grid-cols-2 gap-3">{['actor','director'].map(type=><section className="destination-card" key={type}><h2 className="text-lg font-semibold capitalize">{type} pack</h2><p className="text-2xl font-bold my-4">150 XP</p><p className="text-xs text-muted-foreground mb-4">One collectible. A duplicate can be skipped.</p><Button className="w-full" disabled={busy||!access||access.xp<150} onClick={()=>void redeem(type)}>Get pack</Button></section>)}</div>
     <PackOdds/>
     <RandomSkinShop onBalance={onBalance}/>

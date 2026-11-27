@@ -1,0 +1,2 @@
+export const RANDOM_SKIN_PRICE = 750;
+export const CARD_REPLACEMENT_PRICE = 450;

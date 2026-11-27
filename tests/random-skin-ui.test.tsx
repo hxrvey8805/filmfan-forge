@@ -26,7 +26,7 @@ it('requires confirmation, sends only skin:random and renders the confirmed rewa
  fireEvent.click(screen.getByRole('button',{name:'Unlock a random skin'}));
  expect(supabase.rpc).not.toHaveBeenCalled();
  expect(screen.queryByRole('button',{name:/Unlock Spider/})).toBeNull();
- const confirm=screen.getByRole('button',{name:'Unlock for 1,500 XP'});
+ const confirm=screen.getByRole('button',{name:'Unlock for 750 XP'});
  fireEvent.click(confirm);fireEvent.click(confirm);
  await screen.findByRole('heading',{name:'Spider-Geek unlocked'});
  expect(supabase.rpc).toHaveBeenCalledOnce();
@@ -43,7 +43,7 @@ it('does not charge when the confirmation is dismissed',()=>{
  expect(supabase.rpc).not.toHaveBeenCalled();
 });
 it('disables the offer when funds are insufficient or every skin is owned',()=>{
- const view=render(scene({...account(),xp:1499}));
+ const view=render(scene({...account(),xp:749}));
  expect((screen.getByRole('button',{name:'Unlock a random skin'}) as HTMLButtonElement).disabled).toBe(true);
  expect(screen.getByText('1 more XP needed')).toBeTruthy();
  view.rerender(scene({...account(),unlockedSkins:[...unlockableSkins]}));
@@ -53,7 +53,7 @@ it('disables the offer when funds are insufficient or every skin is owned',()=>{
 it('can recover a lost last-skin response after remount even with no XP and all skins owned',async()=>{
  vi.mocked(supabase.rpc).mockResolvedValueOnce({data:null,error:{message:'Connection lost',code:''}} as never);
  const view=render(scene());fireEvent.click(screen.getByRole('button',{name:'Unlock a random skin'}));
- fireEvent.click(screen.getByRole('button',{name:'Unlock for 1,500 XP'}));await screen.findByRole('alert');
+ fireEvent.click(screen.getByRole('button',{name:'Unlock for 750 XP'}));await screen.findByRole('alert');
  const original=vi.mocked(supabase.rpc).mock.calls[0][1];
  view.unmount();
  render(scene({...account(),xp:0,unlockedSkins:[...unlockableSkins]}));
@@ -65,7 +65,7 @@ it('can recover a lost last-skin response after remount even with no XP and all 
 it('keeps an incomplete response pending so a retry cannot buy another skin',async()=>{
  vi.mocked(supabase.rpc).mockResolvedValueOnce({data:{item:'skin:random'},error:null} as never);
  render(scene());fireEvent.click(screen.getByRole('button',{name:'Unlock a random skin'}));
- fireEvent.click(screen.getByRole('button',{name:'Unlock for 1,500 XP'}));await screen.findByRole('alert');
+ fireEvent.click(screen.getByRole('button',{name:'Unlock for 750 XP'}));await screen.findByRole('alert');
  expect(hasPendingXp(account().userId,RANDOM_SKIN_ITEM)).toBe(true);
  fireEvent.click(screen.getByRole('button',{name:'Retry same unlock'}));await screen.findByRole('heading',{name:'Spider-Geek unlocked'});
  expect(vi.mocked(supabase.rpc).mock.calls[1][1]).toEqual(vi.mocked(supabase.rpc).mock.calls[0][1]);
@@ -75,7 +75,7 @@ it('discards an old account result from the screen after switching accounts',asy
  vi.mocked(supabase.rpc).mockImplementationOnce(()=>new Promise(r=>{resolve=r;}) as never);
  const balance=vi.fn(),view=render(scene(account(),balance));
  fireEvent.click(screen.getByRole('button',{name:'Unlock a random skin'}));
- fireEvent.click(screen.getByRole('button',{name:'Unlock for 1,500 XP'}));
+ fireEvent.click(screen.getByRole('button',{name:'Unlock for 750 XP'}));
  view.rerender(scene(planFixture('monthly','different-viewer'),balance));
  resolve({data:receipt,error:null});
  await waitFor(()=>expect(hasPendingXp(account().userId,RANDOM_SKIN_ITEM)).toBe(false));
