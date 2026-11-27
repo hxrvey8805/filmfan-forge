@@ -106,6 +106,13 @@
       "when": 1795728777190,
       "tag": "0014_ten_question_subscription_budget",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1795775560416,
+      "tag": "0015_xp_collection_strategy",
+      "breakpoints": true
     }
   ]
 }

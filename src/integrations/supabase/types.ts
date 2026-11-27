@@ -1237,6 +1237,7 @@ export type Database = {
           pack_tier: string
           pack_type: string
           replaced_card_id: string | null
+          replacement_xp_cost: number
           reveal_pick: Json | null
           reveal_token: string | null
           reveal_until: string | null
@@ -1252,6 +1253,7 @@ export type Database = {
           pack_tier?: string
           pack_type: string
           replaced_card_id?: string | null
+          replacement_xp_cost?: number
           reveal_pick?: Json | null
           reveal_token?: string | null
           reveal_until?: string | null
@@ -1267,6 +1269,7 @@ export type Database = {
           pack_tier?: string
           pack_type?: string
           replaced_card_id?: string | null
+          replacement_xp_cost?: number
           reveal_pick?: Json | null
           reveal_token?: string | null
           reveal_until?: string | null
@@ -1510,6 +1513,15 @@ export type Database = {
       companion_usage_enabled: { Args: never; Returns: boolean }
       decide_cinegeek_pack: {
         Args: { p_keep: boolean; p_pack: string; p_replace?: string }
+        Returns: Json
+      }
+      decide_cinegeek_pack_v2: {
+        Args: {
+          p_expected_cost: number
+          p_keep: boolean
+          p_pack: string
+          p_replace: string
+        }
         Returns: Json
       }
       end_cinegeek_game: { Args: { p_game: string }; Returns: undefined }
